@@ -1,0 +1,50 @@
+openapi: 3.1.0
+info:
+  title: Cuentas Claras - API Social y de Coordinación
+  description: Contrato de comunicación HTTP entre la aplicación cliente y el servidor backend para el proyecto Cuentas Claras (CI-3715).
+  version: 0.1.0
+servers:
+  - url: http://localhost:8000
+    description: Servidor local de desarrollo
+
+paths:
+  /ping:
+    get:
+      summary: Verificación de estado del servidor (Full Stack Ping)
+      description: Endpoint básico para comprobar conectividad activa y latencia entre el cliente y el servidor backend.
+      operationId: pingServidor
+      responses:
+        '200':
+          description: Servidor operativo y respondiendo exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PingResponse'
+
+components:
+  schemas:
+    PingResponse:
+      type: object
+      required:
+        - estado
+        - mensaje
+        - version
+        - timestamp
+      properties:
+        estado:
+          type: string
+          example: ok
+          description: Estado de salud del servidor backend.
+        mensaje:
+          type: string
+          example: Servidor Cuentas Claras activo
+          description: Mensaje descriptivo retornado por el servidor.
+        version:
+          type: string
+          example: 0.1.0
+          description: Versión semántica del servidor.
+        timestamp:
+          type: string
+          format: date-time
+          example: 2026-10-04T19:50:00Z
+          description: Marca de tiempo ISO-8601 del servidor al procesar la solicitud.
