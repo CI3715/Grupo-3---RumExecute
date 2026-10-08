@@ -18,7 +18,7 @@ export default function HomePage() {
     setData(null);
 
     try {
-      const res = await fetch("http://localhost:8000");
+      const res = await fetch("http://localhost:8000/ping");
       if (!res.ok) {
         throw new Error(`HTTP error! status: ${res.status}`);
       }
