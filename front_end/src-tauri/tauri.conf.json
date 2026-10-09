@@ -4,17 +4,18 @@
   "version": "0.1.0",
   "identifier": "com.davidapm.cuentas_claras",
   "build": {
-    "beforeDevCommand": "pnpm dev",
-    "beforeBuildCommand": "pnpm build",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
     "devUrl": "http://localhost:3000",
     "frontendDist": "../out"
   },
   "app": {
     "windows": [
       {
-        "title": "cuentas_claras",
-        "width": 800,
-        "height": 600
+        "label": "main",
+        "title": "Cuentas Claras",
+        "width": 900,
+        "height": 650
       }
     ],
     "security": {

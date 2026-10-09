@@ -9,6 +9,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 .turbo
+*.tsbuildinfo
 
 # Rust / Cargo / Tauri
 **/src-tauri/target/
