@@ -61,3 +61,31 @@ Endpoint basico para verificacion de estado y calculo de latencia (The Ping Flow
     "timestamp": "2026-10-08T19:30:00Z"
   }
   ```
+
+## Pruebas de Contrato (OpenAPI)
+El servidor incluye pruebas automatizadas para comprobar que la respuesta del endpoint '/ping' cumpla estrictamente con la especificación y tipos de datos definidos en 'openapi.yaml'.
+
+### Ejecutar las pruebas
+Iniciar el servidor en modo desarrollo en una terminal
+
+```bash
+uvicorn main:app --reload --port 8000
+```
+
+En otra terminal activar el entorno virtual
+
+   * En Windows (PowerShell):
+    ```powershell
+    .venv\Scripts\Activate.ps1
+    ```
+   * En Linux / macOS:
+    ```bash
+    source .venv/bin/activate
+    ```
+
+Correr el test con pytest
+
+```bash
+pytest test_correspondencia_openapi.py -v
+```
+
