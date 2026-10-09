@@ -67,7 +67,6 @@ El servidor incluye pruebas automatizadas para comprobar que la respuesta del en
 
 ### Ejecutar las pruebas
 Iniciar el servidor en modo desarrollo en una terminal
-
 ```bash
 uvicorn main:app --reload --port 8000
 ```
@@ -75,16 +74,15 @@ uvicorn main:app --reload --port 8000
 En otra terminal activar el entorno virtual
 
    * En Windows (PowerShell):
-    ```powershell
-    .venv\Scripts\Activate.ps1
-    ```
+     ```powershell
+     .venv\Scripts\Activate.ps1
+     ```
    * En Linux / macOS:
-    ```bash
-    source .venv/bin/activate
-    ```
+     ```bash
+     source .venv/bin/activate
+     ```
 
 Correr el test con pytest
-
 ```bash
 pytest test_correspondencia_openapi.py -v
 ```
