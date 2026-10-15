@@ -1,3 +1,5 @@
+pub mod infraestructura;
+pub mod aplicacion;
 pub mod dominio;
 
 use serde::{Deserialize, Serialize};

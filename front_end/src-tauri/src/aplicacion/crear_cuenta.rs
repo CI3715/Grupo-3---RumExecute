@@ -6,6 +6,7 @@ use crate::dominio::errores::ErrorDominio;
 use crate::dominio::evento::{DatosCuentaCreada, EventoLibro};
 use crate::dominio::moneda::CodigoMoneda;
 use crate::dominio::monto::Monto;
+use serde::{Serialize, Deserialize};   
 
 const DISPOSITIVO_LOCAL: &str = "dispositivo-local";
 

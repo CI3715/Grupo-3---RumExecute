@@ -1,5 +1,6 @@
 use crate::dominio::evento::EventoLibro; // Importa el tipo EventoLibro del módulo dominio
 
+#[derive(Debug)] 
 pub struct ErrorRepositorio(pub String);
 
 pub trait RepositorioLibro {
@@ -14,5 +15,5 @@ pub trait Reloj {
 }
 
 pub trait GeneradorId {
-    fn nuevo_id(&self) -> String; // Genera un id unico
+    fn nuevo_id(&mut self) -> String; // Genera un id unico
 }
