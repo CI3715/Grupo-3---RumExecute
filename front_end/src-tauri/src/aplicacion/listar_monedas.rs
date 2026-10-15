@@ -1,29 +1,6 @@
 use crate::dominio::moneda::{catalogo_monedas, Moneda};
 
-/// Caso de uso: Listar las monedas disponibles en el catálogo base.
-/// 
-/// Este caso de uso consulta el catálogo de monedas de fábrica definido en el dominio
-/// (VES, USD, EUR, USDT) para exponerlo a los adaptadores de entrada (Tauri IPC).
-pub struct CasoUsoListarMonedas;
-
-impl CasoUsoListarMonedas {
-    pub fn new() -> Self {
-        Self
-    }
-
-    /// Ejecuta el caso de uso devolviendo la lista de monedas del catálogo.
-    pub fn ejecutar(&self) -> Vec<Moneda> {
-        catalogo_monedas()
-    }
-}
-
-impl Default for CasoUsoListarMonedas {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Función autónoma alternativa en caso de preferencia por estilo funcional directo.
+/// Caso de uso: listar las monedas del catálogo base (RF-CAM-01).
 pub fn listar_monedas() -> Vec<Moneda> {
     catalogo_monedas()
 }
@@ -33,16 +10,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn debe_retornar_las_cuatro_monedas_del_catalogo_base() {
-        let caso_de_uso = CasoUsoListarMonedas::new();
-        let monedas = caso_de_uso.ejecutar();
-
+    fn devuelve_las_cuatro_monedas_base_con_dos_decimales() {
+        let monedas = listar_monedas();
         assert_eq!(monedas.len(), 4);
-        
-        let codigos: Vec<String> = monedas.into_iter().map(|m| m.codigo.to_string()).collect();
-        assert!(codigos.contains(&"VES".to_string()));
-        assert!(codigos.contains(&"USD".to_string()));
-        assert!(codigos.contains(&"EUR".to_string()));
-        assert!(codigos.contains(&"USDT".to_string()));
+
+        let codigos: Vec<String> = monedas.iter().map(|m| m.codigo.to_string()).collect();
+        for esperado in ["VES", "USD", "EUR", "USDT"] {
+            assert!(codigos.contains(&esperado.to_string()));
+        }
+        assert!(monedas.iter().all(|m| m.decimales == 2));
     }
 }
