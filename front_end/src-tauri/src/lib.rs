@@ -1,9 +1,15 @@
-pub mod infraestructura;
 pub mod aplicacion;
+pub mod comandos;
 pub mod dominio;
+pub mod infraestructura;
 
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::sync::Mutex;
 use std::time::Instant;
+use tauri::Manager;
+
+use infraestructura::sqlite_repo::RepositorioLibroSqlite;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PingBackendResponse {
@@ -66,7 +72,22 @@ async fn ping_servidor() -> Result<PingResult, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet, ping_servidor])
+        .setup(|app| {
+            let directorio_datos = app.path().app_data_dir()?;
+            fs::create_dir_all(&directorio_datos)?;
+            let ruta_libro = directorio_datos.join("cuentas_claras_libro.db");
+            let repositorio = RepositorioLibroSqlite::abrir(ruta_libro)
+                .map_err(|error| std::io::Error::other(error.0))?;
+            app.manage(Mutex::new(repositorio));
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            ping_servidor,
+            comandos::listar_monedas,
+            comandos::listar_cuentas,
+            comandos::crear_cuenta
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
