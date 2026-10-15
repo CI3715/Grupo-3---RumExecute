@@ -1,3 +1,5 @@
+pub mod dominio;
+
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
@@ -36,7 +38,10 @@ async fn ping_servidor() -> Result<PingResult, String> {
 
     let status = response.status();
     if !status.is_success() {
-        return Err(format!("El servidor backend respondió con error HTTP {}", status));
+        return Err(format!(
+            "El servidor backend respondió con error HTTP {}",
+            status
+        ));
     }
 
     let backend_data = response
