@@ -77,3 +77,8 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Documentos y especificaciones locales
+docs_locales/
+*.pdf
+.github/copilot-instructions.md
