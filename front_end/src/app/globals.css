@@ -1,0 +1,52 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@700;800&display=swap');
+
+:root {
+    --bg-app: #F8FAFC;
+    --surface-card: #FFFFFF;
+    --surface-hover: #F1F5F9;
+    --border-subtle: #E2E8F0;
+
+    --text-primary: #0F172A;
+    --text-secondary: #64748B;
+    --text-muted: #94A3B8;
+
+    --emerald-primary: #059669;
+    --emerald-hover: #047857;
+
+    --badge-cash-bg: #ECFDF5;
+    --badge-cash-text: #047857;
+    --badge-bank-bg: #EFF6FF;
+    --badge-bank-text: #2563EB;
+    --badge-wallet-bg: #F5F3FF;
+    --badge-wallet-text: #7C3AED;
+
+    --error-color: #EF4444;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: var(--bg-app);
+    color: var(--text-primary);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+}
+
+button {
+    font-family: inherit;
+    cursor: pointer;
+    border: none;
+    background: none;
+    transition: all 0.15s ease;
+}
+
+input,
+select {
+    font-family: inherit;
+    outline: none;
+}

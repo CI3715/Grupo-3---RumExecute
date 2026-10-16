@@ -1,226 +1,322 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import Navbar from "../components/Navbar";
+import SubtotalesGrid, { SubtotalMoneda } from "../components/SubtotalesGrid";
+import ListaCuentas, { CuentaItem } from "../components/ListaCuentas";
+import ModalNuevaCuenta, { EntradaCuentaForm, ErrorValidacion } from "../components/ModalNuevaCuenta";
+import ModalDiagnostico from "../components/ModalDiagnostico";
 
-interface PingResult {
-  estado: string;
-  mensaje: string;
-  version: string;
-  timestamp: string;
-  latencia_ms: number;
+import { formatearMonto } from "../utils/formato";
+
+interface CuentaRust {
+  id: string;
+  nombre: string;
+  tipo: string;
+  moneda: string;
+  saldo_inicial: {
+    cantidad: string | number;
+    moneda: string;
+  };
+}
+
+interface SubtotalRust {
+  cantidad: string | number;
+  moneda: string;
+}
+
+interface ResumenCuentasRust {
+  cuentas: CuentaRust[];
+  subtotales_por_moneda: SubtotalRust[];
 }
 
 export default function HomePage() {
-  const [data, setData] = useState<PingResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<"desconectado" | "conectando" | "conectado" | "error">("desconectado");
+  const [cuentas, setCuentas] = useState<CuentaItem[]>([]);
+  const [subtotales, setSubtotales] = useState<SubtotalMoneda[]>([]);
+  const [modalNuevaCuenta, setModalNuevaCuenta] = useState(false);
+  const [modalDiagnostico, setModalDiagnostico] = useState(false);
+  const [errorValidacion, setErrorValidacion] = useState<ErrorValidacion | null>(null);
 
-  const handlePing = async () => {
-    setLoading(true);
-    setError(null);
-    setData(null);
-    setStatus("conectando");
+  // 1. Cargar cuentas reales desde Rust SQLite al iniciar la aplicación
+  const cargarCuentas = async () => {
+    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+      try {
+        const respuesta = await invoke<ResumenCuentasRust>("listar_cuentas");
+        if (respuesta) {
+          const cuentasMapeadas: CuentaItem[] = (respuesta.cuentas || []).map((c) => ({
+            id: c.id,
+            nombre: c.nombre,
+            tipo: c.tipo,
+            moneda: c.moneda,
+            saldo_formateado: formatearMonto(c.saldo_inicial?.cantidad ?? "0", c.moneda),
+          }));
 
-    try {
-      let resultado: PingResult;
+          const subtotalesMapeados: SubtotalMoneda[] = (respuesta.subtotales_por_moneda || []).map((s) => {
+            const numCuentas = (respuesta.cuentas || []).filter((c) => c.moneda === s.moneda).length;
+            return {
+              moneda: s.moneda,
+              subtotal_formateado: formatearMonto(s.cantidad, s.moneda),
+              cantidad_cuentas: numCuentas,
+            };
+          });
 
-      // Detección de entorno: invocación nativa en Tauri vs modo navegador
-      if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
-        resultado = await invoke<PingResult>("ping_servidor");
-      } else {
-        const tInicio = performance.now();
-        const res = await fetch("http://localhost:8000/ping");
-        const tFin = performance.now();
-
-        if (!res.ok) {
-          throw new Error(`El servidor respondió con estado HTTP ${res.status}`);
+          setCuentas(cuentasMapeadas);
+          setSubtotales(subtotalesMapeados);
         }
-
-        const json = await res.json();
-        resultado = {
-          estado: json.estado,
-          mensaje: json.mensaje,
-          version: json.version,
-          timestamp: json.timestamp,
-          latencia_ms: Math.round(tFin - tInicio),
-        };
+      } catch (err) {
+        console.warn("Error al cargar cuentas desde Tauri IPC:", err);
       }
-
-      setData(resultado);
-      setStatus("conectado");
-    } catch (err: unknown) {
-      const mensajeError =
-        typeof err === "string"
-          ? err
-          : err instanceof Error
-          ? err.message
-          : "Error al comunicarse con el servidor backend.";
-      setError(mensajeError);
-      setStatus("error");
-    } finally {
-      setLoading(false);
     }
   };
 
-  const badgeColor =
-    status === "conectado"
-      ? "#15803d"
-      : status === "error"
-      ? "#b91c1c"
-      : status === "conectando"
-      ? "#b45309"
-      : "#6b7280";
+  useEffect(() => {
+    cargarCuentas();
+  }, []);
 
-  const badgeBg =
-    status === "conectado"
-      ? "#dcfce7"
-      : status === "error"
-      ? "#fee2e2"
-      : status === "conectando"
-      ? "#fef3c7"
-      : "#f3f4f6";
+  // 2. Manejo de creación de una cuenta
+  const handleCrearCuenta = async (entrada: EntradaCuentaForm): Promise<boolean> => {
+    setErrorValidacion(null);
 
-  const statusTexto =
-    status === "conectado"
-      ? "Conectado"
-      : status === "conectando"
-      ? "Verificando..."
-      : status === "error"
-      ? "Error de Conexión"
-      : "Desconectado";
+    // --- Flujo A: En entorno Tauri Nativo (Conexión directa con Rust y SQLite) ---
+    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+      try {
+        await invoke("crear_cuenta", {
+          entrada: {
+            nombre: entrada.nombre,
+            tipo: entrada.tipo,
+            moneda: entrada.moneda,
+            saldo_inicial: entrada.saldo_inicial,
+          },
+        });
+        await cargarCuentas();
+        return true;
+      } catch (err: any) {
+        // En Rust: ErrorComando::Validacion(ErrorDominio { campo, mensaje })
+        if (err && typeof err === "object" && err.campo && err.mensaje) {
+          setErrorValidacion({
+            campo: err.campo,
+            mensaje: err.mensaje,
+          });
+        } else if (typeof err === "string") {
+          setErrorValidacion({
+            campo: "general",
+            mensaje: err,
+          });
+        } else {
+          setErrorValidacion({
+            campo: "general",
+            mensaje: "Error inesperado al registrar la cuenta",
+          });
+        }
+        return false;
+      }
+    }
+
+    // --- Flujo B: En Navegador Web (Modo prueba funcional previa a empaquetado) ---
+    // Validación 1: Nombre vacío
+    if (!entrada.nombre.trim()) {
+      setErrorValidacion({
+        campo: "nombre",
+        mensaje: "El nombre de la cuenta no puede estar vacío.",
+      });
+      return false;
+    }
+
+    // Validación 2: Nombre duplicado (case-insensitive)
+    if (cuentas.some((c) => c.nombre.trim().toLowerCase() === entrada.nombre.trim().toLowerCase())) {
+      setErrorValidacion({
+        campo: "nombre",
+        mensaje: `Ya existe una cuenta con el nombre '${entrada.nombre}'. Elige un nombre distinto.`,
+      });
+      return false;
+    }
+
+    // Validación 3: Saldo negativo o caracteres inválidos
+    const saldoNormalizado = entrada.saldo_inicial.replace(",", ".");
+    const numeroSaldo = Number(saldoNormalizado);
+    if (isNaN(numeroSaldo) || numeroSaldo < 0) {
+      setErrorValidacion({
+        campo: "saldo_inicial",
+        mensaje: "El saldo inicial no puede ser negativo ni contener letras.",
+      });
+      return false;
+    }
+
+    // Validación 4: Máximo 2 decimales
+    const partes = saldoNormalizado.split(".");
+    if (partes.length > 1 && partes[1].length > 2) {
+      setErrorValidacion({
+        campo: "saldo_inicial",
+        mensaje: "El saldo inicial no puede tener más de 2 decimales.",
+      });
+      return false;
+    }
+
+    // Crear la nueva cuenta formateada
+    const saldoFormateado = formatearMonto(numeroSaldo, entrada.moneda);
+    const nuevaCuenta: CuentaItem & { _saldo_num?: number } = {
+      id: `cta-${Date.now()}`,
+      nombre: entrada.nombre.trim(),
+      tipo: entrada.tipo,
+      moneda: entrada.moneda,
+      saldo_formateado: saldoFormateado,
+      _saldo_num: numeroSaldo,
+    };
+
+    const nuevasCuentas = [...cuentas, nuevaCuenta];
+    setCuentas(nuevasCuentas);
+
+    // INV-02: Calcular subtotales por moneda sumando TODAS las cuentas de la misma moneda
+    const monedasPresentes = Array.from(new Set(nuevasCuentas.map((c) => c.moneda)));
+    const nuevosSubtotales: SubtotalMoneda[] = monedasPresentes.map((codMoneda) => {
+      const cuentasDeEstaMoneda = nuevasCuentas.filter((c) => c.moneda === codMoneda);
+      const totalMoneda = cuentasDeEstaMoneda.reduce((acum, c) => {
+        const val = (c as any)._saldo_num !== undefined
+          ? (c as any)._saldo_num
+          : Number((c.saldo_formateado || "0").replace(/[^0-9,-]/g, "").replace(",", ".")) || 0;
+        return acum + val;
+      }, 0);
+
+      return {
+        moneda: codMoneda,
+        subtotal_formateado: formatearMonto(totalMoneda, codMoneda),
+        cantidad_cuentas: cuentasDeEstaMoneda.length,
+      };
+    });
+
+    setSubtotales(nuevosSubtotales);
+    return true;
+  };
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: "#f9fafb",
-        fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-        padding: "2rem",
-        boxSizing: "border-box",
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: "600px",
-          backgroundColor: "#ffffff",
-          borderRadius: "12px",
-          border: "1px solid #e5e7eb",
-          boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05)",
-          padding: "2.5rem",
+    <div style={styles.mainWrapper}>
+      {/* 1. Barra de Navegación Oficial */}
+      <Navbar
+        onOpenNuevaCuenta={() => setModalNuevaCuenta(true)}
+        onOpenDiagnostico={() => setModalDiagnostico(true)}
+      />
+
+      {/* 2. Contenedor Principal */}
+      <main style={styles.content}>
+        {/* Cabecera / Saludo */}
+        <div style={styles.heroSection}>
+          <div>
+            <h1 style={styles.heroTitle}>Tu dinero, en orden.</h1>
+            <p style={styles.heroSubtitle}>
+              Todas tus cuentas en un solo lugar, sin mezclar monedas.
+            </p>
+          </div>
+          <div style={styles.securityBadge}>
+            <span style={{ fontSize: "14px" }}>🛡️</span>
+            <span>Solo en este dispositivo</span>
+          </div>
+        </div>
+
+        {/* 3. Subtotales por Moneda (Solo aparecen si hay cuentas creadas) */}
+        <SubtotalesGrid subtotales={subtotales} />
+
+        {/* 4. Tabla de Cuentas o Estado Vacío */}
+        <ListaCuentas
+          cuentas={cuentas}
+          onCrearPrimeraCuenta={() => setModalNuevaCuenta(true)}
+        />
+      </main>
+
+      {/* 5. Pie de página Local-First */}
+      <footer style={styles.footer}>
+        <div style={styles.footerLeft}>
+          <span style={{ fontSize: "13px" }}>💾</span>
+          <span>Datos guardados localmente</span>
+        </div>
+        <div style={styles.footerRight}>Sin nube. Sin conexión. Siempre tuyos.</div>
+      </footer>
+
+      {/* 6. Modal Crear Nueva Cuenta */}
+      <ModalNuevaCuenta
+        isOpen={modalNuevaCuenta}
+        onClose={() => {
+          setModalNuevaCuenta(false);
+          setErrorValidacion(null);
         }}
-      >
-        <header style={{ marginBottom: "2rem", borderBottom: "1px solid #f3f4f6", paddingBottom: "1.5rem" }}>
-          <h1 style={{ fontSize: "1.6rem", fontWeight: 700, color: "#111827", margin: 0 }}>
-            Cuentas Claras
-          </h1>
-          <p style={{ color: "#6b7280", marginTop: "0.5rem", fontSize: "0.95rem" }}>
-            Entrega 1: Ambiente Básico y Conexión Inicial (Full Stack Ping)
-          </p>
-        </header>
+        onSubmit={handleCrearCuenta}
+        errorExterno={errorValidacion}
+      />
 
-        <section style={{ marginBottom: "2rem" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
-            <span style={{ fontSize: "0.95rem", color: "#374151", fontWeight: 500 }}>
-              Estado del Servidor:
-            </span>
-            <span
-              style={{
-                display: "inline-block",
-                padding: "0.35rem 0.85rem",
-                borderRadius: "9999px",
-                fontSize: "0.85rem",
-                fontWeight: 600,
-                color: badgeColor,
-                backgroundColor: badgeBg,
-              }}
-            >
-              {statusTexto}
-            </span>
-          </div>
-
-          <button
-            onClick={handlePing}
-            disabled={loading}
-            style={{
-              width: "100%",
-              padding: "0.85rem 1.25rem",
-              fontSize: "1rem",
-              fontWeight: 600,
-              color: "#ffffff",
-              backgroundColor: loading ? "#9ca3af" : "#2563eb",
-              border: "none",
-              borderRadius: "8px",
-              cursor: loading ? "not-allowed" : "pointer",
-              transition: "background-color 0.15s ease",
-            }}
-          >
-            {loading ? "Verificando conexión..." : "Verificar Conexión con el Servidor"}
-          </button>
-        </section>
-
-        {error && (
-          <div
-            style={{
-              padding: "1rem",
-              borderRadius: "8px",
-              backgroundColor: "#fef2f2",
-              border: "1px solid #fecaca",
-              color: "#991b1b",
-              fontSize: "0.9rem",
-              marginBottom: "1.5rem",
-            }}
-          >
-            <strong>Fallo de conexión:</strong> {error}
-          </div>
-        )}
-
-        {data && (
-          <section
-            style={{
-              padding: "1.25rem",
-              borderRadius: "8px",
-              backgroundColor: "#f8fafc",
-              border: "1px solid #e2e8f0",
-            }}
-          >
-            <h3 style={{ margin: "0 0 1rem 0", fontSize: "1rem", color: "#0f172a", fontWeight: 600 }}>
-              Métricas de Conexión Recibidas:
-            </h3>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", fontSize: "0.9rem" }}>
-              <div>
-                <span style={{ color: "#64748b" }}>Estado:</span>{" "}
-                <strong style={{ color: "#0f172a" }}>{data.estado}</strong>
-              </div>
-              <div>
-                <span style={{ color: "#64748b" }}>Versión del Servidor:</span>{" "}
-                <strong style={{ color: "#0f172a" }}>{data.version}</strong>
-              </div>
-              <div>
-                <span style={{ color: "#64748b" }}>Latencia:</span>{" "}
-                <strong style={{ color: "#16a34a" }}>{data.latencia_ms} ms</strong>
-              </div>
-              <div>
-                <span style={{ color: "#64748b" }}>Timestamp:</span>{" "}
-                <strong style={{ color: "#0f172a" }}>{data.timestamp}</strong>
-              </div>
-            </div>
-
-            <div style={{ marginTop: "1rem", borderTop: "1px solid #e2e8f0", paddingTop: "0.75rem", fontSize: "0.9rem" }}>
-              <span style={{ color: "#64748b" }}>Mensaje del Servidor:</span>
-              <p style={{ margin: "0.35rem 0 0 0", color: "#0f172a", fontStyle: "italic" }}>
-                "{data.mensaje}"
-              </p>
-            </div>
-          </section>
-        )}
-      </div>
-    </main>
+      {/* 7. Modal Diagnóstico de Red */}
+      <ModalDiagnostico
+        isOpen={modalDiagnostico}
+        onClose={() => setModalDiagnostico(false)}
+      />
+    </div>
   );
 }
+
+const styles: Record<string, React.CSSProperties> = {
+  mainWrapper: {
+    minHeight: "100vh",
+    display: "flex",
+    flexDirection: "column",
+    backgroundColor: "var(--bg-app)",
+  },
+  content: {
+    flex: 1,
+    width: "100%",
+    maxWidth: "1152px",
+    margin: "0 auto",
+    padding: "36px 24px 48px 24px",
+  },
+  heroSection: {
+    display: "flex",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    marginBottom: "32px",
+    flexWrap: "wrap",
+    gap: "16px",
+  },
+  heroTitle: {
+    fontSize: "28px",
+    fontWeight: 700,
+    color: "var(--text-primary)",
+    letterSpacing: "-0.6px",
+    lineHeight: 1.15,
+  },
+  heroSubtitle: {
+    fontSize: "14px",
+    color: "var(--text-secondary)",
+    marginTop: "6px",
+  },
+  securityBadge: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    fontSize: "12px",
+    fontWeight: 600,
+    color: "var(--text-secondary)",
+    backgroundColor: "var(--surface-card)",
+    border: "1px solid var(--border-subtle)",
+    padding: "6px 12px",
+    borderRadius: "9999px",
+  },
+  footer: {
+    height: "64px",
+    padding: "0 64px",
+    borderTop: "1px solid var(--border-subtle)",
+    backgroundColor: "var(--surface-card)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    fontSize: "11.5px",
+    color: "var(--text-secondary)",
+  },
+  footerLeft: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    fontWeight: 500,
+  },
+  footerRight: {
+    fontWeight: 500,
+    color: "var(--text-muted)",
+  },
+};

@@ -111,14 +111,14 @@ Abrir una segunda terminal en la raiz del repositorio:
 ```bash
 cd front_end
 
-# Instalar dependencias de Node.js
-npm install
+# Instalar dependencias con pnpm
+pnpm install
 
 # Iniciar aplicacion nativa de escritorio con Tauri
-npm run tauri dev
+pnpm tauri dev
 ```
 
-*Nota para desarrollo rapido en navegador:* Tambien es posible ejecutar unicamente la interfaz web con `npm run dev` (disponible en `http://localhost:3000`), la cual incorpora un mecanismo de comunicacion compatible con el servidor para pruebas de maquetado.
+*Nota para desarrollo rapido en navegador:* Tambien es posible ejecutar unicamente la interfaz web con `pnpm dev` (disponible en `http://localhost:3000`), la cual incorpora un mecanismo de comunicacion compatible con el servidor para pruebas de maquetado.
 
 ---
 

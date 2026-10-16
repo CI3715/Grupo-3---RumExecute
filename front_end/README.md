@@ -19,7 +19,7 @@ Modulo cliente para la aplicacion de finanzas personales y gestion de gastos com
 Ejecutar en este directorio (`front_end/`):
 
 ```bash
-npm install
+pnpm install
 ```
 
 ## Ejecucion en Modo Desarrollo
@@ -27,7 +27,7 @@ npm install
 Para iniciar la aplicacion de escritorio completa con recarga rapida (hot-reload):
 
 ```bash
-npm run tauri dev
+pnpm tauri dev
 ```
 
 Este comando inicia el servidor de desarrollo de Next.js en el puerto 3000 y abre la ventana nativa de Tauri.
@@ -37,7 +37,7 @@ Este comando inicia el servidor de desarrollo de Next.js en el puerto 3000 y abr
 Para trabajar unicamente en la interfaz web sin compilar el binario de Rust:
 
 ```bash
-npm run dev
+pnpm dev
 ```
 
 La interfaz estara accesible en `http://localhost:3000`. Nota: Las llamadas que requieren IPC nativo de Tauri cuentan con un mecanismo de respaldo por HTTP directo para facilitar pruebas visuales en navegador.
@@ -47,7 +47,7 @@ La interfaz estara accesible en `http://localhost:3000`. Nota: Las llamadas que 
 Para generar el export estatico del frontend web:
 
 ```bash
-npm run build
+pnpm build
 ```
 
 Los artefactos estaticos se generaran en el directorio `out/`.
@@ -55,5 +55,5 @@ Los artefactos estaticos se generaran en el directorio `out/`.
 Para compilar el binario instalable de escritorio:
 
 ```bash
-npm run tauri build
+pnpm tauri build
 ```

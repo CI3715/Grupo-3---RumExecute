@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cuentas Claras — Colección Oficial "La Balanza"</title>
+<style>
+  :root {
+    --bg: #F8FAFC;
+    --card-bg: #FFFFFF;
+    --text-primary: #0F172A;
+    --text-secondary: #475569;
+    --text-muted: #94A3B8;
+    --border: #E2E8F0;
+    --emerald-brand: #059669;
+    --emerald-subtle: #ECFDF5;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+    --shadow-md: 0 10px 25px -5px rgba(0,0,0,0.06);
+  }
+
+  body.dark-mode {
+    --bg: #090D16;
+    --card-bg: #111827;
+    --text-primary: #F8FAFC;
+    --text-secondary: #94A3B8;
+    --text-muted: #64748B;
+    --border: #1E293B;
+    --emerald-subtle: #064E3B;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+    background-color: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.5;
+    padding: 3rem 1.5rem;
+    transition: background 0.25s ease, color 0.25s ease;
+  }
+
+  .container { max-width: 1100px; margin: 0 auto; }
+
+  /* Header */
+  .header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 2rem;
+    margin-bottom: 2.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  .title-group h1 {
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+  .title-group p {
+    color: var(--text-secondary);
+    font-size: 1rem;
+    margin-top: 0.3rem;
+  }
+  .btn-theme {
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    color: var(--text-primary);
+    padding: 0.5rem 1.2rem;
+    border-radius: 9999px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* Grid of variations */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 2rem;
+    margin-bottom: 2.5rem;
+  }
+
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
+
+  .preview-box {
+    padding: 3rem 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.015);
+    border-bottom: 1px solid var(--border);
+    min-height: 220px;
+  }
+  body.dark-mode .preview-box { background: rgba(0,0,0,0.2); }
+
+  .preview-box img {
+    max-width: 150px;
+    max-height: 150px;
+    transition: transform 0.2s;
+  }
+  .card:hover .preview-box img { transform: scale(1.05); }
+
+  .card-info {
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    flex: 1;
+  }
+  .badge {
+    align-self: flex-start;
+    padding: 0.25rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: var(--emerald-subtle);
+    color: var(--emerald-brand);
+  }
+  .card-info h3 { font-size: 1.2rem; font-weight: 700; }
+  .card-info p { font-size: 0.88rem; color: var(--text-secondary); line-height: 1.5; }
+
+  .file-name {
+    margin-top: auto;
+    padding-top: 0.8rem;
+    border-top: 1px dashed var(--border);
+    font-size: 0.78rem;
+    font-family: monospace;
+    color: var(--text-muted);
+  }
+
+  /* Full Width Navbar Showcase */
+  .navbar-showcase {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 2rem;
+    margin-bottom: 2.5rem;
+    box-shadow: var(--shadow-sm);
+  }
+  .navbar-showcase h3 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+  }
+  .navbar-mockup {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.8rem 1.4rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 1rem;
+  }
+  .navbar-mockup img { height: 38px; width: auto; }
+  .navbar-actions { display: flex; gap: 0.6rem; }
+  .action-pill {
+    height: 30px;
+    padding: 0 14px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+  }
+  .action-pill.secondary {
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+  .action-pill.primary {
+    background: var(--emerald-brand);
+    color: #FFFFFF;
+  }
+
+  /* Scalability Bar */
+  .scalability-box {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1.25rem 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+  }
+  .scale-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .scale-label { font-size: 0.75rem; font-weight: 700; color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Header -->
+  <header class="header">
+    <div class="title-group">
+      <h1>Colección Oficial: "La Balanza"</h1>
+      <p>Exploraciones refinadas sobre la línea seleccionada para <strong>Cuentas Claras</strong></p>
+    </div>
+    <button class="btn-theme" onclick="toggleTheme()">🌓 Alternar Claro / Oscuro</button>
+  </header>
+
+  <!-- Navbar Showcase Card -->
+  <div class="navbar-showcase">
+    <span class="badge" style="margin-bottom: 0.6rem; display: inline-block;">Implementación para Desktop & Web</span>
+    <h3>Logotipo Horizontal para la Barra de Navegación</h3>
+    <p style="font-size: 0.9rem; color: var(--text-secondary);">
+      Diseñado para integrarse directamente en <code>front_end/src/app/page.tsx</code> con el Isotipo de la Balanza y tipografía equilibrada.
+    </p>
+
+    <div class="navbar-mockup">
+      <img src="cuentas-claras-navbar.svg" alt="Cuentas Claras Navbar Wordmark">
+      <div class="navbar-actions">
+        <span class="action-pill secondary">📶 Diagnóstico Servidor</span>
+        <span class="action-pill primary">+ Nueva cuenta</span>
+      </div>
+    </div>
+    <div class="file-name" style="margin-top: 1rem;">Archivo para el Header: <strong>cuentas-claras-navbar.svg</strong></div>
+  </div>
+
+  <!-- 4 Target Variations Grid -->
+  <div class="grid">
+
+    <!-- Card 1: Original Aprobado -->
+    <div class="card">
+      <div class="preview-box">
+        <img src="balanza-original.svg" alt="La Balanza Original">
+      </div>
+      <div class="card-info">
+        <span class="badge">Variación 1 · Diseño Base Aprobado</span>
+        <h3>La Balanza Convergente</h3>
+        <p>Los dos arcos circulares asimétricos formando las iniciales C+C con el nodo focal de balance en el cuadrante inferior derecho. Es la versión original que seleccionaste.</p>
+        <div class="file-name">balanza-original.svg</div>
+      </div>
+    </div>
+
+    <!-- Card 2: Simetría Áurea -->
+    <div class="card">
+      <div class="preview-box">
+        <img src="balanza-simetria-aurea.svg" alt="Simetría Áurea">
+      </div>
+      <div class="card-info">
+        <span class="badge">Variación 2 · Partida Doble</span>
+        <h3>Simetría Áurea y Doble Flujo</h3>
+        <p>Ambos arcos tienen peso óptico idéntico y giran en un equilibrio dinámico continuo (Debe = Haber) con dos nodos complementarios. Simboliza circulación y armonía.</p>
+        <div class="file-name">balanza-simetria-aurea.svg</div>
+      </div>
+    </div>
+
+    <!-- Card 3: Corte Arquitectónico -->
+    <div class="card">
+      <div class="preview-box">
+        <img src="balanza-precision-cut.svg" alt="Corte Arquitectónico">
+      </div>
+      <div class="card-info">
+        <span class="badge">Variación 3 · Digital & Precisión</span>
+        <h3>Corte de Precisión a 45°</h3>
+        <p>Mantiene la curva de la balanza pero corta los extremos con biseles geométricos a 45° y un nodo en rombo pulido. Da una sensación más técnica de software suizo.</p>
+        <div class="file-name">balanza-precision-cut.svg</div>
+      </div>
+    </div>
+
+    <!-- Card 4: App Icon Squircle -->
+    <div class="card">
+      <div class="preview-box">
+        <img src="balanza-app-icon.svg" alt="Icono de Escritorio">
+      </div>
+      <div class="card-info">
+        <span class="badge">Variación 4 · Icono de Escritorio</span>
+        <h3>App Icon (Dock & Instalador)</h3>
+        <p>La Balanza enmarcada en un contenedor squircle oscuro con iluminación suave, ideal para el ejecutable de Tauri, la barra de tareas de Windows y el Dock de macOS.</p>
+        <div class="file-name">balanza-app-icon.svg</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Scalability Bar -->
+  <div class="scalability-box">
+    <span class="scale-label">PRUEBA DE NITIDEZ ÓPTICA (ORIGINAL):</span>
+    <div class="scale-item">
+      <img src="balanza-original.svg" width="48" height="48">
+      <span class="scale-label">48px (Dock)</span>
+    </div>
+    <div class="scale-item">
+      <img src="balanza-original.svg" width="32" height="32">
+      <span class="scale-label">32px (Barra)</span>
+    </div>
+    <div class="scale-item">
+      <img src="balanza-original.svg" width="20" height="20">
+      <span class="scale-label">20px (Navbar)</span>
+    </div>
+    <div class="scale-item">
+      <img src="balanza-original.svg" width="16" height="16">
+      <span class="scale-label">16px (Favicon)</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  function toggleTheme() {
+    document.body.classList.toggle('dark-mode');
+  }
+</script>
+
+</body>
+</html>
