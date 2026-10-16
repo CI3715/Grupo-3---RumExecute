@@ -57,3 +57,24 @@ Para compilar el binario instalable de escritorio:
 ```bash
 pnpm tauri build
 ```
+
+## Almacenamiento Local (SQLite)
+
+Los datos financieros residen exclusivamente en el dispositivo dentro de un archivo SQLite embebido denominado `cuentas_claras_libro.db`.
+
+### Ubicación del archivo por Sistema Operativo
+
+* **Windows:** `%APPDATA%\com.davidapm.cuentas-claras\cuentas_claras_libro.db`  
+  *(Ruta absoluta: `C:\Users\<Usuario>\AppData\Roaming\com.davidapm.cuentas-claras\cuentas_claras_libro.db`)*
+* **Linux:** `~/.local/share/com.davidapm.cuentas-claras/cuentas_claras_libro.db`
+
+---
+
+## Ejecución de Pruebas Automatizadas
+
+Para ejecutar la suite completa de pruebas unitarias de dominio, casos de uso con repositorio en memoria, fitness functions y pruebas de contrato:
+
+```bash
+# Ejecutar todas las pruebas en Rust
+cargo test
+```
