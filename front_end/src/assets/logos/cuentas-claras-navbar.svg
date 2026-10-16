@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 160" width="100%" height="100%">
+  <!-- Cuentas Claras — Logotipo Horizontal Oficial para Barra de Navegación (Next.js Navbar) -->
+  <defs>
+    <linearGradient id="nav-emerald" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#059669" />
+      <stop offset="100%" stop-color="#022c22" />
+    </linearGradient>
+    <linearGradient id="nav-mint" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#34D399" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+  </defs>
+
+  <!-- Isotipo Balanza Escala Reducida -->
+  <g id="isotype" transform="translate(80, 80) scale(0.38)">
+    <path d="M 50,-150
+             A 160,160 0 1,0 50,150
+             L 50,86
+             A 96,96 0 1,1 50,-86
+             Z"
+          fill="url(#nav-emerald)" />
+
+    <path d="M -20,-110
+             A 120,120 0 0,1 110,-20
+             L 165,-45
+             A 180,180 0 0,0 -45,-165
+             Z"
+          fill="url(#nav-mint)" />
+
+    <circle cx="85" cy="55" r="32" fill="#059669" />
+    <circle cx="85" cy="55" r="14" fill="#FFFFFF" />
+  </g>
+
+  <!-- Tipografía Editorial Suizo-Fintech -->
+  <g id="typography" transform="translate(165, 0)">
+    <text x="0" y="92" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Plus Jakarta Sans', 'Segoe UI', Roboto, sans-serif" font-size="46" font-weight="800" letter-spacing="-1.2">
+      <tspan fill="#0F172A">Cuentas</tspan>
+      <tspan fill="#059669" dx="10">Claras</tspan>
+    </text>
+
+    <!-- Subtítulo de posicionamiento y autonomía -->
+    <text x="3" y="122" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif" font-size="11.5" font-weight="700" fill="#64748B" letter-spacing="2.4">
+      BILLETERA LOCAL OFFLINE
+    </text>
+
+    <!-- Indicador de privacidad -->
+    <circle cx="215" cy="118" r="3.5" fill="#10B981" />
+    <text x="226" y="122" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif" font-size="11" font-weight="600" fill="#94A3B8">
+      100% Privado
+    </text>
+  </g>
+</svg>

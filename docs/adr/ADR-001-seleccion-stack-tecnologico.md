@@ -39,5 +39,5 @@ Para la Entrega 1 ("The Full Stack Ping"), la catedra permite optar por aplicaci
 * Facilidad para realizar pruebas unitarias y de contrato independientes en cada modulo.
 
 ### Negativas / Mitigaciones
-* **Requisitos del entorno de desarrollo:** Los integrantes del equipo que desarrollen sobre el cliente requieren toolchains de Node.js y Rust (Cargo) configurados en sus equipos. Como mitigacion, la interfaz web cuenta con un mecanismo de ejecucion desacoplado en navegador (`npm run dev`) para desarrollo rapido de maquetacion.
+* **Requisitos del entorno de desarrollo:** Los integrantes del equipo que desarrollen sobre el cliente requieren toolchains de Node.js, pnpm y Rust (Cargo) configurados en sus equipos. Como mitigacion, la interfaz web cuenta con un mecanismo de ejecucion desacoplado en navegador (`pnpm dev`) para desarrollo rapido de maquetacion.
 * **Serializacion IPC:** Toda comunicacion cliente-nucleo debe definirse formalmente mediante estructuras serializables con Serde.

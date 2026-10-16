@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <!-- Cuentas Claras — La Balanza Convergente (Original Aprobado) -->
+  <defs>
+    <linearGradient id="balanza-emerald" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#059669" />
+      <stop offset="100%" stop-color="#022c22" />
+    </linearGradient>
+    <linearGradient id="balanza-mint" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#34D399" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+  </defs>
+
+  <g id="brandmark" transform="translate(256, 256)">
+    <!-- Arco Principal 'Cuentas' (Base sólida contable) -->
+    <path d="M 50,-150
+             A 160,160 0 1,0 50,150
+             L 50,86
+             A 96,96 0 1,1 50,-86
+             Z"
+          fill="url(#balanza-emerald)" />
+
+    <!-- Arco Secundario Intersecado 'Claras' (Fluidez y Transparencia) -->
+    <path d="M -20,-110
+             A 120,120 0 0,1 110,-20
+             L 165,-45
+             A 180,180 0 0,0 -45,-165
+             Z"
+          fill="url(#balanza-mint)" />
+
+    <!-- Punto Focal de Balance / Arqueo Exacto -->
+    <circle cx="85" cy="55" r="32" fill="#059669" />
+    <circle cx="85" cy="55" r="14" fill="#FFFFFF" />
+  </g>
+</svg>

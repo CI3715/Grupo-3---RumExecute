@@ -2,10 +2,10 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "cuentas_claras",
   "version": "0.1.0",
-  "identifier": "com.davidapm.cuentas_claras",
+  "identifier": "com.davidapm.cuentas-claras",
   "build": {
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build",
     "devUrl": "http://localhost:3000",
     "frontendDist": "../out"
   },
