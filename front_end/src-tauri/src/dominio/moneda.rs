@@ -23,6 +23,11 @@ impl CodigoMoneda {
             CodigoMoneda::USDT => "USDT",
         }
     }
+
+    /// Retorna la cantidad de decimales permitidos para la moneda según RF-CAM-01.
+    pub fn decimales(&self) -> u32 {
+        2
+    }
 }
 
 impl fmt::Display for CodigoMoneda {

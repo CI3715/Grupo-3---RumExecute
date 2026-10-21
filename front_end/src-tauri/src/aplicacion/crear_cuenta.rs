@@ -6,7 +6,7 @@ use crate::dominio::errores::ErrorDominio;
 use crate::dominio::evento::{DatosCuentaCreada, EventoLibro};
 use crate::dominio::moneda::CodigoMoneda;
 use crate::dominio::monto::Monto;
-use serde::{Serialize, Deserialize};   
+use serde::{Deserialize, Serialize};
 
 const DISPOSITIVO_LOCAL: &str = "dispositivo-local";
 
@@ -19,10 +19,9 @@ pub struct EntradaCrearCuenta {
     pub saldo_inicial: String,
 }
 
-
 #[derive(Debug)]
 pub enum ErrorCrearCuenta {
-    Validacion(ErrorDominio),     // dato inválido o nombre repetido: lleva campo y mensaje
+    Validacion(ErrorDominio), // dato inválido o nombre repetido: lleva campo y mensaje
     Repositorio(ErrorRepositorio), // falla técnica: sin campo
 }
 
@@ -52,11 +51,12 @@ pub fn crear_cuenta(
     // 2. Nombre repetido (sin mayúsculas/minúsculas ni espacios extremos)
     let nombre_nuevo = entrada.nombre.trim().to_lowercase();
     for evento in repo.listar_eventos()? {
-        // Hoy solo existe CuentaCreada. Al añadir más eventos a EventoLibro,
-        // este `let` dejará de compilar: cambiarlo por un `match`.
-        let EventoLibro::CuentaCreada { datos, .. } = evento;
-        if datos.nombre.trim().to_lowercase() == nombre_nuevo {
-            return Err(ErrorDominio::nombre_invalido("Ya existe una cuenta con ese nombre.").into());
+        if let EventoLibro::CuentaCreada { datos, .. } = evento {
+            if datos.nombre.trim().to_lowercase() == nombre_nuevo {
+                return Err(
+                    ErrorDominio::nombre_invalido("Ya existe una cuenta con ese nombre.").into(),
+                );
+            }
         }
     }
 
@@ -67,11 +67,12 @@ pub fn crear_cuenta(
     let datos = DatosCuentaCreada {
         id_cuenta: cuenta.id.clone(),
         nombre: cuenta.nombre.clone(),
-        tipo: cuenta.tipo,                      // Tiene derive Copy, se copia solo
-        moneda: cuenta.moneda,                  // Tiene derive Copy, se copia solo
-        saldo_inicial: cuenta.saldo_inicial,    // Tiene derive Copy, se copia solo
+        tipo: cuenta.tipo,                   // Tiene derive Copy, se copia solo
+        moneda: cuenta.moneda,               // Tiene derive Copy, se copia solo
+        saldo_inicial: cuenta.saldo_inicial, // Tiene derive Copy, se copia solo
     };
-    let evento = EventoLibro::nuevo_cuenta_creada(ids.nuevo_id(), reloj.ahora(), DISPOSITIVO_LOCAL, datos);
+    let evento =
+        EventoLibro::nuevo_cuenta_creada(ids.nuevo_id(), reloj.ahora(), DISPOSITIVO_LOCAL, datos);
     repo.guardar(evento)?;
 
     Ok(cuenta)
@@ -168,7 +169,10 @@ mod tests {
             dispositivo_origen,
             datos,
             ..
-        } = &eventos[0];
+        } = &eventos[0]
+        else {
+            panic!("Se esperaba CuentaCreada");
+        };
         assert_eq!(tipo, "cuenta_creada");
         assert_eq!(momento_registro, "2026-10-14T20:00:00Z");
         assert_eq!(dispositivo_origen, DISPOSITIVO_LOCAL);
@@ -181,9 +185,20 @@ mod tests {
         // Criterio de aceptación #2
         let mut p = Prueba::nueva();
 
-        assert!(p.crear(entrada("Efectivo Bs", "efectivo", "VES", "1250,50")).is_ok());
-        assert!(p.crear(entrada("Banco USD", "banco", "USD", "300,00")).is_ok());
-        assert!(p.crear(entrada("Billetera USDT", "billetera_digital", "USDT", "150,00")).is_ok());
+        assert!(p
+            .crear(entrada("Efectivo Bs", "efectivo", "VES", "1250,50"))
+            .is_ok());
+        assert!(p
+            .crear(entrada("Banco USD", "banco", "USD", "300,00"))
+            .is_ok());
+        assert!(p
+            .crear(entrada(
+                "Billetera USDT",
+                "billetera_digital",
+                "USDT",
+                "150,00"
+            ))
+            .is_ok());
 
         assert_eq!(p.eventos().len(), 3);
     }
