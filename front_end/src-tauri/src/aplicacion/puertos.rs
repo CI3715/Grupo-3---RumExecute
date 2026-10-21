@@ -1,6 +1,6 @@
 use crate::dominio::evento::EventoLibro; // Importa el tipo EventoLibro del módulo dominio
 
-#[derive(Debug)] 
+#[derive(Debug)]
 pub struct ErrorRepositorio(pub String);
 
 pub trait RepositorioLibro {
@@ -11,7 +11,7 @@ pub trait RepositorioLibro {
 }
 
 pub trait Reloj {
-    fn ahora(&self) -> String;   // Devuelve un string con la fecha y hora actual (revisar que tipo le pone Jean)
+    fn ahora(&self) -> String; // Devuelve un string con la fecha y hora actual (revisar que tipo le pone Jean)
 }
 
 pub trait GeneradorId {
