@@ -2,9 +2,8 @@ use crate::aplicacion::puertos::{ErrorRepositorio, GeneradorId, Reloj, Repositor
 use crate::dominio::cuenta::Cuenta;
 use crate::dominio::errores::ErrorDominio;
 use crate::dominio::evento::{DatosMovimientoRegistrado, EventoLibro};
-use crate::dominio::moneda::CodigoMoneda;
 use crate::dominio::monto::Monto;
-use crate::dominio::movimiento::{Movimiento, TipoMovimiento};
+use crate::dominio::movimiento::Movimiento;
 use serde::{Deserialize, Serialize};
 
 const DISPOSITIVO_LOCAL: &str = "dispositivo-local";
@@ -133,6 +132,8 @@ mod tests {
     use super::*;
     use crate::dominio::cuenta::TipoCuenta;
     use crate::dominio::evento::DatosCuentaCreada;
+    use crate::dominio::moneda::CodigoMoneda;
+    use crate::dominio::movimiento::TipoMovimiento;
     use crate::infraestructura::memoria_repo::RepositorioLibroEnMemoria;
     use rust_decimal::Decimal;
 
@@ -189,14 +190,14 @@ mod tests {
         }
     }
 
-    fn entrada_gasto(id_cuenta: &str, monto: &str, cat: &str, fecha: &str) -> EntradaRegistrarMovimiento {
+    fn entrada(id_cuenta: &str, tipo: &str, monto: &str, cat: &str, fecha: &str) -> EntradaRegistrarMovimiento {
         EntradaRegistrarMovimiento {
             id_cuenta: id_cuenta.to_string(),
-            tipo: "gasto".to_string(),
+            tipo: tipo.to_string(),
             monto: monto.to_string(),
             categoria: cat.to_string(),
             fecha: fecha.to_string(),
-            descripcion: "Almuerzo".to_string(),
+            descripcion: "Movimiento de prueba".to_string(),
         }
     }
 
@@ -205,8 +206,8 @@ mod tests {
         let mut p = Prueba::nueva();
 
         let mov = p
-            .registrar(entrada_gasto("cta-principal", "15,50", "Alimentación", "2026-10-21"))
-            .expect("Debe registrar el gasto válidamente");
+            .registrar(entrada("cta-principal", "gasto", "15,50", "Alimentación", "2026-10-21"))
+            .expect("Debe registrar el gasto correctamente");
 
         assert_eq!(mov.tipo, TipoMovimiento::Gasto);
         assert_eq!(mov.monto.cantidad, Decimal::new(1550, 2));
@@ -220,17 +221,61 @@ mod tests {
         assert_eq!(datos.id_cuenta, "cta-principal");
         assert_eq!(datos.monto.cantidad, Decimal::new(1550, 2));
     }
+    
+    #[test]
+    fn registra_ingreso_valido_y_guarda_evento() {
+        let mut p = Prueba::nueva();
+
+        let mov = p
+            .registrar(entrada("cta-principal", "ingreso", "500,00", "Salario", "2026-10-21"))
+            .expect("Debe registrar el ingreso correctamente");
+
+        assert_eq!(mov.tipo, TipoMovimiento::Ingreso);
+        assert_eq!(mov.monto.cantidad, Decimal::new(50000, 2));
+
+        let eventos = p.repo.listar_eventos().unwrap();
+        assert_eq!(eventos.len(), 2);
+    }
 
     #[test]
     fn rechaza_si_la_cuenta_no_existe() {
         let mut p = Prueba::nueva();
         let err = p
-            .registrar(entrada_gasto("cta-inexistente", "10,00", "Alimentación", "2026-10-21"))
+            .registrar(entrada("cta-inexistente", "gasto", "10,00", "Alimentación", "2026-10-21"))
             .expect_err("Debe rechazar cuenta inexistente");
 
         let ErrorRegistrarMovimiento::Validacion(e) = err else {
             panic!("Se esperaba error de validación");
         };
         assert_eq!(e.campo, "id_cuenta");
+    }
+
+    #[test]
+    fn rechaza_tipo_de_movimiento_desconocido() {
+        let mut p = Prueba::nueva();
+        let err = p
+            .registrar(entrada("cta-principal", "tiponoexistente", "10,00", "Alimentación", "2026-10-21"))
+            .expect_err("Debe rechazar tipo invalido");
+
+        let ErrorRegistrarMovimiento::Validacion(e) = err else {
+            panic!("Se esperaba error de validación");
+        };
+        assert_eq!(e.campo, "tipo");
+    }
+
+    #[test]
+    fn propaga_error_de_validacion_del_dominio_por_monto_invalido() {
+        let mut p = Prueba::nueva();
+
+        // Enviamos un monto negativo
+        let err = p
+            .registrar(entrada("cta-principal", "gasto", "-15,50", "Alimentación", "2026-10-21"))
+            .expect_err("El dominio debe rechazar monto negativo");
+
+        let ErrorRegistrarMovimiento::Validacion(e) = err else {
+            panic!("Se esperaba error de validación");
+        };
+        assert_eq!(e.campo, "monto");
+        assert!(p.repo.listar_eventos().unwrap().len() == 1); // No guardó el evento
     }
 }
