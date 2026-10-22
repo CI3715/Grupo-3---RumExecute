@@ -8,6 +8,10 @@ Modulo cliente para la aplicacion de finanzas personales y gestion de gastos com
 * **Nucleo Nativo (Desktop Core):** Empaquetado de escritorio mediante Tauri 2 en Rust (`src-tauri/`).
 * **Comunicacion IPC:** La interfaz web se comunica con el backend a traves de comandos invocados con Tauri (`invoke('ping_servidor')`), garantizando aislamiento y ejecucion nativa.
 
+### Comandos locales de cuentas y movimientos
+
+El nucleo Tauri expone los comandos `registrar_movimiento`, `corregir_movimiento` y `obtener_detalle_cuenta`. Los dos primeros reciben el objeto `entrada` definido por sus casos de uso; el ultimo recibe `idCuenta`. Los tres operan sobre el libro SQLite local: los movimientos se registran como eventos inmutables y las correcciones se agregan como ajustes que conservan la referencia al movimiento original.
+
 ## Requisitos Previos
 
 * Node.js (version 20 o superior) y npm / pnpm.
@@ -76,5 +80,5 @@ Para ejecutar la suite completa de pruebas unitarias de dominio, casos de uso co
 
 ```bash
 # Ejecutar todas las pruebas en Rust
-cargo test
+cargo test --manifest-path src-tauri/Cargo.toml
 ```
