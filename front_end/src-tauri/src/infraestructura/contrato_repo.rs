@@ -2,11 +2,15 @@ use std::path::PathBuf;
 
 use crate::aplicacion::puertos::RepositorioLibro;
 use crate::dominio::cuenta::TipoCuenta;
-use crate::dominio::evento::{DatosCuentaCreada, EventoLibro};
+use crate::dominio::evento::{
+    DatosCuentaCreada, DatosMovimientoCorregido, DatosMovimientoRegistrado, EventoLibro,
+};
 use crate::dominio::moneda::CodigoMoneda;
 use crate::dominio::monto::Monto;
+use crate::dominio::movimiento::TipoMovimiento;
 use crate::infraestructura::memoria_repo::RepositorioLibroEnMemoria;
 use crate::infraestructura::sqlite_repo::RepositorioLibroSqlite;
+use rust_decimal::Decimal;
 
 fn crear_evento(id_evento: &str, id_cuenta: &str) -> EventoLibro {
     EventoLibro::nuevo_cuenta_creada(
@@ -23,15 +27,57 @@ fn crear_evento(id_evento: &str, id_cuenta: &str) -> EventoLibro {
     )
 }
 
+fn crear_evento_movimiento() -> EventoLibro {
+    EventoLibro::nuevo_movimiento_registrado(
+        "evento-movimiento",
+        "2026-10-15T01:00:00.000Z",
+        "dispositivo-prueba",
+        DatosMovimientoRegistrado {
+            id_movimiento: "movimiento-1".to_string(),
+            id_cuenta: "cuenta-1".to_string(),
+            tipo: TipoMovimiento::Gasto,
+            monto: Monto::parse_movimiento("500,00", CodigoMoneda::USD).unwrap(),
+            categoria: None,
+            fecha: "2026-10-15".to_string(),
+            descripcion: "Gasto de prueba".to_string(),
+        },
+    )
+}
+
+fn crear_evento_ajuste() -> EventoLibro {
+    EventoLibro::nuevo_movimiento_corregido(
+        "evento-ajuste",
+        "2026-10-15T02:00:00.000Z",
+        "dispositivo-prueba",
+        DatosMovimientoCorregido {
+            id_ajuste: "ajuste-1".to_string(),
+            id_cuenta: "cuenta-1".to_string(),
+            id_movimiento_original: "movimiento-1".to_string(),
+            monto_ajuste: Monto::new(Decimal::new(45_000, 2), CodigoMoneda::USD),
+            monto_original: Monto::parse_movimiento("500,00", CodigoMoneda::USD).unwrap(),
+            monto_nuevo: Monto::parse_movimiento("50,00", CodigoMoneda::USD).unwrap(),
+            fecha: "2026-10-15".to_string(),
+            descripcion: "Corrección de prueba".to_string(),
+        },
+    )
+}
+
 fn verificar_contrato(repo: &mut dyn RepositorioLibro) {
     let primero = crear_evento("evento-1", "cuenta-1");
     let segundo = crear_evento("evento-2", "cuenta-2");
+    let movimiento = crear_evento_movimiento();
+    let ajuste = crear_evento_ajuste();
 
     repo.guardar(primero.clone()).unwrap();
     repo.guardar(primero.clone()).unwrap();
     repo.guardar(segundo.clone()).unwrap();
+    repo.guardar(movimiento.clone()).unwrap();
+    repo.guardar(ajuste.clone()).unwrap();
 
-    assert_eq!(repo.listar_eventos().unwrap(), vec![primero, segundo]);
+    assert_eq!(
+        repo.listar_eventos().unwrap(),
+        vec![primero, segundo, movimiento, ajuste]
+    );
 }
 
 #[test]
@@ -51,15 +97,21 @@ fn repositorio_sqlite_cumple_el_mismo_contrato_de_eventos() {
 #[test]
 fn repositorio_sqlite_conserva_eventos_al_reabrir_la_base() {
     let ruta = ruta_temporal("persistencia");
-    let evento = crear_evento("evento-persistente", "cuenta-persistente");
+    let eventos = vec![
+        crear_evento("evento-persistente", "cuenta-1"),
+        crear_evento_movimiento(),
+        crear_evento_ajuste(),
+    ];
 
     {
         let mut repo = RepositorioLibroSqlite::abrir(&ruta).unwrap();
-        repo.guardar(evento.clone()).unwrap();
+        for evento in &eventos {
+            repo.guardar(evento.clone()).unwrap();
+        }
     }
 
     let repo = RepositorioLibroSqlite::abrir(&ruta).unwrap();
-    assert_eq!(repo.listar_eventos().unwrap(), vec![evento]);
+    assert_eq!(repo.listar_eventos().unwrap(), eventos);
     drop(repo);
     std::fs::remove_file(ruta).unwrap();
 }

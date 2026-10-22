@@ -221,7 +221,7 @@ mod tests {
         assert_eq!(datos.id_cuenta, "cta-principal");
         assert_eq!(datos.monto.cantidad, Decimal::new(1550, 2));
     }
-    
+
     #[test]
     fn registra_ingreso_valido_y_guarda_evento() {
         let mut p = Prueba::nueva();

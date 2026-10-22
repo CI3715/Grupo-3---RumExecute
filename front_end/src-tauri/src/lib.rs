@@ -86,7 +86,10 @@ pub fn run() {
             ping_servidor,
             comandos::listar_monedas,
             comandos::listar_cuentas,
-            comandos::crear_cuenta
+            comandos::crear_cuenta,
+            comandos::registrar_movimiento,
+            comandos::corregir_movimiento,
+            comandos::obtener_detalle_cuenta
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
