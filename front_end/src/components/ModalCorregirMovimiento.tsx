@@ -137,7 +137,12 @@ export default function ModalCorregirMovimiento({
                 <span>{movimiento.fecha}</span>
               </div>
               <div style={{ fontSize: "13px" }}>
-                Categoría: <strong>{movimiento.categoria}</strong>
+                Categoría:{" "}
+                <strong>
+                  {typeof movimiento.categoria === "object" && movimiento.categoria !== null
+                    ? (movimiento.categoria as any).nombre || (movimiento.categoria as any).id || "Varios"
+                    : String(movimiento.categoria || "Varios")}
+                </strong>
                 {movimiento.nota ? ` · "${movimiento.nota}"` : ""}
               </div>
               <div style={{ fontSize: "13.5px" }}>

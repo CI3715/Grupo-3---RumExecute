@@ -125,16 +125,23 @@ export default function HomePage() {
         const moneda = cuentas.find((c) => c.id === id)?.moneda || "VES";
         const movs: MovimientoItem[] = listaMovs.map((m: any) => {
           const montoNum = Number(m.monto?.cantidad ?? m.monto ?? 0);
+          const tipoNorm = (typeof m.tipo === "string" ? m.tipo : m.tipo?.tipo || "gasto").toLowerCase();
+          
+          // En Rust m.categoria es un struct { id, nombre, tipo }
+          const catTexto = typeof m.categoria === "object" && m.categoria !== null
+            ? (m.categoria.nombre || m.categoria.id || "Varios")
+            : (typeof m.categoria === "string" ? m.categoria : "Varios");
+
           return {
             id: m.id,
             id_cuenta: m.id_cuenta || id,
-            tipo: m.tipo?.toLowerCase() || m.tipo,
+            tipo: tipoNorm as "gasto" | "ingreso" | "ajuste",
             monto_num: montoNum,
-            monto_formateado: formatearMontoConSigno(montoNum, moneda, m.tipo?.toLowerCase() || m.tipo),
+            monto_formateado: formatearMontoConSigno(montoNum, moneda, tipoNorm),
             fecha: m.fecha || new Date().toISOString().split("T")[0],
-            categoria: m.categoria || "Varios",
+            categoria: catTexto,
             nota: m.descripcion || m.nota || "",
-            estado: (m.tipo?.toLowerCase() === "ajuste" ? "ajuste" : "vigente") as "vigente" | "corregido" | "ajuste",
+            estado: (tipoNorm === "ajuste" ? "ajuste" : "vigente") as "vigente" | "corregido" | "ajuste",
             id_movimiento_referenciado: m.id_movimiento_referenciado,
           };
         });

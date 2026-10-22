@@ -215,6 +215,9 @@ export default function DetalleCuenta({
                 {cuenta.movimientos.map((mov) => {
                   const esAjuste = mov.tipo === "ajuste";
                   const esCorregido = mov.estado === "corregido";
+                  const nombreCat = typeof mov.categoria === "object" && mov.categoria !== null
+                    ? ((mov.categoria as any).nombre || (mov.categoria as any).id || "Varios")
+                    : String(mov.categoria || "Varios");
 
                   return (
                     <tr
@@ -229,9 +232,9 @@ export default function DetalleCuenta({
                       </td>
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                          <span style={{ fontSize: "18px" }}>{ICONOS_CATEGORIAS[mov.categoria] || "🏷️"}</span>
+                          <span style={{ fontSize: "18px" }}>{ICONOS_CATEGORIAS[nombreCat] || "🏷️"}</span>
                           <div>
-                            <div style={{ fontWeight: 600 }}>{mov.categoria}</div>
+                            <div style={{ fontWeight: 600 }}>{nombreCat}</div>
                             <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                               {mov.tipo === "gasto" ? "Gasto" : mov.tipo === "ingreso" ? "Ingreso" : "Ajuste contable"}
                             </div>
