@@ -102,35 +102,86 @@ impl RepositorioLibro for RepositorioLibroSqlite {
 mod tests {
     use super::*;
     use crate::dominio::cuenta::TipoCuenta;
-    use crate::dominio::evento::DatosCuentaCreada;
+    use crate::dominio::evento::{
+        DatosCuentaCreada, DatosMovimientoCorregido, DatosMovimientoRegistrado,
+    };
     use crate::dominio::moneda::CodigoMoneda;
     use crate::dominio::monto::Monto;
+    use crate::dominio::movimiento::TipoMovimiento;
+    use rust_decimal::Decimal;
 
     #[test]
-    fn los_eventos_persistidos_no_se_pueden_actualizar_ni_eliminar() {
+    fn las_cuentas_movimientos_y_ajustes_persistidos_no_se_pueden_actualizar_ni_eliminar() {
         let mut repo = RepositorioLibroSqlite::abrir(":memory:").unwrap();
         let moneda = CodigoMoneda::USD;
-        repo.guardar(EventoLibro::nuevo_cuenta_creada(
-            "evento-1",
-            "2026-10-15T00:00:00.000Z",
-            "dispositivo-prueba",
-            DatosCuentaCreada {
-                id_cuenta: "cuenta-1".to_string(),
-                nombre: "Cuenta de prueba".to_string(),
-                tipo: TipoCuenta::Banco,
-                moneda,
-                saldo_inicial: Monto::cero(moneda),
-            },
-        ))
-        .unwrap();
+        let eventos = [
+            EventoLibro::nuevo_cuenta_creada(
+                "evento-cuenta",
+                "2026-10-15T00:00:00.000Z",
+                "dispositivo-prueba",
+                DatosCuentaCreada {
+                    id_cuenta: "cuenta-1".to_string(),
+                    nombre: "Cuenta de prueba".to_string(),
+                    tipo: TipoCuenta::Banco,
+                    moneda,
+                    saldo_inicial: Monto::cero(moneda),
+                },
+            ),
+            EventoLibro::nuevo_movimiento_registrado(
+                "evento-movimiento",
+                "2026-10-15T01:00:00.000Z",
+                "dispositivo-prueba",
+                DatosMovimientoRegistrado {
+                    id_movimiento: "movimiento-1".to_string(),
+                    id_cuenta: "cuenta-1".to_string(),
+                    tipo: TipoMovimiento::Gasto,
+                    monto: Monto::parse_movimiento("500,00", moneda).unwrap(),
+                    categoria: None,
+                    fecha: "2026-10-15".to_string(),
+                    descripcion: "Gasto de prueba".to_string(),
+                },
+            ),
+            EventoLibro::nuevo_movimiento_corregido(
+                "evento-ajuste",
+                "2026-10-15T02:00:00.000Z",
+                "dispositivo-prueba",
+                DatosMovimientoCorregido {
+                    id_ajuste: "ajuste-1".to_string(),
+                    id_cuenta: "cuenta-1".to_string(),
+                    id_movimiento_original: "movimiento-1".to_string(),
+                    monto_ajuste: Monto::new(Decimal::new(45_000, 2), moneda),
+                    monto_original: Monto::parse_movimiento("500,00", moneda).unwrap(),
+                    monto_nuevo: Monto::parse_movimiento("50,00", moneda).unwrap(),
+                    fecha: "2026-10-15".to_string(),
+                    descripcion: "Corrección de prueba".to_string(),
+                },
+            ),
+        ];
 
-        assert!(repo
-            .conexion
-            .execute("UPDATE eventos_libro SET evento_json = '{}'", [])
-            .is_err());
-        assert!(repo
-            .conexion
-            .execute("DELETE FROM eventos_libro", [])
-            .is_err());
+        for evento in &eventos {
+            repo.guardar(evento.clone()).unwrap();
+        }
+
+        for evento in &eventos {
+            assert!(
+                repo.conexion
+                    .execute(
+                        "UPDATE eventos_libro SET evento_json = '{}' WHERE id = ?1",
+                        [evento.id()],
+                    )
+                    .is_err(),
+                "El evento {} no debe poder actualizarse",
+                evento.id()
+            );
+            assert!(
+                repo.conexion
+                    .execute("DELETE FROM eventos_libro WHERE id = ?1", [evento.id()])
+                    .is_err(),
+                "El evento {} no debe poder eliminarse",
+                evento.id()
+            );
+        }
+
+        assert_eq!(repo.listar_eventos().unwrap(), eventos);
     }
 }

@@ -41,4 +41,16 @@ impl ErrorDominio {
     pub fn tipo_invalido(mensaje: impl Into<String>) -> Self {
         Self::new("tipo", mensaje)
     }
+
+    pub fn categoria_invalida(mensaje: impl Into<String>) -> Self {
+        Self::new("categoria", mensaje)
+    }
+
+    pub fn monto_invalido(mensaje: impl Into<String>) -> Self {
+        Self::new("monto", mensaje)
+    }
+
+    pub fn fecha_invalida(mensaje: impl Into<String>) -> Self {
+        Self::new("fecha", mensaje)
+    }
 }

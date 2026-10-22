@@ -89,6 +89,66 @@ impl Monto {
         })
     }
 
+    /// Valida y construye un monto para un movimiento (Gasto o Ingreso).
+    ///
+    /// Reglas de negocio (INV-03, RF-LIB-03):
+    /// - Monto estrictamente mayor que cero (`cantidad > 0`).
+    /// - No puede tener más decimales que los que admite la moneda de la cuenta (RF-CAM-01).
+    ///
+    /// Si falla alguna validación, retorna `ErrorDominio` con `campo: "monto"`.
+    pub fn nuevo_movimiento(cantidad: Decimal, moneda: CodigoMoneda) -> Result<Self, ErrorDominio> {
+        if cantidad <= Decimal::ZERO {
+            return Err(ErrorDominio::monto_invalido(
+                "El monto del movimiento debe ser estrictamente mayor que cero.",
+            ));
+        }
+
+        let decimales_admitidos = moneda.decimales();
+        if cantidad.normalize().scale() > decimales_admitidos {
+            return Err(ErrorDominio::monto_invalido(format!(
+                "El monto {} tiene más de {} decimales, lo cual no está permitido para la moneda {}.",
+                cantidad, decimales_admitidos, moneda
+            )));
+        }
+
+        Ok(Self { cantidad, moneda })
+    }
+
+    /// Parsea un monto de movimiento a partir de una cadena y un código de moneda.
+    pub fn parse_movimiento(
+        cantidad_str: &str,
+        moneda: CodigoMoneda,
+    ) -> Result<Self, ErrorDominio> {
+        let normalizado = cantidad_str.trim().replace(',', ".");
+
+        let decimal = Decimal::from_str(&normalizado).map_err(|_| {
+            ErrorDominio::monto_invalido(format!(
+                "El valor '{}' no es un número decimal válido.",
+                cantidad_str
+            ))
+        })?;
+
+        Self::nuevo_movimiento(decimal, moneda)
+    }
+
+    /// Resta dos montos garantizando el invariante INV-02 (no restar monedas distintas).
+    pub fn restar(&self, otro: &Monto) -> Result<Monto, ErrorDominio> {
+        if self.moneda != otro.moneda {
+            return Err(ErrorDominio::new(
+                "moneda",
+                format!(
+                    "Invariante INV-02 violado: No se pueden operar montos de monedas distintas ({} y {}).",
+                    self.moneda, otro.moneda
+                ),
+            ));
+        }
+
+        Ok(Monto {
+            cantidad: self.cantidad - otro.cantidad,
+            moneda: self.moneda,
+        })
+    }
+
     /// Retorna un monto con valor cero para una moneda dada.
     pub fn cero(moneda: CodigoMoneda) -> Self {
         Self {
