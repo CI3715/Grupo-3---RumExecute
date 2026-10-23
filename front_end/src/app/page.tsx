@@ -361,6 +361,86 @@ export default function HomePage() {
     };
   }, [cuentaSeleccionadaId, cuentas, saldosIniciales, movimientosPorCuenta]);
 
+  const handleCorregirMovimiento = async (entrada: EntradaCorreccionForm): Promise<boolean> => {
+    if (enTauri()) {
+      try {
+        const payloadRust = {
+          id_movimiento_original: entrada.id_movimiento_original,
+          nuevo_monto: entrada.monto_correcto,
+          fecha: new Date().toISOString().split("T")[0],
+          descripcion: entrada.motivo?.trim() || "Ajuste de corrección",
+        };
+        await invoke("corregir_movimiento", { entrada: payloadRust });
+        await cargarCuentasTauri();
+        if (cuentaSeleccionadaId) {
+          await abrirDetalleCuenta(cuentaSeleccionadaId);
+        }
+      } catch (err) {
+        console.warn("Usando almacén local para corregir_movimiento:", err);
+      }
+    }
+
+    if (!cuentaSeleccionadaId) return false;
+    const cuenta = cuentas.find((c) => c.id === cuentaSeleccionadaId);
+    const movsActuales = movimientosPorCuenta[cuentaSeleccionadaId] || [];
+    const original = movsActuales.find((m) => m.id === entrada.id_movimiento_original);
+    if (!cuenta || !original) return false;
+
+    const montoCorrectoNum = parseFloat(entrada.monto_correcto.replace(",", "."));
+    const diff =
+      original.tipo === "gasto"
+        ? original.monto_num - montoCorrectoNum
+        : montoCorrectoNum - original.monto_num;
+
+    const movAjuste: MovimientoItem = {
+      id: `mov-ajuste-${Date.now()}`,
+      id_cuenta: cuentaSeleccionadaId,
+      tipo: "ajuste",
+      monto_num: diff,
+      monto_formateado: formatearMontoConSigno(diff, cuenta.moneda, "ajuste"),
+      fecha: new Date().toISOString().split("T")[0],
+      categoria: original.categoria,
+      nota: entrada.motivo?.trim()
+        ? `Ajuste: ${entrada.motivo.trim()}`
+        : `Ajuste por corrección de monto (${original.monto_num} → ${montoCorrectoNum})`,
+      estado: "ajuste",
+      id_movimiento_referenciado: original.id,
+    };
+
+    const listaActualizada = [
+      movAjuste,
+      ...movsActuales.map((m) => (m.id === original.id ? { ...m, estado: "corregido" as const } : m)),
+    ];
+
+    const nuevosMovs = { ...movimientosPorCuenta, [cuentaSeleccionadaId]: listaActualizada };
+    setMovimientosPorCuenta(nuevosMovs);
+    sincronizarSaldosYSubtotales(cuentas, saldosIniciales, nuevosMovs);
+    return true;
+  };
+
+  const cuentaActivaDetalle = useMemo<DetalleCuentaData | null>(() => {
+    if (!cuentaSeleccionadaId) return null;
+    const cuenta = cuentas.find((c) => c.id === cuentaSeleccionadaId);
+    if (!cuenta) return null;
+
+    const saldoIni = saldosIniciales[cuenta.id] ?? 0;
+    const movs = movimientosPorCuenta[cuenta.id] || [];
+    const { totalIngresos, totalGastos, totalAjustes, saldoActual } = calcularTotalesCuenta(saldoIni, movs);
+
+    return {
+      id: cuenta.id,
+      nombre: cuenta.nombre,
+      tipo: cuenta.tipo,
+      moneda: cuenta.moneda,
+      saldo_inicial_num: saldoIni,
+      saldo_actual_num: saldoActual,
+      total_ingresos_num: totalIngresos,
+      total_gastos_num: totalGastos,
+      total_ajustes_num: totalAjustes,
+      movimientos: movs,
+    };
+  }, [cuentaSeleccionadaId, cuentas, saldosIniciales, movimientosPorCuenta]);
+
   return (
     <div className="app-wrapper">
       <Navbar
