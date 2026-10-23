@@ -82,3 +82,30 @@ Para ejecutar la suite completa de pruebas unitarias de dominio, casos de uso co
 # Ejecutar todas las pruebas en Rust
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
+## Reproducir el Ejemplo de la Sección 2.2 (Corrección de un Movimiento)
+
+Este ejemplo demuestra el flujo de inmutabilidad: un gasto anotado incorrectamente
+se corrige mediante un ajuste, sin borrar ni editar el original.
+
+1. Ejecutar `pnpm tauri dev` y crear (o abrir) una cuenta llamada "Billetera dólares"
+   en USD con saldo inicial de 1.000,00.
+2. Registrar un **ingreso** de 800,00 en la categoría "Salario".
+   → El saldo debe quedar en 1.800,00.
+3. Registrar un **gasto** de 500,00 en la categoría "Alimentación"
+   (simulando el error: el monto real era 50,00).
+   → El saldo debe quedar en 1.300,00.
+4. Sobre ese movimiento, seleccionar "Corregir" e indicar el monto correcto: 50,00.
+   → Se genera un ajuste de +450,00. El saldo final debe quedar en **1.750,00**.
+5. Verificar en el historial de la cuenta que:
+   - El movimiento original (500,00) sigue visible, marcado como "corregido".
+   - Existe un ajuste nuevo que referencia al movimiento original.
+
+### Verificación de Autonomía (sin conexión)
+
+1. Apagar el servidor backend del proyecto (si está corriendo).
+2. Desactivar la conexión de red del equipo (WiFi/Ethernet).
+3. Cerrar la aplicación por completo y volver a abrirla (`pnpm tauri dev` o el binario compilado).
+4. Confirmar que:
+   - La cuenta, sus movimientos y el saldo de 1.750,00 son exactamente los mismos.
+   - Ninguna operación de registro, corrección o consulta de saldo requiere red
+     ni el servidor backend.
