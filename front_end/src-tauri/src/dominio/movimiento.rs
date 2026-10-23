@@ -218,41 +218,97 @@ pub fn validar_monto_movimiento(
     Ok(())
 }
 
-/// Valida que una fecha dada (en formato YYYY-MM-DD o ISO-8601) no sea futura respecto al momento actual UTC.
-///
-/// Si la fecha es futura o tiene un formato no válido, retorna `ErrorDominio` con `campo: "fecha"`.
-pub fn validar_fecha_no_futura(fecha: &str, momento_actual_utc: &str) -> Result<(), ErrorDominio> {
-    let f = fecha.trim();
-    let actual = momento_actual_utc.trim();
-
-    if f.is_empty() {
+fn extraer_componentes_fecha(s: &str) -> Result<(u32, u32, u32, &str), ErrorDominio> {
+    let trimmed = s.trim();
+    if trimmed.is_empty() {
         return Err(ErrorDominio::fecha_invalida(
             "La fecha del movimiento no puede estar vacía.",
         ));
     }
 
-    let f_part = f.split('T').next().unwrap_or(f);
-    let actual_part = actual.split('T').next().unwrap_or(actual);
+    let ymd_part = trimmed
+        .split(|c: char| c == 'T' || c.is_whitespace())
+        .next()
+        .unwrap_or(trimmed);
 
-    if f_part.len() != 10 {
+    if ymd_part.len() != 10 {
         return Err(ErrorDominio::fecha_invalida(
             "La fecha del movimiento debe tener el formato YYYY-MM-DD.",
         ));
     }
 
-    // Comparamos lexicográficamente el prefijo de fecha YYYY-MM-DD
-    if f_part > actual_part {
+    let partes: Vec<&str> = ymd_part.split('-').collect();
+    if partes.len() != 3 || partes[0].len() != 4 || partes[1].len() != 2 || partes[2].len() != 2 {
+        return Err(ErrorDominio::fecha_invalida(
+            "La fecha del movimiento debe tener el formato YYYY-MM-DD.",
+        ));
+    }
+
+    let anio: u32 = partes[0]
+        .parse()
+        .map_err(|_| ErrorDominio::fecha_invalida("Año inválido en la fecha del movimiento."))?;
+    let mes: u32 = partes[1]
+        .parse()
+        .map_err(|_| ErrorDominio::fecha_invalida("Mes inválido en la fecha del movimiento."))?;
+    let dia: u32 = partes[2]
+        .parse()
+        .map_err(|_| ErrorDominio::fecha_invalida("Día inválido en la fecha del movimiento."))?;
+
+    if !(1..=12).contains(&mes) {
+        return Err(ErrorDominio::fecha_invalida(
+            "El mes en la fecha debe estar entre 01 y 12.",
+        ));
+    }
+
+    let dias_en_mes = match mes {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 => {
+            let es_bisiesto =
+                (anio.is_multiple_of(4) && !anio.is_multiple_of(100)) || anio.is_multiple_of(400);
+            if es_bisiesto {
+                29
+            } else {
+                28
+            }
+        }
+        _ => unreachable!(),
+    };
+
+    if dia < 1 || dia > dias_en_mes {
         return Err(ErrorDominio::fecha_invalida(format!(
-            "La fecha '{}' es futura respecto a la fecha actual del sistema ('{}').",
-            f, actual_part
+            "El día {:02} no es válido para el mes {:02} del año {:04}.",
+            dia, mes, anio
         )));
     }
 
-    // Si además la fecha incluye timestamp completo y el día es el actual, comparar momento completo
-    if f.contains('T') && actual.contains('T') && f_part == actual_part && f > actual {
+    Ok((anio, mes, dia, ymd_part))
+}
+
+/// Valida que una fecha dada (en formato YYYY-MM-DD o ISO-8601) no sea futura respecto al momento actual UTC.
+///
+/// Si la fecha es futura o tiene un formato no válido, retorna `ErrorDominio` con `campo: "fecha"`.
+pub fn validar_fecha_no_futura(fecha: &str, momento_actual_utc: &str) -> Result<(), ErrorDominio> {
+    let (f_anio, f_mes, f_dia, f_ymd) = extraer_componentes_fecha(fecha)?;
+    let (act_anio, act_mes, act_dia, act_ymd) = extraer_componentes_fecha(momento_actual_utc)?;
+
+    if (f_anio, f_mes, f_dia) > (act_anio, act_mes, act_dia) {
+        return Err(ErrorDominio::fecha_invalida(format!(
+            "La fecha '{}' es futura respecto a la fecha actual del sistema ('{}').",
+            f_ymd, act_ymd
+        )));
+    }
+
+    let f_trim = fecha.trim();
+    let act_trim = momento_actual_utc.trim();
+    if (f_anio, f_mes, f_dia) == (act_anio, act_mes, act_dia)
+        && f_trim.contains('T')
+        && act_trim.contains('T')
+        && f_trim > act_trim
+    {
         return Err(ErrorDominio::fecha_invalida(format!(
             "El momento '{}' es posterior al momento actual del sistema ('{}').",
-            f, actual
+            f_trim, act_trim
         )));
     }
 
@@ -509,6 +565,70 @@ mod tests {
 
         assert_eq!(err.campo, "fecha");
         assert!(err.mensaje.contains("es futura"));
+    }
+
+    #[test]
+    fn test_rechaza_ingreso_con_fecha_futura_indicando_campo_fecha() {
+        let cuenta = cuenta_ejemplo(CodigoMoneda::USD);
+        let monto = Monto::new(Decimal::new(5000, 2), CodigoMoneda::USD);
+        let hoy = "2026-10-20T12:00:00.000Z";
+
+        let err = Movimiento::nuevo_ingreso(
+            "m_futuro",
+            &cuenta,
+            monto,
+            "Salario",
+            "2026-10-21",
+            "Nómina futura",
+            hoy,
+        )
+        .expect_err("Debe rechazar ingreso con fecha futura");
+
+        assert_eq!(err.campo, "fecha");
+        assert!(err.mensaje.contains("es futura"));
+    }
+
+    #[test]
+    fn test_rechaza_ingreso_con_formato_de_fecha_invalido() {
+        let cuenta = cuenta_ejemplo(CodigoMoneda::USD);
+        let monto = Monto::new(Decimal::new(5000, 2), CodigoMoneda::USD);
+        let hoy = "2026-10-20T12:00:00.000Z";
+
+        let err_vacia = Movimiento::nuevo_ingreso(
+            "m_vacia",
+            &cuenta,
+            monto,
+            "Salario",
+            "   ",
+            "Fecha vacía",
+            hoy,
+        )
+        .expect_err("Debe rechazar fecha vacía");
+        assert_eq!(err_vacia.campo, "fecha");
+
+        let err_slash = Movimiento::nuevo_ingreso(
+            "m_slash",
+            &cuenta,
+            monto,
+            "Salario",
+            "2026/10/20",
+            "Formato incorrecto",
+            hoy,
+        )
+        .expect_err("Debe rechazar fecha con /");
+        assert_eq!(err_slash.campo, "fecha");
+
+        let err_dia_invalido = Movimiento::nuevo_ingreso(
+            "m_dia",
+            &cuenta,
+            monto,
+            "Salario",
+            "2026-02-30",
+            "Día no existente",
+            hoy,
+        )
+        .expect_err("Debe rechazar día inválido para el mes");
+        assert_eq!(err_dia_invalido.campo, "fecha");
     }
 
     #[test]

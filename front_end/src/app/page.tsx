@@ -270,6 +270,19 @@ export default function HomePage() {
   };
 
   const handleRegistrarMovimiento = async (entrada: EntradaMovimientoForm): Promise<boolean> => {
+    setErrorValidacion(null);
+    const hoy = new Date().toISOString().split("T")[0];
+    const fechaMovimiento = entrada.fecha?.trim() || hoy;
+
+    if (fechaMovimiento > hoy) {
+      const errorObj = {
+        campo: "fecha",
+        mensaje: `No se permiten movimientos con fechas futuras (${fechaMovimiento} es posterior a la fecha actual ${hoy}).`,
+      };
+      setErrorValidacion(errorObj);
+      throw errorObj;
+    }
+
     if (enTauri()) {
       try {
         const payloadRust = {
@@ -277,15 +290,20 @@ export default function HomePage() {
           tipo: entrada.tipo,
           monto: entrada.monto,
           categoria: entrada.categoria,
-          fecha: entrada.fecha || new Date().toISOString().split("T")[0],
+          fecha: fechaMovimiento,
           descripcion: entrada.nota?.trim() || "Sin descripción",
         };
         await invoke("registrar_movimiento", { entrada: payloadRust });
         await cargarCuentasTauri();
         await abrirDetalleCuenta(entrada.id_cuenta);
         return true;
-      } catch (err) {
-        console.warn("Usando almacén local para registrar_movimiento:", err);
+      } catch (err: any) {
+        const errorObj = {
+          campo: err?.campo || "fecha",
+          mensaje: err?.mensaje || (typeof err === "string" ? err : "Error al registrar el movimiento"),
+        };
+        setErrorValidacion(errorObj);
+        throw errorObj;
       }
     }
 
@@ -299,7 +317,7 @@ export default function HomePage() {
       tipo: entrada.tipo,
       monto_num: montoNum,
       monto_formateado: formatearMontoConSigno(montoNum, cuenta.moneda, entrada.tipo),
-      fecha: entrada.fecha || new Date().toISOString().split("T")[0],
+      fecha: fechaMovimiento,
       categoria: entrada.categoria,
       nota: entrada.nota?.trim(),
       estado: "vigente",
@@ -315,6 +333,7 @@ export default function HomePage() {
   };
 
   const handleCorregirMovimiento = async (entrada: EntradaCorreccionForm): Promise<boolean> => {
+    setErrorValidacion(null);
     if (enTauri()) {
       try {
         const payloadRust = {
@@ -329,8 +348,13 @@ export default function HomePage() {
           await abrirDetalleCuenta(cuentaSeleccionadaId);
         }
         return true;
-      } catch (err) {
-        console.warn("Usando almacén local para corregir_movimiento:", err);
+      } catch (err: any) {
+        const errorObj = {
+          campo: err?.campo || "monto_correcto",
+          mensaje: err?.mensaje || (typeof err === "string" ? err : "Error al corregir el movimiento"),
+        };
+        setErrorValidacion(errorObj);
+        throw errorObj;
       }
     }
 

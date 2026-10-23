@@ -104,6 +104,11 @@ export default function ModalCorregirMovimiento({
         motivo: motivo.trim(),
       });
       if (exito) onClose();
+    } catch (err: any) {
+      setErrorActivo({
+        campo: err?.campo || "monto_correcto",
+        mensaje: err?.mensaje || (typeof err === "string" ? err : "Error al corregir el movimiento."),
+      });
     } finally {
       setCargando(false);
     }
