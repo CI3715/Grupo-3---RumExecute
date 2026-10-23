@@ -5,9 +5,7 @@ use crate::dominio::cuenta::Cuenta;
 use crate::dominio::errores::ErrorDominio;
 use crate::dominio::evento::EventoLibro;
 use crate::dominio::monto::Monto;
-use crate::dominio::movimiento::{
-    aplicar_movimiento_a_saldo, Movimiento, TipoMovimiento,
-};
+use crate::dominio::movimiento::{aplicar_movimiento_a_saldo, Movimiento, TipoMovimiento};
 
 /// Respuesta con el detalle proyectado de la cuenta y su historial de movimientos.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

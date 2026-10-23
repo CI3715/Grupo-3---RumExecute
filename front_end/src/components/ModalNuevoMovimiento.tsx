@@ -104,8 +104,15 @@ export default function ModalNuevoMovimiento({
     if (isNaN(montoFinalNum) || montoFinalNum <= 0) {
       return setErrorActivo({ campo: "monto", mensaje: "El monto debe ser mayor que 0." });
     }
+    const hoy = new Date().toISOString().split("T")[0];
     if (!fecha) {
       return setErrorActivo({ campo: "fecha", mensaje: "Selecciona una fecha válida." });
+    }
+    if (fecha > hoy) {
+      return setErrorActivo({
+        campo: "fecha",
+        mensaje: `No se permiten movimientos con fechas futuras (${fecha} es posterior a hoy ${hoy}).`,
+      });
     }
     if (esNuevaCategoria && !categoriaPersonalizada.trim()) {
       return setErrorActivo({ campo: "categoria", mensaje: "Ingresa el nombre de la categoría." });
@@ -128,6 +135,11 @@ export default function ModalNuevoMovimiento({
         nota: nota.trim(),
       });
       if (exito) onClose();
+    } catch (err: any) {
+      setErrorActivo({
+        campo: err?.campo || "fecha",
+        mensaje: err?.mensaje || (typeof err === "string" ? err : "Error al registrar el movimiento."),
+      });
     } finally {
       setCargando(false);
     }
@@ -228,6 +240,7 @@ export default function ModalNuevoMovimiento({
               <label className="form-label">Fecha</label>
               <input
                 type="date"
+                max={new Date().toISOString().split("T")[0]}
                 value={fecha}
                 onChange={(e) => {
                   setFecha(e.target.value);

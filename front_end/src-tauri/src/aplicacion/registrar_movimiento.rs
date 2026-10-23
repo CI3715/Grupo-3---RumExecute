@@ -66,7 +66,10 @@ pub fn registrar_movimiento(
     let cuenta = cuenta_opt.ok_or_else(|| {
         ErrorDominio::new(
             "id_cuenta",
-            format!("No existe ninguna cuenta registrada con el id '{}'.", entrada.id_cuenta),
+            format!(
+                "No existe ninguna cuenta registrada con el id '{}'.",
+                entrada.id_cuenta
+            ),
         )
     })?;
 
@@ -185,12 +188,21 @@ mod tests {
             }
         }
 
-        fn registrar(&mut self, entrada: EntradaRegistrarMovimiento) -> Result<Movimiento, ErrorRegistrarMovimiento> {
+        fn registrar(
+            &mut self,
+            entrada: EntradaRegistrarMovimiento,
+        ) -> Result<Movimiento, ErrorRegistrarMovimiento> {
             registrar_movimiento(&mut self.repo, &RelojFijo, &mut self.ids, entrada)
         }
     }
 
-    fn entrada(id_cuenta: &str, tipo: &str, monto: &str, cat: &str, fecha: &str) -> EntradaRegistrarMovimiento {
+    fn entrada(
+        id_cuenta: &str,
+        tipo: &str,
+        monto: &str,
+        cat: &str,
+        fecha: &str,
+    ) -> EntradaRegistrarMovimiento {
         EntradaRegistrarMovimiento {
             id_cuenta: id_cuenta.to_string(),
             tipo: tipo.to_string(),
@@ -206,7 +218,13 @@ mod tests {
         let mut p = Prueba::nueva();
 
         let mov = p
-            .registrar(entrada("cta-principal", "gasto", "15,50", "Alimentación", "2026-10-21"))
+            .registrar(entrada(
+                "cta-principal",
+                "gasto",
+                "15,50",
+                "Alimentación",
+                "2026-10-21",
+            ))
             .expect("Debe registrar el gasto correctamente");
 
         assert_eq!(mov.tipo, TipoMovimiento::Gasto);
@@ -227,7 +245,13 @@ mod tests {
         let mut p = Prueba::nueva();
 
         let mov = p
-            .registrar(entrada("cta-principal", "ingreso", "500,00", "Salario", "2026-10-21"))
+            .registrar(entrada(
+                "cta-principal",
+                "ingreso",
+                "500,00",
+                "Salario",
+                "2026-10-21",
+            ))
             .expect("Debe registrar el ingreso correctamente");
 
         assert_eq!(mov.tipo, TipoMovimiento::Ingreso);
@@ -241,7 +265,13 @@ mod tests {
     fn rechaza_si_la_cuenta_no_existe() {
         let mut p = Prueba::nueva();
         let err = p
-            .registrar(entrada("cta-inexistente", "gasto", "10,00", "Alimentación", "2026-10-21"))
+            .registrar(entrada(
+                "cta-inexistente",
+                "gasto",
+                "10,00",
+                "Alimentación",
+                "2026-10-21",
+            ))
             .expect_err("Debe rechazar cuenta inexistente");
 
         let ErrorRegistrarMovimiento::Validacion(e) = err else {
@@ -254,7 +284,13 @@ mod tests {
     fn rechaza_tipo_de_movimiento_desconocido() {
         let mut p = Prueba::nueva();
         let err = p
-            .registrar(entrada("cta-principal", "tiponoexistente", "10,00", "Alimentación", "2026-10-21"))
+            .registrar(entrada(
+                "cta-principal",
+                "tiponoexistente",
+                "10,00",
+                "Alimentación",
+                "2026-10-21",
+            ))
             .expect_err("Debe rechazar tipo invalido");
 
         let ErrorRegistrarMovimiento::Validacion(e) = err else {
@@ -269,7 +305,13 @@ mod tests {
 
         // Enviamos un monto negativo
         let err = p
-            .registrar(entrada("cta-principal", "gasto", "-15,50", "Alimentación", "2026-10-21"))
+            .registrar(entrada(
+                "cta-principal",
+                "gasto",
+                "-15,50",
+                "Alimentación",
+                "2026-10-21",
+            ))
             .expect_err("El dominio debe rechazar monto negativo");
 
         let ErrorRegistrarMovimiento::Validacion(e) = err else {
@@ -277,5 +319,28 @@ mod tests {
         };
         assert_eq!(e.campo, "monto");
         assert!(p.repo.listar_eventos().unwrap().len() == 1); // No guardó el evento
+    }
+
+    #[test]
+    fn rechaza_ingreso_con_fecha_futura_indicando_campo_fecha() {
+        let mut p = Prueba::nueva();
+
+        // RelojFijo es 2026-10-21T12:00:00Z, enviamos fecha 2026-10-22
+        let err = p
+            .registrar(entrada(
+                "cta-principal",
+                "ingreso",
+                "100,00",
+                "Salario",
+                "2026-10-22",
+            ))
+            .expect_err("Debe rechazar ingreso con fecha futura");
+
+        let ErrorRegistrarMovimiento::Validacion(e) = err else {
+            panic!("Se esperaba error de validación");
+        };
+        assert_eq!(e.campo, "fecha");
+        assert!(e.mensaje.contains("es futura"));
+        assert_eq!(p.repo.listar_eventos().unwrap().len(), 1); // No persistió ningún evento
     }
 }

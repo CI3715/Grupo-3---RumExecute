@@ -58,20 +58,20 @@ pub fn corregir_movimiento(
                     saldo_inicial: datos.saldo_inicial,
                 });
             }
-            EventoLibro::MovimientoRegistrado { datos, .. } => {
-                if datos.id_movimiento == entrada.id_movimiento_original {
-                    // Reconstruimos la entidad del movimiento original
-                    movimiento_original_opt = Some(Movimiento {
-                        id: datos.id_movimiento,
-                        id_cuenta: datos.id_cuenta,
-                        tipo: datos.tipo,
-                        monto: datos.monto,
-                        categoria: datos.categoria,
-                        fecha: datos.fecha,
-                        descripcion: datos.descripcion,
-                        id_movimiento_referenciado: None,
-                    });
-                }
+            EventoLibro::MovimientoRegistrado { datos, .. }
+                if datos.id_movimiento == entrada.id_movimiento_original =>
+            {
+                // Reconstruimos la entidad del movimiento original
+                movimiento_original_opt = Some(Movimiento {
+                    id: datos.id_movimiento,
+                    id_cuenta: datos.id_cuenta,
+                    tipo: datos.tipo,
+                    monto: datos.monto,
+                    categoria: datos.categoria,
+                    fecha: datos.fecha,
+                    descripcion: datos.descripcion,
+                    id_movimiento_referenciado: None,
+                });
             }
             _ => {}
         }
@@ -236,10 +236,7 @@ mod tests {
 
         assert_eq!(ajuste.tipo, TipoMovimiento::Ajuste);
         assert_eq!(ajuste.monto.cantidad, Decimal::new(45000, 2)); // +450.00
-        assert_eq!(
-            ajuste.id_movimiento_referenciado.as_deref(),
-            Some("id-11")
-        );
+        assert_eq!(ajuste.id_movimiento_referenciado.as_deref(), Some("id-11"));
 
         // Se verifica la emisión del evento
         let eventos = p.repo.listar_eventos().unwrap();
@@ -263,7 +260,9 @@ mod tests {
             descripcion: "Error".to_string(),
         };
 
-        let err = p.corregir(entrada).expect_err("Debe rechazar id inexistente");
+        let err = p
+            .corregir(entrada)
+            .expect_err("Debe rechazar id inexistente");
 
         let ErrorCorregirMovimiento::Validacion(e) = err else {
             panic!("Se esperaba error de validación");
