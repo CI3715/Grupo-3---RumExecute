@@ -51,24 +51,83 @@ export default function HomePage() {
       if (!res?.cuentas) return;
 
       const mapaSaldos: Record<string, number> = {};
+      const mapaMovs: Record<string, MovimientoItem[]> = {};
+
+      // Consultar el detalle proyectado de cada cuenta (saldo_actual y movimientos de SQLite)
+      const detalles = await Promise.all(
+        res.cuentas.map(async (c) => {
+          try {
+            const d = await invoke<any>("obtener_detalle_cuenta", { idCuenta: c.id })
+              .catch(() => invoke<any>("obtener_detalle_cuenta", { id_cuenta: c.id }));
+            return { id: c.id, detalle: d };
+          } catch {
+            return { id: c.id, detalle: null };
+          }
+        })
+      );
+
       const nuevasCuentas: CuentaItem[] = res.cuentas.map((c) => {
-        mapaSaldos[c.id] = Number(c.saldo_inicial?.cantidad ?? 0);
+        const saldoIniNum = Number(c.saldo_inicial?.cantidad ?? 0);
+        mapaSaldos[c.id] = saldoIniNum;
+
+        const info = detalles.find((d) => d.id === c.id)?.detalle;
+        let saldoActualNum = saldoIniNum;
+
+        if (info?.saldo_actual) {
+          saldoActualNum = Number(info.saldo_actual.cantidad ?? saldoIniNum);
+        }
+
+        if (info && Array.isArray(info.movimientos)) {
+          const movs: MovimientoItem[] = info.movimientos.map((m: any) => {
+            const montoNum = Number(m.monto?.cantidad ?? m.monto ?? 0);
+            const tipoNorm = (typeof m.tipo === "string" ? m.tipo : m.tipo?.tipo || "gasto").toLowerCase();
+            const catTexto = typeof m.categoria === "object" && m.categoria !== null
+              ? (m.categoria.nombre || m.categoria.id || "Varios")
+              : (typeof m.categoria === "string" ? m.categoria : "Varios");
+
+            return {
+              id: m.id,
+              id_cuenta: m.id_cuenta || c.id,
+              tipo: tipoNorm as "gasto" | "ingreso" | "ajuste",
+              monto_num: montoNum,
+              monto_formateado: formatearMontoConSigno(montoNum, c.moneda, tipoNorm),
+              fecha: m.fecha || new Date().toISOString().split("T")[0],
+              categoria: catTexto,
+              nota: m.descripcion || m.nota || "",
+              estado: (tipoNorm === "ajuste" ? "ajuste" : "vigente") as "vigente" | "corregido" | "ajuste",
+              id_movimiento_referenciado: m.id_movimiento_referenciado,
+            };
+          });
+          mapaMovs[c.id] = movs;
+        }
+
         return {
           id: c.id,
           nombre: c.nombre,
           tipo: c.tipo,
           moneda: c.moneda,
-          saldo_formateado: formatearMonto(c.saldo_inicial?.cantidad ?? "0", c.moneda),
+          saldo_formateado: formatearMonto(saldoActualNum, c.moneda),
         };
       });
 
-      const nuevosSubtotales: SubtotalMoneda[] = (res.subtotales_por_moneda || []).map((s) => ({
-        moneda: s.moneda,
-        subtotal_formateado: formatearMonto(s.cantidad, s.moneda),
-        cantidad_cuentas: res.cuentas.filter((c) => c.moneda === s.moneda).length,
-      }));
+      // Calcular los subtotales usando los saldos actuales reales proyectados
+      const monedas = Array.from(new Set(nuevasCuentas.map((c) => c.moneda)));
+      const nuevosSubtotales: SubtotalMoneda[] = monedas.map((codMoneda) => {
+        const cuentasMoneda = nuevasCuentas.filter((c) => c.moneda === codMoneda);
+        const total = cuentasMoneda.reduce((acum, c) => {
+          const saldo = detalles.find((d) => d.id === c.id)?.detalle?.saldo_actual?.cantidad;
+          return acum + Number(saldo ?? mapaSaldos[c.id] ?? 0);
+        }, 0);
+
+        return {
+          moneda: codMoneda,
+          subtotal_formateado: formatearMonto(total, codMoneda),
+          cantidad_cuentas: cuentasMoneda.length,
+        };
+      });
 
       setSaldosIniciales((prev) => ({ ...mapaSaldos, ...prev }));
+      setMovimientosPorCuenta((prev) => ({ ...prev, ...mapaMovs }));
       setCuentas(nuevasCuentas);
       setSubtotales(nuevosSubtotales);
     } catch (err) {
@@ -369,6 +428,7 @@ export default function HomePage() {
         onNavigateHome={() => {
           setVista("cuentas");
           setCuentaSeleccionadaId(null);
+          cargarCuentasTauri();
         }}
       />
 
@@ -403,6 +463,7 @@ export default function HomePage() {
               onVolver={() => {
                 setVista("cuentas");
                 setCuentaSeleccionadaId(null);
+                cargarCuentasTauri();
               }}
               onRegistrarMovimiento={handleRegistrarMovimiento}
               onCorregirMovimiento={handleCorregirMovimiento}
