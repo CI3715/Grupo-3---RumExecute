@@ -125,16 +125,23 @@ export default function HomePage() {
         const moneda = cuentas.find((c) => c.id === id)?.moneda || "VES";
         const movs: MovimientoItem[] = listaMovs.map((m: any) => {
           const montoNum = Number(m.monto?.cantidad ?? m.monto ?? 0);
+          const tipoNorm = (typeof m.tipo === "string" ? m.tipo : m.tipo?.tipo || "gasto").toLowerCase();
+          
+          // En Rust m.categoria es un struct { id, nombre, tipo }
+          const catTexto = typeof m.categoria === "object" && m.categoria !== null
+            ? (m.categoria.nombre || m.categoria.id || "Varios")
+            : (typeof m.categoria === "string" ? m.categoria : "Varios");
+
           return {
             id: m.id,
             id_cuenta: m.id_cuenta || id,
-            tipo: m.tipo?.toLowerCase() || m.tipo,
+            tipo: tipoNorm as "gasto" | "ingreso" | "ajuste",
             monto_num: montoNum,
-            monto_formateado: formatearMontoConSigno(montoNum, moneda, m.tipo?.toLowerCase() || m.tipo),
+            monto_formateado: formatearMontoConSigno(montoNum, moneda, tipoNorm),
             fecha: m.fecha || new Date().toISOString().split("T")[0],
-            categoria: m.categoria || "Varios",
+            categoria: catTexto,
             nota: m.descripcion || m.nota || "",
-            estado: (m.tipo?.toLowerCase() === "ajuste" ? "ajuste" : "vigente") as "vigente" | "corregido" | "ajuste",
+            estado: (tipoNorm === "ajuste" ? "ajuste" : "vigente") as "vigente" | "corregido" | "ajuste",
             id_movimiento_referenciado: m.id_movimiento_referenciado,
           };
         });
@@ -217,6 +224,7 @@ export default function HomePage() {
         await invoke("registrar_movimiento", { entrada: payloadRust });
         await cargarCuentasTauri();
         await abrirDetalleCuenta(entrada.id_cuenta);
+        return true;
       } catch (err) {
         console.warn("Usando almacén local para registrar_movimiento:", err);
       }
@@ -246,6 +254,112 @@ export default function HomePage() {
     sincronizarSaldosYSubtotales(cuentas, saldosIniciales, nuevosMovs);
     return true;
   };
+
+  const handleCorregirMovimiento = async (entrada: EntradaCorreccionForm): Promise<boolean> => {
+    if (enTauri()) {
+      try {
+        const payloadRust = {
+          id_movimiento_original: entrada.id_movimiento_original,
+          nuevo_monto: entrada.monto_correcto,
+          fecha: new Date().toISOString().split("T")[0],
+          descripcion: entrada.motivo?.trim() || "Ajuste de corrección",
+        };
+        await invoke("corregir_movimiento", { entrada: payloadRust });
+        await cargarCuentasTauri();
+        if (cuentaSeleccionadaId) {
+          await abrirDetalleCuenta(cuentaSeleccionadaId);
+        }
+        return true;
+      } catch (err) {
+        console.warn("Usando almacén local para corregir_movimiento:", err);
+      }
+    }
+
+    if (!cuentaSeleccionadaId) return false;
+    const cuenta = cuentas.find((c) => c.id === cuentaSeleccionadaId);
+    const movsActuales = movimientosPorCuenta[cuentaSeleccionadaId] || [];
+    const original = movsActuales.find((m) => m.id === entrada.id_movimiento_original);
+    if (!cuenta || !original) return false;
+
+    const montoCorrectoNum = parseFloat(entrada.monto_correcto.replace(",", "."));
+    const diff =
+      original.tipo === "gasto"
+        ? original.monto_num - montoCorrectoNum
+        : montoCorrectoNum - original.monto_num;
+
+    const movAjuste: MovimientoItem = {
+      id: `mov-ajuste-${Date.now()}`,
+      id_cuenta: cuentaSeleccionadaId,
+      tipo: "ajuste",
+      monto_num: diff,
+      monto_formateado: formatearMontoConSigno(diff, cuenta.moneda, "ajuste"),
+      fecha: new Date().toISOString().split("T")[0],
+      categoria: original.categoria,
+      nota: entrada.motivo?.trim()
+        ? `Ajuste: ${entrada.motivo.trim()}`
+        : `Ajuste por corrección de monto (${original.monto_num} → ${montoCorrectoNum})`,
+      estado: "ajuste",
+      id_movimiento_referenciado: original.id,
+    };
+
+    const listaActualizada = [
+      movAjuste,
+      ...movsActuales.map((m) => (m.id === original.id ? { ...m, estado: "corregido" as const } : m)),
+    ];
+
+    const nuevosMovs = { ...movimientosPorCuenta, [cuentaSeleccionadaId]: listaActualizada };
+    setMovimientosPorCuenta(nuevosMovs);
+    sincronizarSaldosYSubtotales(cuentas, saldosIniciales, nuevosMovs);
+    return true;
+  };
+
+  const cuentaActivaDetalle = useMemo<DetalleCuentaData | null>(() => {
+    if (!cuentaSeleccionadaId) return null;
+    const cuenta = cuentas.find((c) => c.id === cuentaSeleccionadaId);
+    if (!cuenta) return null;
+
+    const saldoIni = saldosIniciales[cuenta.id] ?? 0;
+    const movsBrutos = movimientosPorCuenta[cuenta.id] || [];
+
+    // Sanitización exhaustiva para asegurar tipos primitivos a prueba de fallos de React
+    const movs: MovimientoItem[] = movsBrutos.map((m: any) => {
+      const catTexto = typeof m.categoria === "object" && m.categoria !== null
+        ? (m.categoria.nombre || m.categoria.id || "Varios")
+        : (typeof m.categoria === "string" ? m.categoria : "Varios");
+
+      const tipoNorm = (typeof m.tipo === "string" ? m.tipo : m.tipo?.tipo || "gasto").toLowerCase();
+      const montoNum = Number(m.monto_num ?? m.monto?.cantidad ?? m.monto ?? 0);
+
+      return {
+        ...m,
+        id: String(m.id || ""),
+        id_cuenta: String(m.id_cuenta || cuenta.id),
+        tipo: tipoNorm as "gasto" | "ingreso" | "ajuste",
+        monto_num: montoNum,
+        monto_formateado: m.monto_formateado || formatearMontoConSigno(montoNum, cuenta.moneda, tipoNorm),
+        fecha: String(m.fecha || new Date().toISOString().split("T")[0]),
+        categoria: String(catTexto),
+        nota: String(m.nota || m.descripcion || ""),
+        estado: (tipoNorm === "ajuste" ? "ajuste" : m.estado || "vigente") as "vigente" | "corregido" | "ajuste",
+        id_movimiento_referenciado: m.id_movimiento_referenciado ? String(m.id_movimiento_referenciado) : undefined,
+      };
+    });
+
+    const { totalIngresos, totalGastos, totalAjustes, saldoActual } = calcularTotalesCuenta(saldoIni, movs);
+
+    return {
+      id: cuenta.id,
+      nombre: String(cuenta.nombre),
+      tipo: String(cuenta.tipo),
+      moneda: String(cuenta.moneda),
+      saldo_inicial_num: saldoIni,
+      saldo_actual_num: saldoActual,
+      total_ingresos_num: totalIngresos,
+      total_gastos_num: totalGastos,
+      total_ajustes_num: totalAjustes,
+      movimientos: movs,
+    };
+  }, [cuentaSeleccionadaId, cuentas, saldosIniciales, movimientosPorCuenta]);
 
   const handleCorregirMovimiento = async (entrada: EntradaCorreccionForm): Promise<boolean> => {
     if (enTauri()) {
