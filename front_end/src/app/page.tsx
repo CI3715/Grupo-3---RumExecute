@@ -224,6 +224,7 @@ export default function HomePage() {
         await invoke("registrar_movimiento", { entrada: payloadRust });
         await cargarCuentasTauri();
         await abrirDetalleCuenta(entrada.id_cuenta);
+        return true;
       } catch (err) {
         console.warn("Usando almacén local para registrar_movimiento:", err);
       }
@@ -268,6 +269,7 @@ export default function HomePage() {
         if (cuentaSeleccionadaId) {
           await abrirDetalleCuenta(cuentaSeleccionadaId);
         }
+        return true;
       } catch (err) {
         console.warn("Usando almacén local para corregir_movimiento:", err);
       }
@@ -317,14 +319,39 @@ export default function HomePage() {
     if (!cuenta) return null;
 
     const saldoIni = saldosIniciales[cuenta.id] ?? 0;
-    const movs = movimientosPorCuenta[cuenta.id] || [];
+    const movsBrutos = movimientosPorCuenta[cuenta.id] || [];
+
+    // Sanitización exhaustiva para asegurar tipos primitivos a prueba de fallos de React
+    const movs: MovimientoItem[] = movsBrutos.map((m: any) => {
+      const catTexto = typeof m.categoria === "object" && m.categoria !== null
+        ? (m.categoria.nombre || m.categoria.id || "Varios")
+        : (typeof m.categoria === "string" ? m.categoria : "Varios");
+
+      const tipoNorm = (typeof m.tipo === "string" ? m.tipo : m.tipo?.tipo || "gasto").toLowerCase();
+      const montoNum = Number(m.monto_num ?? m.monto?.cantidad ?? m.monto ?? 0);
+
+      return {
+        ...m,
+        id: String(m.id || ""),
+        id_cuenta: String(m.id_cuenta || cuenta.id),
+        tipo: tipoNorm as "gasto" | "ingreso" | "ajuste",
+        monto_num: montoNum,
+        monto_formateado: m.monto_formateado || formatearMontoConSigno(montoNum, cuenta.moneda, tipoNorm),
+        fecha: String(m.fecha || new Date().toISOString().split("T")[0]),
+        categoria: String(catTexto),
+        nota: String(m.nota || m.descripcion || ""),
+        estado: (tipoNorm === "ajuste" ? "ajuste" : m.estado || "vigente") as "vigente" | "corregido" | "ajuste",
+        id_movimiento_referenciado: m.id_movimiento_referenciado ? String(m.id_movimiento_referenciado) : undefined,
+      };
+    });
+
     const { totalIngresos, totalGastos, totalAjustes, saldoActual } = calcularTotalesCuenta(saldoIni, movs);
 
     return {
       id: cuenta.id,
-      nombre: cuenta.nombre,
-      tipo: cuenta.tipo,
-      moneda: cuenta.moneda,
+      nombre: String(cuenta.nombre),
+      tipo: String(cuenta.tipo),
+      moneda: String(cuenta.moneda),
       saldo_inicial_num: saldoIni,
       saldo_actual_num: saldoActual,
       total_ingresos_num: totalIngresos,
