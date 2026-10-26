@@ -260,4 +260,59 @@ mod tests {
         assert_eq!(cat.nombre, "Educación");
         assert_eq!(cat.tipo, TipoCategoria::Ingreso);
     }
+
+    #[test]
+    fn base_de_datos_sqlite_crea_las_categorias_y_las_guarda_persistentemente() {
+        use crate::aplicacion::listar_categorias::listar_categorias;
+        use crate::infraestructura::sqlite_repo::RepositorioLibroSqlite;
+
+        let ruta = std::env::temp_dir().join(format!(
+            "cuentas_claras_cat_sqlite_{}.db",
+            uuid::Uuid::new_v4()
+        ));
+
+        // 1. Crear la categoría en SQLite
+        {
+            let mut repo = RepositorioLibroSqlite::abrir(&ruta).unwrap();
+            let mut ids = IdsSecuenciales { contador: 0 };
+            let entrada = EntradaCrearCategoria {
+                nombre: "Gimnasio".to_string(),
+                tipo: "gasto".to_string(),
+            };
+            let cat = crear_categoria(&mut repo, &RelojFijo, &mut ids, entrada)
+                .expect("Debe guardar la categoría en SQLite");
+            assert_eq!(cat.nombre, "Gimnasio");
+            assert_eq!(cat.tipo, TipoCategoria::Gasto);
+        }
+
+        // 2. Cerrar la conexión y reabrir desde el archivo en disco
+        {
+            let repo = RepositorioLibroSqlite::abrir(&ruta).unwrap();
+            let todas = listar_categorias(&repo).expect("Debe leer eventos de SQLite");
+
+            // Debe contener las 11 originales de fábrica + la nueva "Gimnasio"
+            assert_eq!(todas.len(), 12);
+            let creada = todas.iter().find(|c| c.nombre == "Gimnasio").unwrap();
+            assert_eq!(creada.tipo, TipoCategoria::Gasto);
+        }
+
+        // 3. Reabrir y verificar que no permita crear un duplicado
+        {
+            let mut repo = RepositorioLibroSqlite::abrir(&ruta).unwrap();
+            let mut ids = IdsSecuenciales { contador: 10 };
+            let entrada_repetida = EntradaCrearCategoria {
+                nombre: "  GIMNASIO  ".to_string(),
+                tipo: "gasto".to_string(),
+            };
+            let err = crear_categoria(&mut repo, &RelojFijo, &mut ids, entrada_repetida)
+                .expect_err("Debe rechazar categoría duplicada en SQLite existente");
+            let ErrorCrearCategoria::Validacion(e) = err else {
+                panic!("Se esperaba error de validación");
+            };
+            assert_eq!(e.campo, "categoria");
+            assert!(e.mensaje.contains("Ya existe"));
+        }
+
+        std::fs::remove_file(ruta).unwrap();
+    }
 }

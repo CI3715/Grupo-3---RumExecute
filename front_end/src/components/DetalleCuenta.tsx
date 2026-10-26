@@ -30,6 +30,7 @@ interface DetalleCuentaProps {
   onVolver: () => void;
   categoriasGasto?: string[];
   categoriasIngreso?: string[];
+  onCrearCategoria?: (entrada: { nombre: string; tipo: "gasto" | "ingreso" }) => Promise<boolean>;
   onRegistrarMovimiento: (entrada: EntradaMovimientoForm) => Promise<boolean>;
   onCorregirMovimiento: (entrada: EntradaCorreccionForm) => Promise<boolean>;
 }
@@ -45,6 +46,7 @@ export default function DetalleCuenta({
   onVolver,
   categoriasGasto,
   categoriasIngreso,
+  onCrearCategoria,
   onRegistrarMovimiento,
   onCorregirMovimiento,
 }: DetalleCuentaProps) {
@@ -315,6 +317,7 @@ export default function DetalleCuenta({
         tipoInicial={tipoMovimientoInicial}
         categoriasGasto={categoriasGasto}
         categoriasIngreso={categoriasIngreso}
+        onCrearCategoria={onCrearCategoria}
         onSubmit={onRegistrarMovimiento}
       />
 

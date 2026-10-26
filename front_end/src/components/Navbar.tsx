@@ -2,14 +2,12 @@
 
 interface NavbarProps {
   onOpenNuevaCuenta: () => void;
-  onOpenNuevaCategoria?: () => void;
   onOpenDiagnostico: () => void;
   onNavigateHome?: () => void;
 }
 
 export default function Navbar({
   onOpenNuevaCuenta,
-  onOpenNuevaCategoria,
   onOpenDiagnostico,
   onNavigateHome,
 }: NavbarProps) {
@@ -51,12 +49,6 @@ export default function Navbar({
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-        {onOpenNuevaCategoria && (
-          <button onClick={onOpenNuevaCategoria} className="btn btn-secondary" title="Crear nueva categoría">
-            <span style={{ fontSize: "15px" }}>🏷️</span>
-            <span>Nueva categoría</span>
-          </button>
-        )}
         <button onClick={onOpenDiagnostico} className="btn btn-secondary">
           <span>📶</span>
           <span>Diagnóstico Servidor</span>

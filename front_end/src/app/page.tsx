@@ -6,9 +6,13 @@ import Navbar from "../components/Navbar";
 import SubtotalesGrid, { SubtotalMoneda } from "../components/SubtotalesGrid";
 import ListaCuentas, { CuentaItem } from "../components/ListaCuentas";
 import ModalNuevaCuenta, { EntradaCuentaForm, ErrorValidacion } from "../components/ModalNuevaCuenta";
-import ModalNuevaCategoria, { EntradaNuevaCategoriaForm } from "../components/ModalNuevaCategoria";
 import ModalDiagnostico from "../components/ModalDiagnostico";
 import DetalleCuenta, { DetalleCuentaData } from "../components/DetalleCuenta";
+
+export interface EntradaNuevaCategoriaForm {
+  nombre: string;
+  tipo: "gasto" | "ingreso";
+}
 import { EntradaMovimientoForm } from "../components/ModalNuevoMovimiento";
 import { EntradaCorreccionForm, MovimientoItem } from "../components/ModalCorregirMovimiento";
 import {
@@ -47,7 +51,6 @@ export default function HomePage() {
   const [categoriasIngreso, setCategoriasIngreso] = useState<string[]>(CATEGORIAS_INGRESO);
 
   const [modalNuevaCuenta, setModalNuevaCuenta] = useState(false);
-  const [modalNuevaCategoria, setModalNuevaCategoria] = useState(false);
   const [modalDiagnostico, setModalDiagnostico] = useState(false);
   const [errorValidacion, setErrorValidacion] = useState<ErrorValidacion | null>(null);
 
@@ -561,7 +564,6 @@ export default function HomePage() {
     <div className="app-wrapper">
       <Navbar
         onOpenNuevaCuenta={() => setModalNuevaCuenta(true)}
-        onOpenNuevaCategoria={() => setModalNuevaCategoria(true)}
         onOpenDiagnostico={() => setModalDiagnostico(true)}
         onNavigateHome={() => {
           setVista("cuentas");
@@ -601,6 +603,7 @@ export default function HomePage() {
               cuenta={cuentaActivaDetalle}
               categoriasGasto={categoriasGasto}
               categoriasIngreso={categoriasIngreso}
+              onCrearCategoria={handleCrearCategoria}
               onVolver={() => {
                 setVista("cuentas");
                 setCuentaSeleccionadaId(null);
@@ -631,16 +634,6 @@ export default function HomePage() {
           setErrorValidacion(null);
         }}
         onSubmit={handleCrearCuenta}
-        errorExterno={errorValidacion}
-      />
-
-      <ModalNuevaCategoria
-        isOpen={modalNuevaCategoria}
-        onClose={() => {
-          setModalNuevaCategoria(false);
-          setErrorValidacion(null);
-        }}
-        onSubmit={handleCrearCategoria}
         errorExterno={errorValidacion}
       />
 
