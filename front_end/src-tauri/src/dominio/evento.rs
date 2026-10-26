@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::categoria::Categoria;
+use super::categoria::{Categoria, TipoCategoria};
 use super::cuenta::TipoCuenta;
 use super::moneda::CodigoMoneda;
 use super::monto::Monto;
@@ -41,12 +41,20 @@ pub struct DatosMovimientoCorregido {
     pub descripcion: String,
 }
 
+/// Datos específicos asociados a la creación de una nueva categoría en el libro contable (RF-LIB-07).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DatosCategoriaCreada {
+    pub id_categoria: String,
+    pub nombre: String,
+    pub tipo: TipoCategoria,
+}
+
 /// Evento inmutable del libro contable (Event Sourcing - INV-13, INV-04).
 ///
 /// Cada evento representa un hecho consumado que nunca se modifica ni se borra.
 /// Contiene:
 /// - `id`: Identificador único e inmutable del evento.
-/// - `tipo`: Nombre o clasificador del tipo de evento (ej. "cuenta_creada", "movimiento_registrado", "movimiento_corregido").
+/// - `tipo`: Nombre o clasificador del tipo de evento (ej. "cuenta_creada", "movimiento_registrado", "movimiento_corregido", "categoria_creada").
 /// - `momento_registro`: Marca temporal ISO 8601 en UTC del registro del evento.
 /// - `dispositivo_origen`: Identificador del dispositivo donde se originó el evento.
 /// - `datos`: Carga útil específica de cada clase de evento.
@@ -73,6 +81,13 @@ pub enum EventoLibro {
         momento_registro: String,
         dispositivo_origen: String,
         datos: DatosMovimientoCorregido,
+    },
+    CategoriaCreada {
+        id: String,
+        tipo: String,
+        momento_registro: String,
+        dispositivo_origen: String,
+        datos: DatosCategoriaCreada,
     },
 }
 
@@ -125,12 +140,29 @@ impl EventoLibro {
         }
     }
 
+    /// Constructor para un evento de creación de categoría inmutable (RF-LIB-07).
+    pub fn nuevo_categoria_creada(
+        id: impl Into<String>,
+        momento_registro: impl Into<String>,
+        dispositivo_origen: impl Into<String>,
+        datos: DatosCategoriaCreada,
+    ) -> Self {
+        Self::CategoriaCreada {
+            id: id.into(),
+            tipo: "categoria_creada".to_string(),
+            momento_registro: momento_registro.into(),
+            dispositivo_origen: dispositivo_origen.into(),
+            datos,
+        }
+    }
+
     /// Retorna el ID único del evento.
     pub fn id(&self) -> &str {
         match self {
             EventoLibro::CuentaCreada { id, .. }
             | EventoLibro::MovimientoRegistrado { id, .. }
-            | EventoLibro::MovimientoCorregido { id, .. } => id,
+            | EventoLibro::MovimientoCorregido { id, .. }
+            | EventoLibro::CategoriaCreada { id, .. } => id,
         }
     }
 
@@ -139,7 +171,8 @@ impl EventoLibro {
         match self {
             EventoLibro::CuentaCreada { tipo, .. }
             | EventoLibro::MovimientoRegistrado { tipo, .. }
-            | EventoLibro::MovimientoCorregido { tipo, .. } => tipo,
+            | EventoLibro::MovimientoCorregido { tipo, .. }
+            | EventoLibro::CategoriaCreada { tipo, .. } => tipo,
         }
     }
 
@@ -153,6 +186,9 @@ impl EventoLibro {
                 momento_registro, ..
             }
             | EventoLibro::MovimientoCorregido {
+                momento_registro, ..
+            }
+            | EventoLibro::CategoriaCreada {
                 momento_registro, ..
             } => momento_registro,
         }
@@ -169,16 +205,20 @@ impl EventoLibro {
             }
             | EventoLibro::MovimientoCorregido {
                 dispositivo_origen, ..
+            }
+            | EventoLibro::CategoriaCreada {
+                dispositivo_origen, ..
             } => dispositivo_origen,
         }
     }
 
-    /// Retorna el identificador de la cuenta afectada por el evento.
-    pub fn id_cuenta(&self) -> &str {
+    /// Retorna el identificador de la cuenta afectada por el evento, si aplica.
+    pub fn id_cuenta(&self) -> Option<&str> {
         match self {
-            EventoLibro::CuentaCreada { datos, .. } => &datos.id_cuenta,
-            EventoLibro::MovimientoRegistrado { datos, .. } => &datos.id_cuenta,
-            EventoLibro::MovimientoCorregido { datos, .. } => &datos.id_cuenta,
+            EventoLibro::CuentaCreada { datos, .. } => Some(&datos.id_cuenta),
+            EventoLibro::MovimientoRegistrado { datos, .. } => Some(&datos.id_cuenta),
+            EventoLibro::MovimientoCorregido { datos, .. } => Some(&datos.id_cuenta),
+            EventoLibro::CategoriaCreada { .. } => None,
         }
     }
 }
@@ -210,7 +250,7 @@ mod tests {
         assert_eq!(evento.tipo(), "cuenta_creada");
         assert_eq!(evento.momento_registro(), "2026-10-14T20:00:00Z");
         assert_eq!(evento.dispositivo_origen(), "disp-local-pc");
-        assert_eq!(evento.id_cuenta(), "cta-123");
+        assert_eq!(evento.id_cuenta(), Some("cta-123"));
 
         let EventoLibro::CuentaCreada { datos: d, .. } = &evento else {
             panic!("Tipo de evento incorrecto");
@@ -240,7 +280,7 @@ mod tests {
 
         assert_eq!(evento.id(), "evt-002");
         assert_eq!(evento.tipo(), "movimiento_registrado");
-        assert_eq!(evento.id_cuenta(), "cta-123");
+        assert_eq!(evento.id_cuenta(), Some("cta-123"));
 
         let EventoLibro::MovimientoRegistrado { datos: d, .. } = &evento else {
             panic!("Tipo de evento incorrecto");
@@ -274,9 +314,34 @@ mod tests {
 
         assert_eq!(evento.id(), "evt-003");
         assert_eq!(evento.tipo(), "movimiento_corregido");
-        assert_eq!(evento.id_cuenta(), "cta-123");
+        assert_eq!(evento.id_cuenta(), Some("cta-123"));
 
         let EventoLibro::MovimientoCorregido { datos: d, .. } = &evento else {
+            panic!("Tipo de evento incorrecto");
+        };
+        assert_eq!(d, &datos);
+    }
+
+    #[test]
+    fn test_creacion_evento_categoria_creada() {
+        let datos = DatosCategoriaCreada {
+            id_categoria: "cursos_online".to_string(),
+            nombre: "Cursos Online".to_string(),
+            tipo: TipoCategoria::Gasto,
+        };
+
+        let evento = EventoLibro::nuevo_categoria_creada(
+            "evt-cat-01",
+            "2026-10-24T12:00:00Z",
+            "disp-local",
+            datos.clone(),
+        );
+
+        assert_eq!(evento.id(), "evt-cat-01");
+        assert_eq!(evento.tipo(), "categoria_creada");
+        assert_eq!(evento.id_cuenta(), None);
+
+        let EventoLibro::CategoriaCreada { datos: d, .. } = &evento else {
             panic!("Tipo de evento incorrecto");
         };
         assert_eq!(d, &datos);

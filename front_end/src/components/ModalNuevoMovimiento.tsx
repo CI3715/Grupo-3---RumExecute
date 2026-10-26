@@ -18,6 +18,7 @@ export interface EntradaMovimientoForm {
   fecha: string;
   categoria: string;
   nota: string;
+  esNuevaCategoria?: boolean;
 }
 
 export interface ErrorValidacion {
@@ -35,6 +36,8 @@ interface ModalNuevoMovimientoProps {
     saldo_actual_num: number;
   };
   tipoInicial?: "gasto" | "ingreso";
+  categoriasGasto?: string[];
+  categoriasIngreso?: string[];
   onSubmit: (entrada: EntradaMovimientoForm) => Promise<boolean>;
   errorExterno?: ErrorValidacion | null;
 }
@@ -44,6 +47,8 @@ export default function ModalNuevoMovimiento({
   onClose,
   cuenta,
   tipoInicial = "gasto",
+  categoriasGasto = CATEGORIAS_GASTO,
+  categoriasIngreso = CATEGORIAS_INGRESO,
   onSubmit,
   errorExterno,
 }: ModalNuevoMovimientoProps) {
@@ -58,19 +63,22 @@ export default function ModalNuevoMovimiento({
   const [cargando, setCargando] = useState(false);
   const [errorActivo, setErrorActivo] = useState<ErrorValidacion | null>(null);
 
+  const listaActual = tipo === "gasto" ? categoriasGasto : categoriasIngreso;
+
   useEffect(() => {
     if (isOpen) {
       setFecha(new Date().toISOString().split("T")[0]);
       setTipo(tipoInicial);
       setMonto("");
-      setCategoria((tipoInicial === "gasto" ? CATEGORIAS_GASTO : CATEGORIAS_INGRESO)[0]);
+      const lista = tipoInicial === "gasto" ? categoriasGasto : categoriasIngreso;
+      setCategoria(lista[0] || "");
       setCategoriaPersonalizada("");
       setEsNuevaCategoria(false);
       setNota("");
       setConfirmaNegativo(false);
       setErrorActivo(null);
     }
-  }, [isOpen, tipoInicial]);
+  }, [isOpen, tipoInicial, categoriasGasto, categoriasIngreso]);
 
   useEffect(() => {
     if (errorExterno) setErrorActivo(errorExterno);
@@ -82,7 +90,8 @@ export default function ModalNuevoMovimiento({
     setTipo(nuevoTipo);
     setEsNuevaCategoria(false);
     setCategoriaPersonalizada("");
-    setCategoria((nuevoTipo === "gasto" ? CATEGORIAS_GASTO : CATEGORIAS_INGRESO)[0]);
+    const lista = nuevoTipo === "gasto" ? categoriasGasto : categoriasIngreso;
+    setCategoria(lista[0] || "");
     setErrorActivo(null);
   };
 
@@ -91,7 +100,7 @@ export default function ModalNuevoMovimiento({
     tipo === "gasto" ? cuenta.saldo_actual_num - montoNum : cuenta.saldo_actual_num + montoNum;
   const dejaraSaldoNegativo = tipo === "gasto" && montoNum > 0 && saldoProyectado < 0;
   const tieneError = (campo: string) => errorActivo?.campo === campo;
-  const categoriasActuales = tipo === "gasto" ? CATEGORIAS_GASTO : CATEGORIAS_INGRESO;
+  const categoriasActuales = listaActual;
   const simbolo = SIMBOLOS_MONEDA[cuenta.moneda] || cuenta.moneda;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -133,6 +142,7 @@ export default function ModalNuevoMovimiento({
         fecha,
         categoria: esNuevaCategoria ? categoriaPersonalizada.trim() : categoria,
         nota: nota.trim(),
+        esNuevaCategoria,
       });
       if (exito) onClose();
     } catch (err: any) {

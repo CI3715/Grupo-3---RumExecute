@@ -28,6 +28,8 @@ export interface DetalleCuentaData {
 interface DetalleCuentaProps {
   cuenta: DetalleCuentaData;
   onVolver: () => void;
+  categoriasGasto?: string[];
+  categoriasIngreso?: string[];
   onRegistrarMovimiento: (entrada: EntradaMovimientoForm) => Promise<boolean>;
   onCorregirMovimiento: (entrada: EntradaCorreccionForm) => Promise<boolean>;
 }
@@ -41,6 +43,8 @@ const ETIQUETA_TIPO: Record<string, string> = {
 export default function DetalleCuenta({
   cuenta,
   onVolver,
+  categoriasGasto,
+  categoriasIngreso,
   onRegistrarMovimiento,
   onCorregirMovimiento,
 }: DetalleCuentaProps) {
@@ -309,6 +313,8 @@ export default function DetalleCuenta({
           saldo_actual_num: cuenta.saldo_actual_num,
         }}
         tipoInicial={tipoMovimientoInicial}
+        categoriasGasto={categoriasGasto}
+        categoriasIngreso={categoriasIngreso}
         onSubmit={onRegistrarMovimiento}
       />
 

@@ -1,9 +1,11 @@
 use std::path::PathBuf;
 
 use crate::aplicacion::puertos::RepositorioLibro;
+use crate::dominio::categoria::TipoCategoria;
 use crate::dominio::cuenta::TipoCuenta;
 use crate::dominio::evento::{
-    DatosCuentaCreada, DatosMovimientoCorregido, DatosMovimientoRegistrado, EventoLibro,
+    DatosCategoriaCreada, DatosCuentaCreada, DatosMovimientoCorregido, DatosMovimientoRegistrado,
+    EventoLibro,
 };
 use crate::dominio::moneda::CodigoMoneda;
 use crate::dominio::monto::Monto;
@@ -62,21 +64,36 @@ fn crear_evento_ajuste() -> EventoLibro {
     )
 }
 
+fn crear_evento_categoria() -> EventoLibro {
+    EventoLibro::nuevo_categoria_creada(
+        "evento-categoria",
+        "2026-10-15T03:00:00.000Z",
+        "dispositivo-prueba",
+        DatosCategoriaCreada {
+            id_categoria: "suscripciones".to_string(),
+            nombre: "Suscripciones".to_string(),
+            tipo: TipoCategoria::Gasto,
+        },
+    )
+}
+
 fn verificar_contrato(repo: &mut dyn RepositorioLibro) {
     let primero = crear_evento("evento-1", "cuenta-1");
     let segundo = crear_evento("evento-2", "cuenta-2");
     let movimiento = crear_evento_movimiento();
     let ajuste = crear_evento_ajuste();
+    let categoria = crear_evento_categoria();
 
     repo.guardar(primero.clone()).unwrap();
     repo.guardar(primero.clone()).unwrap();
     repo.guardar(segundo.clone()).unwrap();
     repo.guardar(movimiento.clone()).unwrap();
     repo.guardar(ajuste.clone()).unwrap();
+    repo.guardar(categoria.clone()).unwrap();
 
     assert_eq!(
         repo.listar_eventos().unwrap(),
-        vec![primero, segundo, movimiento, ajuste]
+        vec![primero, segundo, movimiento, ajuste, categoria]
     );
 }
 
@@ -101,6 +118,7 @@ fn repositorio_sqlite_conserva_eventos_al_reabrir_la_base() {
         crear_evento("evento-persistente", "cuenta-1"),
         crear_evento_movimiento(),
         crear_evento_ajuste(),
+        crear_evento_categoria(),
     ];
 
     {

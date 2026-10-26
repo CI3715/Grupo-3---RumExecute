@@ -6,11 +6,14 @@ import Navbar from "../components/Navbar";
 import SubtotalesGrid, { SubtotalMoneda } from "../components/SubtotalesGrid";
 import ListaCuentas, { CuentaItem } from "../components/ListaCuentas";
 import ModalNuevaCuenta, { EntradaCuentaForm, ErrorValidacion } from "../components/ModalNuevaCuenta";
+import ModalNuevaCategoria, { EntradaNuevaCategoriaForm } from "../components/ModalNuevaCategoria";
 import ModalDiagnostico from "../components/ModalDiagnostico";
 import DetalleCuenta, { DetalleCuentaData } from "../components/DetalleCuenta";
 import { EntradaMovimientoForm } from "../components/ModalNuevoMovimiento";
 import { EntradaCorreccionForm, MovimientoItem } from "../components/ModalCorregirMovimiento";
 import {
+  CATEGORIAS_GASTO,
+  CATEGORIAS_INGRESO,
   formatearMonto,
   formatearMontoConSigno,
   calcularTotalesCuenta,
@@ -40,7 +43,11 @@ export default function HomePage() {
   const [saldosIniciales, setSaldosIniciales] = useState<Record<string, number>>({});
   const [movimientosPorCuenta, setMovimientosPorCuenta] = useState<Record<string, MovimientoItem[]>>({});
 
+  const [categoriasGasto, setCategoriasGasto] = useState<string[]>(CATEGORIAS_GASTO);
+  const [categoriasIngreso, setCategoriasIngreso] = useState<string[]>(CATEGORIAS_INGRESO);
+
   const [modalNuevaCuenta, setModalNuevaCuenta] = useState(false);
+  const [modalNuevaCategoria, setModalNuevaCategoria] = useState(false);
   const [modalDiagnostico, setModalDiagnostico] = useState(false);
   const [errorValidacion, setErrorValidacion] = useState<ErrorValidacion | null>(null);
 
@@ -135,8 +142,31 @@ export default function HomePage() {
     }
   };
 
+  const cargarCategoriasTauri = async () => {
+    if (!enTauri()) return;
+    try {
+      const cats = await invoke<
+        Array<{ id: string; nombre: string; tipo: "gasto" | "ingreso" }>
+      >("listar_categorias");
+      if (cats && Array.isArray(cats)) {
+        const gastos = cats
+          .filter((c) => c.tipo === "gasto")
+          .map((c) => c.nombre);
+        const ingresos = cats
+          .filter((c) => c.tipo === "ingreso")
+          .map((c) => c.nombre);
+
+        setCategoriasGasto(Array.from(new Set([...CATEGORIAS_GASTO, ...gastos])));
+        setCategoriasIngreso(Array.from(new Set([...CATEGORIAS_INGRESO, ...ingresos])));
+      }
+    } catch (err) {
+      console.warn("Error al cargar categorías desde Tauri IPC:", err);
+    }
+  };
+
   useEffect(() => {
     cargarCuentasTauri();
+    cargarCategoriasTauri();
   }, []);
 
   const sincronizarSaldosYSubtotales = (
@@ -269,7 +299,68 @@ export default function HomePage() {
     return true;
   };
 
-  const handleRegistrarMovimiento = async (entrada: EntradaMovimientoForm): Promise<boolean> => {
+  const handleCrearCategoria = async (
+    entrada: EntradaNuevaCategoriaForm
+  ): Promise<boolean> => {
+    setErrorValidacion(null);
+    const nombreLimpio = entrada.nombre.trim();
+    if (!nombreLimpio) {
+      const err = {
+        campo: "categoria",
+        mensaje: "El nombre de la categoría no puede estar vacío.",
+      };
+      setErrorValidacion(err);
+      throw err;
+    }
+
+    if (enTauri()) {
+      try {
+        await invoke("crear_categoria", {
+          entrada: {
+            nombre: nombreLimpio,
+            tipo: entrada.tipo,
+          },
+        });
+        await cargarCategoriasTauri();
+        return true;
+      } catch (err: any) {
+        const errorObj = {
+          campo: err?.campo || "categoria",
+          mensaje:
+            err?.mensaje ||
+            (typeof err === "string" ? err : "Error al crear la categoría."),
+        };
+        setErrorValidacion(errorObj);
+        throw errorObj;
+      }
+    }
+
+    // Modo fallback sin Tauri
+    const listaActual =
+      entrada.tipo === "gasto" ? categoriasGasto : categoriasIngreso;
+    const yaExiste = listaActual.some(
+      (c) => c.trim().toLowerCase() === nombreLimpio.toLowerCase()
+    );
+    if (yaExiste) {
+      const err = {
+        campo: "categoria",
+        mensaje: `Ya existe una categoría de ${entrada.tipo} con el nombre '${nombreLimpio}'. Elige un nombre distinto.`,
+      };
+      setErrorValidacion(err);
+      throw err;
+    }
+
+    if (entrada.tipo === "gasto") {
+      setCategoriasGasto((prev) => [...prev, nombreLimpio]);
+    } else {
+      setCategoriasIngreso((prev) => [...prev, nombreLimpio]);
+    }
+    return true;
+  };
+
+  const handleRegistrarMovimiento = async (
+    entrada: EntradaMovimientoForm
+  ): Promise<boolean> => {
     setErrorValidacion(null);
     const hoy = new Date().toISOString().split("T")[0];
     const fechaMovimiento = entrada.fecha?.trim() || hoy;
@@ -281,6 +372,25 @@ export default function HomePage() {
       };
       setErrorValidacion(errorObj);
       throw errorObj;
+    }
+
+    // Si el usuario indicó crear una nueva categoría, primero la creamos
+    if (entrada.esNuevaCategoria) {
+      try {
+        await handleCrearCategoria({
+          nombre: entrada.categoria.trim(),
+          tipo: entrada.tipo,
+        });
+      } catch (errCat: any) {
+        // Si el backend o fallback reporta que ya existe, no es un error bloqueante para el movimiento
+        const msg = (
+          errCat?.mensaje ||
+          (typeof errCat === "string" ? errCat : "")
+        ).toLowerCase();
+        if (!msg.includes("ya existe")) {
+          throw errCat;
+        }
+      }
     }
 
     if (enTauri()) {
@@ -295,12 +405,15 @@ export default function HomePage() {
         };
         await invoke("registrar_movimiento", { entrada: payloadRust });
         await cargarCuentasTauri();
+        await cargarCategoriasTauri();
         await abrirDetalleCuenta(entrada.id_cuenta);
         return true;
       } catch (err: any) {
         const errorObj = {
-          campo: err?.campo || "fecha",
-          mensaje: err?.mensaje || (typeof err === "string" ? err : "Error al registrar el movimiento"),
+          campo: err?.campo || "categoria",
+          mensaje:
+            err?.mensaje ||
+            (typeof err === "string" ? err : "Error al registrar el movimiento"),
         };
         setErrorValidacion(errorObj);
         throw errorObj;
@@ -448,11 +561,13 @@ export default function HomePage() {
     <div className="app-wrapper">
       <Navbar
         onOpenNuevaCuenta={() => setModalNuevaCuenta(true)}
+        onOpenNuevaCategoria={() => setModalNuevaCategoria(true)}
         onOpenDiagnostico={() => setModalDiagnostico(true)}
         onNavigateHome={() => {
           setVista("cuentas");
           setCuentaSeleccionadaId(null);
           cargarCuentasTauri();
+          cargarCategoriasTauri();
         }}
       />
 
@@ -484,10 +599,13 @@ export default function HomePage() {
           cuentaActivaDetalle && (
             <DetalleCuenta
               cuenta={cuentaActivaDetalle}
+              categoriasGasto={categoriasGasto}
+              categoriasIngreso={categoriasIngreso}
               onVolver={() => {
                 setVista("cuentas");
                 setCuentaSeleccionadaId(null);
                 cargarCuentasTauri();
+                cargarCategoriasTauri();
               }}
               onRegistrarMovimiento={handleRegistrarMovimiento}
               onCorregirMovimiento={handleCorregirMovimiento}
@@ -513,6 +631,16 @@ export default function HomePage() {
           setErrorValidacion(null);
         }}
         onSubmit={handleCrearCuenta}
+        errorExterno={errorValidacion}
+      />
+
+      <ModalNuevaCategoria
+        isOpen={modalNuevaCategoria}
+        onClose={() => {
+          setModalNuevaCategoria(false);
+          setErrorValidacion(null);
+        }}
+        onSubmit={handleCrearCategoria}
         errorExterno={errorValidacion}
       />
 
