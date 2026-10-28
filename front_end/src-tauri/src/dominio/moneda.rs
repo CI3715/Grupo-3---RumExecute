@@ -25,11 +25,6 @@ impl CodigoMoneda {
             CodigoMoneda::Personalizado(c) => c.as_str(),
         }
     }
-
-    /// Retorna la cantidad de decimales permitidos para la moneda según RF-CAM-01.
-    pub fn decimales(&self) -> u32 {
-        2
-    }
 }
 
 impl fmt::Display for CodigoMoneda {
