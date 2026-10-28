@@ -24,9 +24,16 @@ impl ErrorDominio {
         Self::new(
             "moneda",
             format!(
-                "La moneda '{}' no es válida. Debe pertenecer al catálogo oficial (VES, USD, EUR, USDT).",
+                "La moneda '{}' no pertenece a las monedas registradas.",
                 codigo
             ),
+        )
+    }
+
+    pub fn codigo_moneda_invalido() -> Self {
+        Self::new(
+            "codigo",
+            "El código de moneda debe tener entre 3 y 5 caracteres alfabéticos en mayúscula.",
         )
     }
 
