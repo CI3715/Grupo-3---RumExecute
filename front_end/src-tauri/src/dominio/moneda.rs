@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::str::FromStr;
 
@@ -35,7 +35,7 @@ impl StringCodigo {
 }
 
 /// Códigos de moneda permitidos en el catálogo de fábrica (RF-CAM-01).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CodigoMoneda {
     VES,
     USD,
@@ -86,6 +86,25 @@ impl FromStr for CodigoMoneda {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         CodigoMoneda::parse(s)
+    }
+}
+
+impl Serialize for CodigoMoneda {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for CodigoMoneda {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        CodigoMoneda::parse(&s).map_err(de::Error::custom)
     }
 }
 
