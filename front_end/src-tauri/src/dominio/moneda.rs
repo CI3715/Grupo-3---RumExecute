@@ -4,19 +4,48 @@ use std::str::FromStr;
 
 use super::errores::ErrorDominio;
 
+// Guarda un String de máximo 5 de longitud, que corresponde a un código de Moneda.
+// Literamente existe solo para no tener que modificar todo el resto del código (Gracias rust, te estoy odiando)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct StringCodigo {
+    bytes: [u8; 5],
+    len: u8,
+}
+
+impl StringCodigo {
+    pub fn nuevo(s: &str) -> Result<Self, ErrorDominio> {
+        let cod = s.trim().to_uppercase();
+        let bytes_vec = cod.as_bytes();
+
+        if bytes_vec.len() < 3 || bytes_vec.len() > 5 || !cod.chars().all(|c| c.is_ascii_uppercase()) {
+            return Err(ErrorDominio::codigo_moneda_invalido());
+        }
+
+        let mut bytes = [0u8; 5];
+        bytes[..bytes_vec.len()].copy_from_slice(bytes_vec);
+        Ok(Self {
+            bytes,
+            len: bytes_vec.len() as u8,
+        })
+    }
+
+    pub fn as_str(&self) -> &str {
+        std::str::from_utf8(&self.bytes[..self.len as usize]).unwrap_or("")
+    }
+}
+
 /// Códigos de moneda permitidos en el catálogo de fábrica (RF-CAM-01).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
 pub enum CodigoMoneda {
     VES,
     USD,
     EUR,
     USDT,
-    Personalizado(String),
+    Personalizado(StringCodigo),
 }
 
 impl CodigoMoneda {
-    pub fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &str {
         match self {
             CodigoMoneda::VES => "VES",
             CodigoMoneda::USD => "USD",
@@ -34,10 +63,8 @@ impl CodigoMoneda {
             "EUR" => Ok(CodigoMoneda::EUR),
             "USDT" => Ok(CodigoMoneda::USDT),
             _ => {
-                if cod.len() < 3 || cod.len() > 5 || !cod.chars().all(|c| c.is_ascii_uppercase()) {
-                    return Err(ErrorDominio::codigo_moneda_invalido());
-                }
-                Ok(CodigoMoneda::Personalizado(cod))
+                let pers = StringCodigo::nuevo(&cod)?;
+                Ok(CodigoMoneda::Personalizado(pers))
             }
         }
     }
@@ -63,7 +90,7 @@ pub struct Moneda {
     pub codigo: CodigoMoneda,
     pub nombre: String,
     pub simbolo: String,
-    pub decimales: u32,
+    pub decimales: u8,
 }
 
 impl Moneda {
@@ -133,7 +160,7 @@ mod tests {
 
     #[test]
     fn test_catalogo_contiene_las_4_monedas_base_con_2_decimales() {
-        let catalogo = catalogo_monedas();
+        let catalogo = Moneda::monedas_de_fabrica();
         assert_eq!(catalogo.len(), 4);
 
         let ves = catalogo
@@ -170,36 +197,123 @@ mod tests {
     }
 
     #[test]
-    fn test_busqueda_moneda_valida() {
-        assert!(buscar_moneda("VES").is_ok());
-        assert!(buscar_moneda("USD").is_ok());
-        assert!(buscar_moneda("EUR").is_ok());
-        assert!(buscar_moneda("USDT").is_ok());
+    fn test_parse_codigos_de_fabrica() {
+        assert_eq!(CodigoMoneda::parse("ves").unwrap(), CodigoMoneda::VES);
+        assert_eq!(CodigoMoneda::parse(" USD ").unwrap(), CodigoMoneda::USD);
+        assert_eq!(CodigoMoneda::parse("Eur").unwrap(), CodigoMoneda::EUR);
+        assert_eq!(CodigoMoneda::parse("USDT").unwrap(), CodigoMoneda::USDT);
     }
 
     #[test]
-    fn test_rechazo_moneda_fuera_del_catalogo() {
-        let resultado = buscar_moneda("BTC");
-        assert!(resultado.is_err());
-        let err = resultado.unwrap_err();
-        assert_eq!(err.campo, "moneda");
+    fn test_parse_codigo_personalizado_valido() {
+        let cod = CodigoMoneda::parse("cad").unwrap();
+        assert_eq!(cod.as_str(), "CAD");
 
-        let resultado_vacio = buscar_moneda("");
-        assert!(resultado_vacio.is_err());
-        assert_eq!(resultado_vacio.unwrap_err().campo, "moneda");
+        let cod_5_letras = CodigoMoneda::parse("ABCDE").unwrap();
+        assert_eq!(cod_5_letras.as_str(), "ABCDE");
+    }
 
-        let resultado_otra = buscar_moneda("COP");
-        assert!(resultado_otra.is_err());
-        assert_eq!(resultado_otra.unwrap_err().campo, "moneda");
+    #[test]
+    fn test_parse_codigo_personalizado_invalido() {
+        assert!(CodigoMoneda::parse("US").is_err());
+        assert!(CodigoMoneda::parse("USDTX1").is_err());
+        assert!(CodigoMoneda::parse("US1").is_err());
+        assert!(CodigoMoneda::parse("U S").is_err());
+        assert!(CodigoMoneda::parse("USD$").is_err());
+    }
+
+    #[test]
+    fn test_crear_moneda_propia_exitosa() {
+        let moneda = Moneda::nueva_propia(
+            "CAD",
+            "Dólar canadiense".to_string(),
+            "$".to_string(),
+            5
+        )
+        .unwrap();
+
+        assert_eq!(moneda.codigo.as_str(), "CAD");
+        assert_eq!(moneda.nombre, "Dólar canadiense");
+        assert_eq!(moneda.simbolo, "$");
+        assert_eq!(moneda.decimales, 5);
+    }
+
+    #[test]
+    fn test_rechazo_moneda_propia_invalida() {
+
+        // Nombre vacío
+        assert!(Moneda::nueva_propia(
+            "CAD", 
+            "".to_string(),
+            "C$".to_string(),
+            2
+        )
+        .is_err());
+
+        // Nombre demasiado largo
+        assert!(Moneda::nueva_propia(
+            "CAD", 
+            "C".repeat(51),
+            "C$".to_string(),
+            2
+        )
+        .is_err());
+
+        // Símbolo vacío
+        assert!(Moneda::nueva_propia(
+            "CAD",
+            "Dólar canadiense".to_string(),
+            "".to_string(),
+            2
+        )
+        .is_err());
+
+        // Símbolo demasiado largo
+        assert!(Moneda::nueva_propia(
+            "CAD",
+            "Dólar canadiense".to_string(),
+            "123456".to_string(),
+            2
+        )
+        .is_err());
+
+        // Decimales mayores a 8
+        assert!(Moneda::nueva_propia(
+            "CAD",
+            "Dólar canadiense".to_string(),
+            "$".to_string(),
+            9
+        )
+        .is_err());
     }
 
     #[test]
     fn test_serializacion_moneda() {
-        let moneda = buscar_moneda("USD").unwrap();
-        let json = serde_json::to_string(&moneda).unwrap();
-        assert!(json.contains("\"codigo\":\"USD\""));
-        assert!(json.contains("\"nombre\":\"Dólar estadounidense\""));
-        assert!(json.contains("\"simbolo\":\"$\""));
-        assert!(json.contains("\"decimales\":2"));
+        // Prueba serialización de una moneda del catálogo de fábrica
+        let moneda_usd = Moneda::monedas_de_fabrica()
+            .into_iter()
+            .find(|m| m.codigo == CodigoMoneda::USD)
+            .expect("USD debe existir en el catálogo de fábrica");
+        
+        let json_usd = serde_json::to_string(&moneda_usd).unwrap();
+        assert!(json_usd.contains("\"codigo\":\"USD\""));
+        assert!(json_usd.contains("\"nombre\":\"Dólar estadounidense\""));
+        assert!(json_usd.contains("\"simbolo\":\"$\""));
+        assert!(json_usd.contains("\"decimales\":2"));
+
+        // Prueba serialización de una moneda personalizada
+        let moneda_cad = Moneda::nueva_propia(
+            "CAD",
+            "Dólar canadiense".to_string(),
+            "$".to_string(),
+            2
+        )
+        .unwrap();
+
+        let json_cad = serde_json::to_string(&moneda_cad).unwrap();
+        assert!(json_cad.contains("\"codigo\":\"CAD\""));
+        assert!(json_cad.contains("\"nombre\":\"Dólar canadiense\""));
+        assert!(json_cad.contains("\"simbolo\":\"$\""));
+        assert!(json_cad.contains("\"decimales\":2"));
     }
 }
