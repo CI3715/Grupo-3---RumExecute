@@ -37,6 +37,27 @@ impl ErrorDominio {
         )
     }
 
+    pub fn nombre_moneda_invalido() -> Self {
+        Self::new(
+            "nombre",
+            "El nombre de la moneda debe tener entre 1 y 50 caracteres.",
+        )
+    }
+
+    pub fn simbolo_moneda_invalido() -> Self {
+        Self::new(
+            "simbolo",
+            "El símbolo de la moneda debe tener entre 1 y 5 caracteres.",
+        )
+    }
+
+    pub fn decimales_moneda_invalido() -> Self {
+        Self::new(
+            "decimales",
+            "El número de decimales de la moneda no puede ser mayor a 8.",
+        )
+    }
+
     pub fn nombre_invalido(mensaje: impl Into<String>) -> Self {
         Self::new("nombre", mensaje)
     }
