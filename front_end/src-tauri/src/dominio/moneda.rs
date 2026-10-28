@@ -66,6 +66,67 @@ pub struct Moneda {
     pub decimales: u32,
 }
 
+impl Moneda {
+    // Catálogo de Monedas de Fábrica (RF-CAM-01)
+    pub fn monedas_de_fabrica() -> Vec<Moneda> {
+        vec![
+            Moneda {
+                codigo: CodigoMoneda::VES,
+                nombre: "Bolívar".to_string(),
+                simbolo: "Bs.".to_string(),
+                decimales: 2,
+            },
+            Moneda {
+                codigo: CodigoMoneda::USD,
+                nombre: "Dólar estadounidense".to_string(),
+                simbolo: "$".to_string(),
+                decimales: 2,
+            },
+            Moneda {
+                codigo: CodigoMoneda::EUR,
+                nombre: "Euro".to_string(),
+                simbolo: "€".to_string(),
+                decimales: 2,
+            },
+            Moneda {
+                codigo: CodigoMoneda::USDT,
+                nombre: "Tether (dólar digital)".to_string(),
+                simbolo: "USDT".to_string(),
+                decimales: 2,
+            },
+        ]
+    }
+
+    // Crea y valida una nueva moneda definida por el usuario
+    pub fn nueva_propia(
+        codigo: &str,
+        nombre: String,
+        simbolo: String,
+        decimales: u8,
+    ) -> Result<Self, ErrorDominio> {
+        let cod_moneda = CodigoMoneda::parse(codigo)?;
+
+        if nombre.trim().is_empty() || nombre.trim().len() > 50 {
+            return Err(ErrorDominio::nombre_moneda_invalido());
+        }
+
+        if simbolo.trim().is_empty() || simbolo.trim().chars().count() > 5 {
+            return Err(ErrorDominio::simbolo_moneda_invalido());
+        }
+
+        if decimales > 8 {
+            return Err(ErrorDominio::decimales_moneda_invalido());
+        }
+
+        Ok(Moneda {
+            codigo: cod_moneda,
+            nombre: nombre.trim().to_string(),
+            simbolo: simbolo.trim().to_string(),
+            decimales,
+        })
+    }
+}
+
 /// Retorna el catálogo completo de monedas incluido de fábrica.
 /// Según la especificación RF-CAM-01:
 /// - VES: Bolívar, Bs., 2 decimales
