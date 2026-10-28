@@ -20,6 +20,7 @@ impl ErrorDominio {
         }
     }
 
+    // monto.rs
     pub fn moneda_invalida(codigo: &str) -> Self {
         Self::new(
             "moneda",
@@ -30,6 +31,7 @@ impl ErrorDominio {
         )
     }
 
+    // monto.rs
     pub fn codigo_moneda_invalido() -> Self {
         Self::new(
             "codigo",
@@ -37,6 +39,7 @@ impl ErrorDominio {
         )
     }
 
+    // monto.rs
     pub fn nombre_moneda_invalido() -> Self {
         Self::new(
             "nombre",
@@ -44,6 +47,7 @@ impl ErrorDominio {
         )
     }
 
+    // monto.rs
     pub fn simbolo_moneda_invalido() -> Self {
         Self::new(
             "simbolo",
@@ -51,6 +55,7 @@ impl ErrorDominio {
         )
     }
 
+    // monto.rs
     pub fn decimales_moneda_invalido() -> Self {
         Self::new(
             "decimales",
@@ -58,27 +63,44 @@ impl ErrorDominio {
         )
     }
 
+    // cuenta.rs
     pub fn nombre_invalido(mensaje: impl Into<String>) -> Self {
         Self::new("nombre", mensaje)
     }
 
+    // monto.rs
     pub fn saldo_invalido(mensaje: impl Into<String>) -> Self {
         Self::new("saldo_inicial", mensaje)
     }
 
+    // categoria.rs
     pub fn tipo_invalido(mensaje: impl Into<String>) -> Self {
         Self::new("tipo", mensaje)
     }
 
+    // categoria.rs
     pub fn categoria_invalida(mensaje: impl Into<String>) -> Self {
         Self::new("categoria", mensaje)
     }
 
+    // monto.rs
     pub fn monto_invalido(mensaje: impl Into<String>) -> Self {
         Self::new("monto", mensaje)
     }
 
+    // movimiento.rs
     pub fn fecha_invalida(mensaje: impl Into<String>) -> Self {
         Self::new("fecha", mensaje)
+    }
+
+    // tasa_cambio.rs
+    pub fn monedas_iguales(origen: &str) -> Self {
+        Self::new(
+            "par_monedas",
+            format!(
+                "El par de monedas no puede tener la misma moneda de origen y destino: '{}'.",
+                origen
+            )
+        )
     }
 }
