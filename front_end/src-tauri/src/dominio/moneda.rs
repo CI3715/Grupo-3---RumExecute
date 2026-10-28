@@ -70,7 +70,7 @@ impl CodigoMoneda {
     }
 
     // TEMPORAL: Mientras se implementa la lógica de las tasas, para no romper el resto del proyecto
-    pub fn decimales(&self) -> u8 {
+    pub fn decimales(&self) -> u32 {
         2
     }
 }
@@ -95,7 +95,7 @@ pub struct Moneda {
     pub codigo: CodigoMoneda,
     pub nombre: String,
     pub simbolo: String,
-    pub decimales: u8,
+    pub decimales: u32,
 }
 
 impl Moneda {
@@ -134,7 +134,7 @@ impl Moneda {
         codigo: &str,
         nombre: String,
         simbolo: String,
-        decimales: u8,
+        decimales: u32,
     ) -> Result<Self, ErrorDominio> {
         let cod_moneda = CodigoMoneda::parse(codigo)?;
 
