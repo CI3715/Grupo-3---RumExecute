@@ -37,27 +37,52 @@ impl fmt::Display for ParMonedas {
 pub struct TasaCambio {
     pub par: ParMonedas,
     pub valor: Decimal,
+    pub fecha: String,
+    pub fuente: String,
 }
 
 impl TasaCambio {
-    pub fn nueva(origen: CodigoMoneda, destino: CodigoMoneda, valor: Decimal) -> Result<Self, ErrorDominio> {
+    pub fn nueva(
+        origen: CodigoMoneda,
+        destino: CodigoMoneda,
+        valor: Decimal,
+        fecha: String,
+        fuente: String
+    ) -> Result<Self, ErrorDominio> {
         let par = ParMonedas::nuevo(origen, destino)?;
 
         if valor <= Decimal::ZERO {
-            return Err(ErrorDominio::tasa_invalida());
+            return Err(ErrorDominio::tasa_invalida("El valor de la tasa de cambio debe ser mayor a cero."));
         }
 
-        Ok(Self { par, valor })
+        if valor.normalize().scale() > 8 {
+            return Err(ErrorDominio::tasa_invalida("La tasa de cambio no puede tener más de 8 decimales."));
+        }
+
+        if fuente.trim().is_empty() {
+            return Err(ErrorDominio::tasa_invalida("Debe especificar la fuente de la tasa de cambio."));
+        }
+
+        Ok(Self { 
+            par,
+            valor,
+            fecha: fecha.trim().to_string(),
+            fuente: fuente.trim().to_string(),
+        })
     }
 
     pub fn invertida(&self) -> Result<Self, ErrorDominio> {
-        let valor_inverso = Decimal::ONE
+        let mut valor_inverso = Decimal::ONE
             .checked_div(self.valor)
-            .ok_or_else(|| ErrorDominio::tasa_invalida())?;
+            .ok_or_else(|| ErrorDominio::tasa_invalida("Error al calcular la tasa inversa."))?;
+        
+        valor_inverso = valor_inverso.round_dp(8);
         
         Ok(Self {
             par: self.par.invertido(),
             valor: valor_inverso,
+            fecha: self.fecha.clone(),
+            fuente: format!("{} (Invertida)", self.fuente),
         })
     }
 }

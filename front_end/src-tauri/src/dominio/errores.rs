@@ -105,7 +105,7 @@ impl ErrorDominio {
     }
 
     // tasa_cambio.rs
-    pub fn tasa_invalida() -> Self {
-        Self::new("tasa_cambio", "El valor de la tasa de cambio debe ser mayor a cero.")
+    pub fn tasa_invalida(mensaje: impl Into<String>) -> Self {
+        Self::new("tasa_cambio", mensaje)
     }
 }
