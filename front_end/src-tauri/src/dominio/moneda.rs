@@ -25,6 +25,21 @@ impl CodigoMoneda {
             CodigoMoneda::Personalizado(c) => c.as_str(),
         }
     }
+
+    pub fn parse(codigo: &str) -> Result<Self, ErrorDominio> {
+        let cod = codigo.trim().to_uppercase();
+        match cod.as_str() {
+            "VES" => Ok(CodigoMoneda::VES),
+            "USD" => Ok(CodigoMoneda::USD),
+            "EUR" => Ok(CodigoMoneda::EUR),
+            "USDT" => Ok(CodigoMoneda::USDT),
+            _ => {
+                if cod.len() < 3 || cod.len() > 5 || !cod.chars().all(|c| c.is_ascii_uppercase()) {
+                    return Err(ErrorDominio::codigo_moneda_invalido());
+                }
+                Ok(CodigoMoneda::Personalizado(cod))
+            }
+    }
 }
 
 impl fmt::Display for CodigoMoneda {
@@ -44,21 +59,6 @@ impl FromStr for CodigoMoneda {
             "USDT" => Ok(CodigoMoneda::USDT),
             _ => Err(ErrorDominio::moneda_invalida(s)),
         }
-    }
-
-    pub fn parse(codigo: &str) -> Result<Self, ErrorDominio> {
-        let cod = codigo.trim().to_uppercase();
-        match cod.as_str() {
-            "VES" => Ok(CodigoMoneda::VES),
-            "USD" => Ok(CodigoMoneda::USD),
-            "EUR" => Ok(CodigoMoneda::EUR),
-            "USDT" => Ok(CodigoMoneda::USDT),
-            _ => {
-                if cod.len() < 3 || cod.len() > 5 || !cod.chars().all(|c| c.is_ascii_uppercase()) {
-                    return Err(ErrorDominio::codigo_moneda_invalido());
-                }
-                Ok(CodigoMoneda::Personalizado(cod))
-            }
     }
 }
 
