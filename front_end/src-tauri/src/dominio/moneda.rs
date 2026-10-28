@@ -39,6 +39,7 @@ impl CodigoMoneda {
                 }
                 Ok(CodigoMoneda::Personalizado(cod))
             }
+        }
     }
 }
 
@@ -52,13 +53,7 @@ impl FromStr for CodigoMoneda {
     type Err = ErrorDominio;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim().to_uppercase().as_str() {
-            "VES" => Ok(CodigoMoneda::VES),
-            "USD" => Ok(CodigoMoneda::USD),
-            "EUR" => Ok(CodigoMoneda::EUR),
-            "USDT" => Ok(CodigoMoneda::USDT),
-            _ => Err(ErrorDominio::moneda_invalida(s)),
-        }
+        CodigoMoneda::parse(s)
     }
 }
 
