@@ -127,51 +127,6 @@ impl Moneda {
     }
 }
 
-/// Retorna el catálogo completo de monedas incluido de fábrica.
-/// Según la especificación RF-CAM-01:
-/// - VES: Bolívar, Bs., 2 decimales
-/// - USD: Dólar estadounidense, $, 2 decimales
-/// - EUR: Euro, €, 2 decimales
-/// - USDT: Tether (dólar digital), USDT, 2 decimales
-pub fn catalogo_monedas() -> Vec<Moneda> {
-    vec![
-        Moneda {
-            codigo: CodigoMoneda::VES,
-            nombre: "Bolívar".to_string(),
-            simbolo: "Bs.".to_string(),
-            decimales: 2,
-        },
-        Moneda {
-            codigo: CodigoMoneda::USD,
-            nombre: "Dólar estadounidense".to_string(),
-            simbolo: "$".to_string(),
-            decimales: 2,
-        },
-        Moneda {
-            codigo: CodigoMoneda::EUR,
-            nombre: "Euro".to_string(),
-            simbolo: "€".to_string(),
-            decimales: 2,
-        },
-        Moneda {
-            codigo: CodigoMoneda::USDT,
-            nombre: "Tether (dólar digital)".to_string(),
-            simbolo: "USDT".to_string(),
-            decimales: 2,
-        },
-    ]
-}
-
-/// Valida un código de moneda y devuelve su entidad `Moneda` correspondiente del catálogo.
-/// Si la moneda no pertenece al catálogo, retorna un `ErrorDominio` con `campo: "moneda"`.
-pub fn buscar_moneda(codigo: &str) -> Result<Moneda, ErrorDominio> {
-    let codigo_enum = CodigoMoneda::from_str(codigo)?;
-    catalogo_monedas()
-        .into_iter()
-        .find(|m| m.codigo == codigo_enum)
-        .ok_or_else(|| ErrorDominio::moneda_invalida(codigo))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
