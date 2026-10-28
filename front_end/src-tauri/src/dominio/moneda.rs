@@ -68,6 +68,11 @@ impl CodigoMoneda {
             }
         }
     }
+
+    // TEMPORAL: Mientras se implementa la lógica de las tasas, para no romper el resto del proyecto
+    pub fn decimales(&self) -> u8 {
+        2
+    }
 }
 
 impl fmt::Display for CodigoMoneda {
@@ -152,6 +157,10 @@ impl Moneda {
             decimales,
         })
     }
+}
+
+pub fn catalogo_monedas() -> Vec<Moneda> {
+    Moneda::monedas_de_fabrica()
 }
 
 #[cfg(test)]
