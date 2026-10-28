@@ -89,7 +89,9 @@ pub fn run() {
             comandos::crear_cuenta,
             comandos::registrar_movimiento,
             comandos::corregir_movimiento,
-            comandos::obtener_detalle_cuenta
+            comandos::obtener_detalle_cuenta,
+            comandos::crear_categoria,
+            comandos::listar_categorias
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

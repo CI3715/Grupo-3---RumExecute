@@ -156,6 +156,16 @@ mod tests {
                     descripcion: "Corrección de prueba".to_string(),
                 },
             ),
+            EventoLibro::nuevo_categoria_creada(
+                "evento-categoria",
+                "2026-10-15T03:00:00.000Z",
+                "dispositivo-prueba",
+                crate::dominio::evento::DatosCategoriaCreada {
+                    id_categoria: "software".to_string(),
+                    nombre: "Software".to_string(),
+                    tipo: crate::dominio::categoria::TipoCategoria::Gasto,
+                },
+            ),
         ];
 
         for evento in &eventos {

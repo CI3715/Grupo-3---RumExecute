@@ -18,6 +18,7 @@ export interface EntradaMovimientoForm {
   fecha: string;
   categoria: string;
   nota: string;
+  esNuevaCategoria?: boolean;
 }
 
 export interface ErrorValidacion {
@@ -35,6 +36,9 @@ interface ModalNuevoMovimientoProps {
     saldo_actual_num: number;
   };
   tipoInicial?: "gasto" | "ingreso";
+  categoriasGasto?: string[];
+  categoriasIngreso?: string[];
+  onCrearCategoria?: (entrada: { nombre: string; tipo: "gasto" | "ingreso" }) => Promise<boolean>;
   onSubmit: (entrada: EntradaMovimientoForm) => Promise<boolean>;
   errorExterno?: ErrorValidacion | null;
 }
@@ -44,6 +48,9 @@ export default function ModalNuevoMovimiento({
   onClose,
   cuenta,
   tipoInicial = "gasto",
+  categoriasGasto = CATEGORIAS_GASTO,
+  categoriasIngreso = CATEGORIAS_INGRESO,
+  onCrearCategoria,
   onSubmit,
   errorExterno,
 }: ModalNuevoMovimientoProps) {
@@ -51,26 +58,30 @@ export default function ModalNuevoMovimiento({
   const [monto, setMonto] = useState("");
   const [fecha, setFecha] = useState("");
   const [categoria, setCategoria] = useState("");
-  const [categoriaPersonalizada, setCategoriaPersonalizada] = useState("");
-  const [esNuevaCategoria, setEsNuevaCategoria] = useState(false);
+  const [mostrarCrearCategoria, setMostrarCrearCategoria] = useState(false);
+  const [nombreNuevaCategoria, setNombreNuevaCategoria] = useState("");
+  const [guardandoCategoria, setGuardandoCategoria] = useState(false);
   const [nota, setNota] = useState("");
   const [confirmaNegativo, setConfirmaNegativo] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [errorActivo, setErrorActivo] = useState<ErrorValidacion | null>(null);
+
+  const listaActual = tipo === "gasto" ? categoriasGasto : categoriasIngreso;
 
   useEffect(() => {
     if (isOpen) {
       setFecha(new Date().toISOString().split("T")[0]);
       setTipo(tipoInicial);
       setMonto("");
-      setCategoria((tipoInicial === "gasto" ? CATEGORIAS_GASTO : CATEGORIAS_INGRESO)[0]);
-      setCategoriaPersonalizada("");
-      setEsNuevaCategoria(false);
+      const lista = tipoInicial === "gasto" ? categoriasGasto : categoriasIngreso;
+      setCategoria(lista[0] || "");
+      setMostrarCrearCategoria(false);
+      setNombreNuevaCategoria("");
       setNota("");
       setConfirmaNegativo(false);
       setErrorActivo(null);
     }
-  }, [isOpen, tipoInicial]);
+  }, [isOpen, tipoInicial, categoriasGasto, categoriasIngreso]);
 
   useEffect(() => {
     if (errorExterno) setErrorActivo(errorExterno);
@@ -80,10 +91,37 @@ export default function ModalNuevoMovimiento({
 
   const handleCambiarTipo = (nuevoTipo: "gasto" | "ingreso") => {
     setTipo(nuevoTipo);
-    setEsNuevaCategoria(false);
-    setCategoriaPersonalizada("");
-    setCategoria((nuevoTipo === "gasto" ? CATEGORIAS_GASTO : CATEGORIAS_INGRESO)[0]);
+    setMostrarCrearCategoria(false);
+    setNombreNuevaCategoria("");
+    const lista = nuevoTipo === "gasto" ? categoriasGasto : categoriasIngreso;
+    setCategoria(lista[0] || "");
     setErrorActivo(null);
+  };
+
+  const handleCrearCategoriaDirecta = async () => {
+    const nombreLimpio = nombreNuevaCategoria.trim();
+    if (!nombreLimpio) {
+      setErrorActivo({ campo: "categoria", mensaje: "Ingresa el nombre de la categoría." });
+      return;
+    }
+
+    setGuardandoCategoria(true);
+    setErrorActivo(null);
+    try {
+      if (onCrearCategoria) {
+        await onCrearCategoria({ nombre: nombreLimpio, tipo });
+      }
+      setCategoria(nombreLimpio);
+      setNombreNuevaCategoria("");
+      setMostrarCrearCategoria(false);
+    } catch (err: any) {
+      setErrorActivo({
+        campo: "categoria",
+        mensaje: err?.mensaje || (typeof err === "string" ? err : "Error al crear la categoría."),
+      });
+    } finally {
+      setGuardandoCategoria(false);
+    }
   };
 
   const montoNum = parseFloat(monto.trim().replace(",", ".")) || 0;
@@ -91,7 +129,7 @@ export default function ModalNuevoMovimiento({
     tipo === "gasto" ? cuenta.saldo_actual_num - montoNum : cuenta.saldo_actual_num + montoNum;
   const dejaraSaldoNegativo = tipo === "gasto" && montoNum > 0 && saldoProyectado < 0;
   const tieneError = (campo: string) => errorActivo?.campo === campo;
-  const categoriasActuales = tipo === "gasto" ? CATEGORIAS_GASTO : CATEGORIAS_INGRESO;
+  const categoriasActuales = listaActual;
   const simbolo = SIMBOLOS_MONEDA[cuenta.moneda] || cuenta.moneda;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -114,9 +152,30 @@ export default function ModalNuevoMovimiento({
         mensaje: `No se permiten movimientos con fechas futuras (${fecha} es posterior a hoy ${hoy}).`,
       });
     }
-    if (esNuevaCategoria && !categoriaPersonalizada.trim()) {
-      return setErrorActivo({ campo: "categoria", mensaje: "Ingresa el nombre de la categoría." });
+
+    let categoriaFinal = categoria;
+    if (mostrarCrearCategoria && nombreNuevaCategoria.trim()) {
+      const nombreLimpio = nombreNuevaCategoria.trim();
+      try {
+        if (onCrearCategoria) {
+          await onCrearCategoria({ nombre: nombreLimpio, tipo });
+        }
+        categoriaFinal = nombreLimpio;
+        setCategoria(nombreLimpio);
+        setMostrarCrearCategoria(false);
+        setNombreNuevaCategoria("");
+      } catch (err: any) {
+        return setErrorActivo({
+          campo: "categoria",
+          mensaje: err?.mensaje || (typeof err === "string" ? err : "Error al crear la categoría."),
+        });
+      }
     }
+
+    if (!categoriaFinal || !categoriaFinal.trim() || categoriaFinal === "__crear_nueva__") {
+      return setErrorActivo({ campo: "categoria", mensaje: "Selecciona o ingresa una categoría." });
+    }
+
     if (dejaraSaldoNegativo && !confirmaNegativo) {
       return setErrorActivo({
         campo: "general",
@@ -131,7 +190,7 @@ export default function ModalNuevoMovimiento({
         tipo,
         monto: montoFinal.trim(),
         fecha,
-        categoria: esNuevaCategoria ? categoriaPersonalizada.trim() : categoria,
+        categoria: categoriaFinal.trim(),
         nota: nota.trim(),
       });
       if (exito) onClose();
@@ -253,47 +312,107 @@ export default function ModalNuevoMovimiento({
             </div>
 
             <div className="form-group">
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <label className="form-label">Categoría</label>
-                <button
-                  type="button"
-                  onClick={() => setEsNuevaCategoria(!esNuevaCategoria)}
-                  className="btn-link"
-                >
-                  {esNuevaCategoria ? "← Seleccionar de la lista" : "+ Crear nueva categoría"}
-                </button>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+                <label className="form-label" style={{ marginBottom: 0 }}>Categoría</label>
+                {!mostrarCrearCategoria && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMostrarCrearCategoria(true);
+                      setNombreNuevaCategoria("");
+                      if (tieneError("categoria")) setErrorActivo(null);
+                    }}
+                    className="btn-link"
+                    style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--emerald-primary)", cursor: "pointer" }}
+                  >
+                    + Nueva categoría
+                  </button>
+                )}
               </div>
 
-              {esNuevaCategoria ? (
-                <input
-                  type="text"
-                  value={categoriaPersonalizada}
-                  onChange={(e) => {
-                    setCategoriaPersonalizada(e.target.value);
-                    if (tieneError("categoria")) setErrorActivo(null);
-                  }}
-                  placeholder="Ej. Cursos online, Freelance"
-                  className={`form-input ${tieneError("categoria") ? "input-error" : ""}`}
-                  disabled={cargando}
-                />
-              ) : (
-                <select
-                  value={categoria}
-                  onChange={(e) => {
+              {mostrarCrearCategoria && (
+                <div style={{
+                  padding: "10px 12px",
+                  borderRadius: "8px",
+                  background: "rgba(16, 185, 129, 0.08)",
+                  border: "1px solid rgba(16, 185, 129, 0.25)",
+                  marginBottom: "10px",
+                }}>
+                  <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>
+                    Crear nueva categoría de {tipo === "gasto" ? "Gasto" : "Ingreso"}:
+                  </div>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <input
+                      type="text"
+                      value={nombreNuevaCategoria}
+                      onChange={(e) => {
+                        setNombreNuevaCategoria(e.target.value);
+                        if (tieneError("categoria")) setErrorActivo(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleCrearCategoriaDirecta();
+                        }
+                      }}
+                      placeholder="Ej. Gimnasio, Cursos online, Freelance..."
+                      className={`form-input ${tieneError("categoria") ? "input-error" : ""}`}
+                      disabled={guardandoCategoria || cargando}
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCrearCategoriaDirecta}
+                      className="btn btn-primary"
+                      style={{ padding: "6px 12px", fontSize: "13px", whiteSpace: "nowrap" }}
+                      disabled={guardandoCategoria || !nombreNuevaCategoria.trim() || cargando}
+                    >
+                      {guardandoCategoria ? "Guardando..." : "Guardar categoría"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMostrarCrearCategoria(false);
+                        setNombreNuevaCategoria("");
+                        if (tieneError("categoria")) setErrorActivo(null);
+                      }}
+                      className="btn btn-secondary"
+                      style={{ padding: "6px 10px", fontSize: "13px" }}
+                      disabled={guardandoCategoria || cargando}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                  {tieneError("categoria") && (
+                    <span className="error-text" style={{ marginTop: "4px", display: "block" }}>
+                      {errorActivo?.mensaje}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              <select
+                value={categoria}
+                onChange={(e) => {
+                  if (e.target.value === "__crear_nueva__") {
+                    setMostrarCrearCategoria(true);
+                    setNombreNuevaCategoria("");
+                  } else {
                     setCategoria(e.target.value);
                     if (tieneError("categoria")) setErrorActivo(null);
-                  }}
-                  className={`form-select ${tieneError("categoria") ? "input-error" : ""}`}
-                  disabled={cargando}
-                >
-                  {categoriasActuales.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {ICONOS_CATEGORIAS[cat] || "🏷️"} {cat}
-                    </option>
-                  ))}
-                </select>
-              )}
-              {tieneError("categoria") && (
+                  }
+                }}
+                className={`form-select ${tieneError("categoria") && !mostrarCrearCategoria ? "input-error" : ""}`}
+                disabled={cargando || guardandoCategoria}
+              >
+                {categoriasActuales.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {ICONOS_CATEGORIAS[cat] || "🏷️"} {cat}
+                  </option>
+                ))}
+                <option value="__crear_nueva__">➕ + Crear nueva categoría...</option>
+              </select>
+              {tieneError("categoria") && !mostrarCrearCategoria && (
                 <span className="error-text">{errorActivo?.mensaje}</span>
               )}
             </div>

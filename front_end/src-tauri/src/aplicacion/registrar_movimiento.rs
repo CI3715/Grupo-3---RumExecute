@@ -1,4 +1,5 @@
 use crate::aplicacion::puertos::{ErrorRepositorio, GeneradorId, Reloj, RepositorioLibro};
+use crate::dominio::categoria::{catalogo_categorias, Categoria};
 use crate::dominio::cuenta::Cuenta;
 use crate::dominio::errores::ErrorDominio;
 use crate::dominio::evento::{DatosMovimientoRegistrado, EventoLibro};
@@ -45,21 +46,31 @@ pub fn registrar_movimiento(
 ) -> Result<Movimiento, ErrorRegistrarMovimiento> {
     let momento_actual_utc = reloj.ahora();
 
-    // Buscar la cuenta afectada reconstruyéndola a partir de los eventos del libro
+    // Reconstruir la cuenta afectada y el catálogo de categorías (fábrica + creadas)
     let mut cuenta_opt: Option<Cuenta> = None;
+    let mut categorias_disponibles = catalogo_categorias();
 
     for evento in repo.listar_eventos()? {
-        if let EventoLibro::CuentaCreada { datos, .. } = evento {
-            if datos.id_cuenta == entrada.id_cuenta {
-                cuenta_opt = Some(Cuenta {
-                    id: datos.id_cuenta,
+        match evento {
+            EventoLibro::CuentaCreada { datos, .. } => {
+                if datos.id_cuenta == entrada.id_cuenta {
+                    cuenta_opt = Some(Cuenta {
+                        id: datos.id_cuenta,
+                        nombre: datos.nombre,
+                        tipo: datos.tipo,
+                        moneda: datos.moneda,
+                        saldo_inicial: datos.saldo_inicial,
+                    });
+                }
+            }
+            EventoLibro::CategoriaCreada { datos, .. } => {
+                categorias_disponibles.push(Categoria {
+                    id: datos.id_categoria,
                     nombre: datos.nombre,
                     tipo: datos.tipo,
-                    moneda: datos.moneda,
-                    saldo_inicial: datos.saldo_inicial,
                 });
-                break;
             }
+            _ => {}
         }
     }
 
@@ -75,11 +86,11 @@ pub fn registrar_movimiento(
 
     let monto = Monto::parse_movimiento(&entrada.monto, cuenta.moneda)?;
 
-    // Crear el movimiento según el tipo (el dominio valida el resto de invariantes)
+    // Crear el movimiento según el tipo validando contra el catálogo disponible
     let id_movimiento = ids.nuevo_id();
 
     let movimiento = match entrada.tipo.trim().to_lowercase().as_str() {
-        "gasto" => Movimiento::nuevo_gasto(
+        "gasto" => Movimiento::nuevo_gasto_con_catalogo(
             &id_movimiento,
             &cuenta,
             monto,
@@ -87,8 +98,9 @@ pub fn registrar_movimiento(
             &entrada.fecha,
             entrada.descripcion,
             &momento_actual_utc,
+            &categorias_disponibles,
         )?,
-        "ingreso" => Movimiento::nuevo_ingreso(
+        "ingreso" => Movimiento::nuevo_ingreso_con_catalogo(
             &id_movimiento,
             &cuenta,
             monto,
@@ -96,6 +108,7 @@ pub fn registrar_movimiento(
             &entrada.fecha,
             entrada.descripcion,
             &momento_actual_utc,
+            &categorias_disponibles,
         )?,
         _ => {
             return Err(ErrorDominio::tipo_invalido(format!(
@@ -342,5 +355,57 @@ mod tests {
         assert_eq!(e.campo, "fecha");
         assert!(e.mensaje.contains("es futura"));
         assert_eq!(p.repo.listar_eventos().unwrap().len(), 1); // No persistió ningún evento
+    }
+
+    #[test]
+    fn registra_movimiento_con_categoria_creada_por_usuario() {
+        let mut p = Prueba::nueva();
+
+        // 1. Guardamos una categoría creada por el usuario
+        use crate::dominio::categoria::TipoCategoria;
+        use crate::dominio::evento::DatosCategoriaCreada;
+        p.repo
+            .guardar(EventoLibro::nuevo_categoria_creada(
+                "evt-cat",
+                "2026-10-21T10:00:00Z",
+                "disp",
+                DatosCategoriaCreada {
+                    id_categoria: "cursos_online".to_string(),
+                    nombre: "Cursos Online".to_string(),
+                    tipo: TipoCategoria::Gasto,
+                },
+            ))
+            .unwrap();
+
+        // 2. Registramos un gasto usando esa categoría creada
+        let mov = p
+            .registrar(entrada(
+                "cta-principal",
+                "gasto",
+                "75,00",
+                "Cursos Online",
+                "2026-10-21",
+            ))
+            .expect("Debe registrar el movimiento con la categoría creada");
+
+        assert_eq!(mov.categoria.unwrap().nombre, "Cursos Online");
+        assert_eq!(p.repo.listar_eventos().unwrap().len(), 3); // cta + cat + mov
+
+        // 3. Si intentamos registrar un ingreso con esa categoría de gasto, debe fallar
+        let err = p
+            .registrar(entrada(
+                "cta-principal",
+                "ingreso",
+                "50,00",
+                "Cursos Online",
+                "2026-10-21",
+            ))
+            .expect_err("Debe rechazar categoría de gasto en un ingreso");
+
+        let ErrorRegistrarMovimiento::Validacion(e) = err else {
+            panic!("Se esperaba error de validación");
+        };
+        assert_eq!(e.campo, "categoria");
+        assert!(e.mensaje.contains("no puede ser utilizada"));
     }
 }

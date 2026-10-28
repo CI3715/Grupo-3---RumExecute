@@ -94,6 +94,7 @@ pub fn obtener_detalle_cuenta(
                     });
                 }
             }
+            EventoLibro::CategoriaCreada { .. } => {}
         }
     }
 

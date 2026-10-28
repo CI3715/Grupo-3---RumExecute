@@ -7,8 +7,14 @@ use crate::aplicacion::corregir_movimiento::{
     corregir_movimiento as ejecutar_corregir_movimiento, EntradaCorregirMovimiento,
     ErrorCorregirMovimiento,
 };
+use crate::aplicacion::crear_categoria::{
+    crear_categoria as ejecutar_crear_categoria, EntradaCrearCategoria, ErrorCrearCategoria,
+};
 use crate::aplicacion::crear_cuenta::{
     crear_cuenta as ejecutar_crear_cuenta, EntradaCrearCuenta, ErrorCrearCuenta,
+};
+use crate::aplicacion::listar_categorias::{
+    listar_categorias as ejecutar_listar_categorias, ErrorListarCategorias,
 };
 use crate::aplicacion::listar_cuentas::{
     listar_cuentas as ejecutar_listar_cuentas, ErrorListarCuentas, ResumenCuentas,
@@ -22,6 +28,7 @@ use crate::aplicacion::registrar_movimiento::{
     registrar_movimiento as ejecutar_registrar_movimiento, EntradaRegistrarMovimiento,
     ErrorRegistrarMovimiento,
 };
+use crate::dominio::categoria::Categoria;
 use crate::dominio::cuenta::Cuenta;
 use crate::dominio::errores::ErrorDominio;
 use crate::dominio::moneda::Moneda;
@@ -121,5 +128,36 @@ pub fn obtener_detalle_cuenta(
     ejecutar_obtener_detalle_cuenta(&*repositorio, &id_cuenta).map_err(|error| match error {
         ErrorObtenerDetalleCuenta::Dominio(error) => ErrorComando::Validacion(error),
         ErrorObtenerDetalleCuenta::Repositorio(error) => ErrorComando::Tecnico(error.0),
+    })
+}
+
+#[tauri::command]
+pub fn crear_categoria(
+    entrada: EntradaCrearCategoria,
+    repositorio: State<'_, Mutex<RepositorioLibroSqlite>>,
+) -> Result<Categoria, ErrorComando> {
+    let mut repositorio = repositorio.lock().map_err(|error| {
+        ErrorComando::Tecnico(format!("No se pudo acceder al libro local: {error}"))
+    })?;
+    let mut ids = GeneradorIdUuid;
+
+    ejecutar_crear_categoria(&mut *repositorio, &RelojSistema, &mut ids, entrada).map_err(|error| {
+        match error {
+            ErrorCrearCategoria::Validacion(error) => ErrorComando::Validacion(error),
+            ErrorCrearCategoria::Repositorio(error) => ErrorComando::Tecnico(error.0),
+        }
+    })
+}
+
+#[tauri::command]
+pub fn listar_categorias(
+    repositorio: State<'_, Mutex<RepositorioLibroSqlite>>,
+) -> Result<Vec<Categoria>, String> {
+    let repositorio = repositorio
+        .lock()
+        .map_err(|error| format!("No se pudo acceder al libro local: {error}"))?;
+
+    ejecutar_listar_categorias(&*repositorio).map_err(|error| match error {
+        ErrorListarCategorias::Repositorio(error) => error.0,
     })
 }

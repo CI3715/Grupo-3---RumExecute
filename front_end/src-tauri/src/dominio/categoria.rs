@@ -208,11 +208,14 @@ pub fn catalogo_por_tipo(tipo: TipoCategoria) -> Vec<Categoria> {
         .collect()
 }
 
-/// Busca una categoría en el catálogo oficial por id, nombre exacto o nombre normalizado
+/// Busca una categoría en un catálogo dado por id, nombre exacto o nombre normalizado
 /// (sin distinguir mayúsculas, minúsculas ni acentos).
 ///
 /// Si no existe, devuelve un `ErrorDominio` con `campo: "categoria"`.
-pub fn buscar_categoria(identificador: &str) -> Result<Categoria, ErrorDominio> {
+pub fn buscar_categoria_en(
+    identificador: &str,
+    catalogo: &[Categoria],
+) -> Result<Categoria, ErrorDominio> {
     let clean = identificador.trim();
     if clean.is_empty() {
         return Err(ErrorDominio::categoria_invalida(
@@ -222,14 +225,15 @@ pub fn buscar_categoria(identificador: &str) -> Result<Categoria, ErrorDominio> 
 
     let clean_norm = normalizar_para_comparacion(clean);
 
-    catalogo_categorias()
-        .into_iter()
+    catalogo
+        .iter()
         .find(|c| {
             c.id.eq_ignore_ascii_case(clean)
                 || c.nombre.trim().eq_ignore_ascii_case(clean)
                 || normalizar_para_comparacion(&c.id) == clean_norm
                 || normalizar_para_comparacion(&c.nombre) == clean_norm
         })
+        .cloned()
         .ok_or_else(|| {
             ErrorDominio::categoria_invalida(format!(
                 "La categoría '{}' no pertenece al catálogo oficial de categorías.",
@@ -238,16 +242,14 @@ pub fn buscar_categoria(identificador: &str) -> Result<Categoria, ErrorDominio> 
         })
 }
 
-/// Valida que la categoría exista en el catálogo y que coincida exactamente
+/// Valida que la categoría exista en el catálogo provisto y que coincida exactamente
 /// con el tipo de movimiento esperado (Gasto o Ingreso).
-///
-/// Si la categoría no existe o su tipo no coincide, retorna un `ErrorDominio`
-/// con `campo: "categoria"` (RF-LIB-07, Criterio de Aceptación 2).
-pub fn validar_categoria_para_tipo(
+pub fn validar_categoria_para_tipo_en(
     identificador: &str,
     tipo_esperado: TipoCategoria,
+    catalogo: &[Categoria],
 ) -> Result<Categoria, ErrorDominio> {
-    let categoria = buscar_categoria(identificador)?;
+    let categoria = buscar_categoria_en(identificador, catalogo)?;
 
     if categoria.tipo != tipo_esperado {
         return Err(ErrorDominio::categoria_invalida(format!(
@@ -257,6 +259,47 @@ pub fn validar_categoria_para_tipo(
     }
 
     Ok(categoria)
+}
+
+/// Busca una categoría en el catálogo de fábrica por id, nombre exacto o nombre normalizado.
+pub fn buscar_categoria(identificador: &str) -> Result<Categoria, ErrorDominio> {
+    buscar_categoria_en(identificador, &catalogo_categorias())
+}
+
+/// Valida que la categoría exista en el catálogo de fábrica y coincida con el tipo esperado.
+pub fn validar_categoria_para_tipo(
+    identificador: &str,
+    tipo_esperado: TipoCategoria,
+) -> Result<Categoria, ErrorDominio> {
+    validar_categoria_para_tipo_en(identificador, tipo_esperado, &catalogo_categorias())
+}
+
+/// Valida que no exista ya una categoría del mismo tipo con el mismo nombre (RF-LIB-07).
+///
+/// La comparación es insensible a mayúsculas, espacios y acentos.
+pub fn validar_nueva_categoria_no_duplicada(
+    nombre: &str,
+    tipo: TipoCategoria,
+    categorias_existentes: &[Categoria],
+) -> Result<(), ErrorDominio> {
+    let clean = nombre.trim();
+    if clean.is_empty() {
+        return Err(ErrorDominio::categoria_invalida(
+            "El nombre de la categoría no puede estar vacío.",
+        ));
+    }
+
+    let norm = normalizar_para_comparacion(clean);
+    for cat in categorias_existentes {
+        if cat.tipo == tipo && normalizar_para_comparacion(&cat.nombre) == norm {
+            return Err(ErrorDominio::categoria_invalida(format!(
+                "Ya existe una categoría de {} con el nombre '{}'. Elige un nombre distinto.",
+                tipo, cat.nombre
+            )));
+        }
+    }
+
+    Ok(())
 }
 
 /// Valida una colección de categorías asegurando que no existan nombres duplicados

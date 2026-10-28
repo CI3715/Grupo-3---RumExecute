@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use super::categoria::{validar_categoria_para_tipo, Categoria, TipoCategoria};
+use super::categoria::{
+    catalogo_categorias, validar_categoria_para_tipo_en, Categoria, TipoCategoria,
+};
 use super::cuenta::Cuenta;
 use super::errores::ErrorDominio;
 use super::moneda::CodigoMoneda;
@@ -43,13 +45,7 @@ pub struct Movimiento {
 }
 
 impl Movimiento {
-    /// Crea y valida un nuevo movimiento de tipo Gasto.
-    ///
-    /// Validaciones estrictas:
-    /// - Monto > 0 y decimales acordes a la moneda de la cuenta (campo: "monto").
-    /// - La moneda del monto debe coincidir con la moneda de la cuenta (campo: "moneda").
-    /// - Fecha válida y no futura en UTC (campo: "fecha").
-    /// - Categoría perteneciente al catálogo de fábrica y de tipo Gasto (campo: "categoria").
+    /// Crea y valida un nuevo movimiento de tipo Gasto con catálogo oficial de fábrica.
     pub fn nuevo_gasto(
         id: impl Into<String>,
         cuenta: &Cuenta,
@@ -59,9 +55,34 @@ impl Movimiento {
         descripcion: impl Into<String>,
         momento_actual_utc: &str,
     ) -> Result<Self, ErrorDominio> {
+        Self::nuevo_gasto_con_catalogo(
+            id,
+            cuenta,
+            monto,
+            categoria_nombre_o_id,
+            fecha,
+            descripcion,
+            momento_actual_utc,
+            &catalogo_categorias(),
+        )
+    }
+
+    /// Crea y valida un nuevo movimiento de tipo Gasto verificando contra un catálogo dado.
+    #[allow(clippy::too_many_arguments)]
+    pub fn nuevo_gasto_con_catalogo(
+        id: impl Into<String>,
+        cuenta: &Cuenta,
+        monto: Monto,
+        categoria_nombre_o_id: &str,
+        fecha: &str,
+        descripcion: impl Into<String>,
+        momento_actual_utc: &str,
+        catalogo: &[Categoria],
+    ) -> Result<Self, ErrorDominio> {
         validar_monto_movimiento(&monto, cuenta.moneda)?;
         validar_fecha_no_futura(fecha, momento_actual_utc)?;
-        let categoria = validar_categoria_para_tipo(categoria_nombre_o_id, TipoCategoria::Gasto)?;
+        let categoria =
+            validar_categoria_para_tipo_en(categoria_nombre_o_id, TipoCategoria::Gasto, catalogo)?;
 
         Ok(Self {
             id: id.into(),
@@ -75,13 +96,7 @@ impl Movimiento {
         })
     }
 
-    /// Crea y valida un nuevo movimiento de tipo Ingreso.
-    ///
-    /// Validaciones estrictas:
-    /// - Monto > 0 y decimales acordes a la moneda de la cuenta (campo: "monto").
-    /// - La moneda del monto debe coincidir con la moneda de la cuenta (campo: "moneda").
-    /// - Fecha válida y no futura en UTC (campo: "fecha").
-    /// - Categoría perteneciente al catálogo de fábrica y de tipo Ingreso (campo: "categoria").
+    /// Crea y valida un nuevo movimiento de tipo Ingreso con catálogo oficial de fábrica.
     pub fn nuevo_ingreso(
         id: impl Into<String>,
         cuenta: &Cuenta,
@@ -91,9 +106,37 @@ impl Movimiento {
         descripcion: impl Into<String>,
         momento_actual_utc: &str,
     ) -> Result<Self, ErrorDominio> {
+        Self::nuevo_ingreso_con_catalogo(
+            id,
+            cuenta,
+            monto,
+            categoria_nombre_o_id,
+            fecha,
+            descripcion,
+            momento_actual_utc,
+            &catalogo_categorias(),
+        )
+    }
+
+    /// Crea y valida un nuevo movimiento de tipo Ingreso verificando contra un catálogo dado.
+    #[allow(clippy::too_many_arguments)]
+    pub fn nuevo_ingreso_con_catalogo(
+        id: impl Into<String>,
+        cuenta: &Cuenta,
+        monto: Monto,
+        categoria_nombre_o_id: &str,
+        fecha: &str,
+        descripcion: impl Into<String>,
+        momento_actual_utc: &str,
+        catalogo: &[Categoria],
+    ) -> Result<Self, ErrorDominio> {
         validar_monto_movimiento(&monto, cuenta.moneda)?;
         validar_fecha_no_futura(fecha, momento_actual_utc)?;
-        let categoria = validar_categoria_para_tipo(categoria_nombre_o_id, TipoCategoria::Ingreso)?;
+        let categoria = validar_categoria_para_tipo_en(
+            categoria_nombre_o_id,
+            TipoCategoria::Ingreso,
+            catalogo,
+        )?;
 
         Ok(Self {
             id: id.into(),
