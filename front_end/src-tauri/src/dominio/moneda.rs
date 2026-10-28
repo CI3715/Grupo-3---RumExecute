@@ -12,6 +12,7 @@ pub enum CodigoMoneda {
     USD,
     EUR,
     USDT,
+    Personalizado(String),
 }
 
 impl CodigoMoneda {
@@ -21,6 +22,7 @@ impl CodigoMoneda {
             CodigoMoneda::USD => "USD",
             CodigoMoneda::EUR => "EUR",
             CodigoMoneda::USDT => "USDT",
+            CodigoMoneda::Personalizado(c) => c.as_str(),
         }
     }
 
