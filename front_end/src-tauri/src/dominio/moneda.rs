@@ -1,4 +1,5 @@
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
 
@@ -175,6 +176,50 @@ impl Moneda {
             simbolo: simbolo.trim().to_string(),
             decimales,
         })
+    }
+}
+
+// Guarda todas las monedas, tanto de fábrica como personalizadas
+#[derive(Debug, Clone, Default)]
+pub struct CatalogoMonedas {
+    monedas: HashMap<CodigoMoneda, Moneda>,
+}
+
+impl CatalogoMonedas {
+    // Inicializa el catálogo cargando automáticamente las monedas de fábrica
+    pub fn nuevo() -> Self {
+        let mut catalogo = Self {
+            monedas: HashMap::new(),
+        };
+
+        for moneda in Moneda::monedas_de_fabrica() {
+            catalogo.monedas.insert(moneda.codigo.clone(), moneda);
+        };
+
+        catalogo
+    }
+
+    // Registra una moneda personalizada en el catálogo.
+    // Esto se llama al procesar un evento `MonedaCreada`.
+    pub fn registrar_moneda(&mut self, moneda: Moneda) {
+        self.monedas.insert(moneda.codigo.clone(), moneda);
+    }
+
+    // Recupera la entidad `Moneda` completa por su código.
+    pub fn obtener(&self, codigo: &CodigoMoneda) -> Option<&Moneda> {
+        self.monedas.get(codigo)
+    }
+
+    // Obtiene de forma segura los decimales exactos de una moneda.
+    pub fn decimales(&self, codigo: &CodigoMoneda) -> Result<u32, ErrorDominio> {
+        self.obtener(codigo)
+            .map(|m| m.decimales)
+            .ok_or_else(|| ErrorDominio::moneda_no_encontrada(codigo.as_str()))
+    }
+
+    // Retorna una lista con todas las monedas (útil para enviar a la interfaz gráfica).
+    pub fn listar_todas(&self) -> Vec<Moneda> {
+        self.monedas.values().cloned().collect()
     }
 }
 

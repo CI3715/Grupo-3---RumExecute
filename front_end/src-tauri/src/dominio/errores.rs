@@ -20,10 +20,10 @@ impl ErrorDominio {
         }
     }
 
-    // monto.rs
-    pub fn moneda_invalida(codigo: &str) -> Self {
+    // moneda.rs
+    pub fn moneda_no_encontrada(codigo: &str) -> Self {
         Self::new(
-            "moneda",
+            "moneda_no_encontrada",
             format!(
                 "La moneda '{}' no pertenece a las monedas registradas.",
                 codigo
@@ -31,7 +31,7 @@ impl ErrorDominio {
         )
     }
 
-    // monto.rs
+    // moneda.rs
     pub fn codigo_moneda_invalido() -> Self {
         Self::new(
             "codigo",
@@ -39,7 +39,7 @@ impl ErrorDominio {
         )
     }
 
-    // monto.rs
+    // moneda.rs
     pub fn nombre_moneda_invalido() -> Self {
         Self::new(
             "nombre",
@@ -47,7 +47,7 @@ impl ErrorDominio {
         )
     }
 
-    // monto.rs
+    // moneda.rs
     pub fn simbolo_moneda_invalido() -> Self {
         Self::new(
             "simbolo",
@@ -55,7 +55,7 @@ impl ErrorDominio {
         )
     }
 
-    // monto.rs
+    // moneda.rs
     pub fn decimales_moneda_invalido() -> Self {
         Self::new(
             "decimales",
