@@ -47,17 +47,26 @@ impl TasaCambio {
         let par = ParMonedas::nuevo(origen, destino)?;
 
         if valor <= Decimal::ZERO {
-            return Err(ErrorDominio::tasa_invalida("El valor de la tasa de cambio debe ser mayor a cero."));
+            return Err(ErrorDominio::new(
+                "valor",
+                "El valor de la tasa de cambio debe ser mayor a cero.",
+            ));
         }
 
         if valor.normalize().scale() > 8 {
-            return Err(ErrorDominio::tasa_invalida("La tasa de cambio no puede tener más de 8 decimales."));
+            return Err(ErrorDominio::new(
+                "valor",
+                "La tasa de cambio no puede tener más de 8 decimales.",
+            ));
         }
 
         validar_fecha_no_futura(fecha, momento_actual_utc)?;
 
         if fuente.trim().is_empty() {
-            return Err(ErrorDominio::tasa_invalida("Debe especificar la fuente de la tasa de cambio."));
+            return Err(ErrorDominio::new(
+                "fuente",
+                "Debe especificar la fuente de la tasa de cambio.",
+            ));
         }
 
         Ok(Self { 
@@ -186,7 +195,7 @@ mod tests {
             MOMENTO_ACTUAL,
         )
         .unwrap_err();
-        assert_eq!(err_cero.campo, "tasa_cambio");
+        assert_eq!(err_cero.campo, "valor");
 
         let valor_neg = Decimal::from_str("-10.5").unwrap();
         let err_neg = TasaCambio::nueva(
@@ -198,7 +207,7 @@ mod tests {
             MOMENTO_ACTUAL,
         )
         .unwrap_err();
-        assert_eq!(err_neg.campo, "tasa_cambio");
+        assert_eq!(err_neg.campo, "valor");
     }
 
     #[test]

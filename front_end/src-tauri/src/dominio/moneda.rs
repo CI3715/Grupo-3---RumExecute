@@ -156,9 +156,15 @@ impl Moneda {
         simbolo: String,
         decimales: u32,
     ) -> Result<Self, ErrorDominio> {
+        if codigo.trim() != codigo
+            || !(3..=5).contains(&codigo.len())
+            || !codigo.bytes().all(|caracter| caracter.is_ascii_uppercase())
+        {
+            return Err(ErrorDominio::codigo_moneda_invalido());
+        }
         let cod_moneda = CodigoMoneda::parse(codigo)?;
 
-        if nombre.trim().is_empty() || nombre.trim().len() > 50 {
+        if nombre.trim().is_empty() || nombre.trim().chars().count() > 50 {
             return Err(ErrorDominio::nombre_moneda_invalido());
         }
 

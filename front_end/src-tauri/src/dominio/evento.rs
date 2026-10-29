@@ -66,6 +66,8 @@ pub struct DatosTasaEliminada {
     pub par_monedas: ParMonedas,
     pub fecha: String,
     pub fuente: String,
+    #[serde(default)]
+    pub id_tasa: Option<String>,
 }
 
 /// Datos específicos asociados al cambio de la moneda base de consolidación de la aplicación.
