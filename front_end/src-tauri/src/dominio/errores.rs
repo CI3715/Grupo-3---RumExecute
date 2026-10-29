@@ -108,4 +108,15 @@ impl ErrorDominio {
     pub fn tasa_invalida(mensaje: impl Into<String>) -> Self {
         Self::new("tasa_cambio", mensaje)
     }
+
+    // conversion.rs
+    pub fn tasa_no_existente(origen: &str, destino: &str, fecha: &str) {
+        Self::new(
+            "tasa_no_existente",
+            format!(
+                "Falta una tasa de {} a {} con fecha igual o anterior al {}",
+                origen, destino, fecha
+            )
+        )
+    }
 }
