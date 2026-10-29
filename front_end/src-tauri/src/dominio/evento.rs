@@ -5,6 +5,7 @@ use super::cuenta::TipoCuenta;
 use super::moneda::CodigoMoneda;
 use super::monto::Monto;
 use super::movimiento::TipoMovimiento;
+use super::tasa_cambio::ParMonedas;
 
 /// Datos específicos asociados a la creación de una cuenta en el libro.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -47,6 +48,37 @@ pub struct DatosCategoriaCreada {
     pub id_categoria: String,
     pub nombre: String,
     pub tipo: TipoCategoria,
+}
+
+/// Datos específicos asociados al registro de una nueva tasa de cambio.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DatosTasaRegistrada {
+    pub par_monedas: ParMonedas,
+    pub valor: Decimal,
+    pub fecha: String,
+    pub fuente: String,
+}
+
+/// Datos específicos asociados a la eliminación lógica de una tasa de cambio registrada.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DatosTasaEliminada {
+    pub par_monedas: ParMonedas,
+    pub fecha: String,
+    pub fuente: String,
+}
+
+/// Datos específicos asociados al cambio de la moneda base de consolidación de la aplicación.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DatosMonedaBaseCambiada {
+    pub nueva_moneda: CodigoMoneda,
+}
+
+/// Datos específicos asociados a la creación de una moneda personalizada.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DatosMonedaCreada {
+    pub codigo: CodigoMoneda,
+    pub nombre: String,
+    pub decimales: u32,
 }
 
 /// Evento inmutable del libro contable (Event Sourcing - INV-13, INV-04).
