@@ -121,6 +121,34 @@ pub enum EventoLibro {
         dispositivo_origen: String,
         datos: DatosCategoriaCreada,
     },
+    TasaRegistrada {
+        id: String,
+        tipo: String,
+        momento_registro: String,
+        dispositivo_origen: String,
+        datos: DatosTasaRegistrada,
+    },
+    TasaEliminada {
+        id: String,
+        tipo: String,
+        momento_registro: String,
+        dispositivo_origen: String,
+        datos: DatosTasaEliminada,
+    },
+    MonedaBaseCambiada {
+        id: String,
+        tipo: String,
+        momento_registro: String,
+        dispositivo_origen: String,
+        datos: DatosMonedaBaseCambiada,
+    },
+    MonedaCreada {
+        id: String,
+        tipo: String,
+        momento_registro: String,
+        dispositivo_origen: String,
+        datos: DatosMonedaCreada,
+    },
 }
 
 impl EventoLibro {
