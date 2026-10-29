@@ -4,7 +4,9 @@ use crate::aplicacion::puertos::{ErrorRepositorio, GeneradorId, Reloj, Repositor
 use crate::dominio::cuenta::{Cuenta, TipoCuenta};
 use crate::dominio::errores::ErrorDominio;
 use crate::dominio::evento::{DatosCuentaCreada, EventoLibro};
+use crate::dominio::moneda::CatalogoMonedas;
 use crate::dominio::moneda::CodigoMoneda;
+use crate::dominio::moneda::Moneda;
 use crate::dominio::monto::Monto;
 use serde::{Deserialize, Serialize};
 
@@ -43,22 +45,38 @@ pub fn crear_cuenta(
     ids: &mut dyn GeneradorId,
     entrada: EntradaCrearCuenta,
 ) -> Result<Cuenta, ErrorCrearCuenta> {
-    // 1. Convertir los textos en tipos del dominio (el dominio valida)
-    let moneda = CodigoMoneda::from_str(&entrada.moneda)?;
-    let tipo = TipoCuenta::from_str(&entrada.tipo)?;
-    let saldo = Monto::parse_saldo_inicial(&entrada.saldo_inicial, moneda)?;
-
-    // 2. Nombre repetido (sin mayúsculas/minúsculas ni espacios extremos)
+    // 1. Reconstruir catálogo de monedas y verificar nombres repetidos
+    let mut catalogo = CatalogoMonedas::nuevo();
     let nombre_nuevo = entrada.nombre.trim().to_lowercase();
+
     for evento in repo.listar_eventos()? {
-        if let EventoLibro::CuentaCreada { datos, .. } = evento {
-            if datos.nombre.trim().to_lowercase() == nombre_nuevo {
-                return Err(
-                    ErrorDominio::nombre_invalido("Ya existe una cuenta con ese nombre.").into(),
-                );
+        match evento {
+            EventoLibro::MonedaCreada { datos, .. } => {
+                if let Ok(moneda) = Moneda::nueva_propia(
+                    datos.codigo.as_str(),
+                    datos.nombre,
+                    datos.simbolo,
+                    datos.decimales as u32,
+                ) {
+                    catalogo.registrar_moneda(moneda);
+                }
             }
+            EventoLibro::CuentaCreada { datos, .. } => {
+                if datos.nombre.trim().to_lowercase() == nombre_nuevo {
+                    return Err(
+                        ErrorDominio::nombre_invalido("Ya existe una cuenta con ese nombre.").into(),
+                    );
+                }
+            }
+            _ => {}
         }
     }
+
+    // 2. Convertir los textos en tipos del dominio (el dominio valida)
+    let moneda = CodigoMoneda::from_str(&entrada.moneda)?;
+    let tipo = TipoCuenta::from_str(&entrada.tipo)?;
+    let decimales = catalogo.decimales(&moneda)?;
+    let saldo = Monto::parse_saldo_inicial(&entrada.saldo_inicial, moneda.clone(), decimales)?;
 
     // 3. Crear la cuenta (el dominio valida el nombre vacío)
     let cuenta = Cuenta::nueva(ids.nuevo_id(), entrada.nombre, tipo, moneda, saldo)?;

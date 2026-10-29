@@ -2,6 +2,8 @@ use crate::aplicacion::puertos::{ErrorRepositorio, GeneradorId, Reloj, Repositor
 use crate::dominio::cuenta::Cuenta;
 use crate::dominio::errores::ErrorDominio;
 use crate::dominio::evento::{DatosMovimientoCorregido, EventoLibro};
+use crate::dominio::moneda::CatalogoMonedas;
+use crate::dominio::moneda::Moneda;
 use crate::dominio::monto::Monto;
 use crate::dominio::movimiento::Movimiento;
 use serde::{Deserialize, Serialize};
@@ -44,11 +46,22 @@ pub fn corregir_movimiento(
     let momento_actual_utc = reloj.ahora();
 
     // Reconstruir el estado leyendo los eventos del libro
+    let mut catalogo = CatalogoMonedas::nuevo();
     let mut movimiento_original_opt: Option<Movimiento> = None;
     let mut cuentas: Vec<Cuenta> = Vec::new();
 
     for evento in repo.listar_eventos()? {
         match evento {
+            EventoLibro::MonedaCreada { datos, .. } => {
+                if let Ok(moneda) = Moneda::nueva_propia(
+                    datos.codigo.as_str(),
+                    datos.nombre,
+                    datos.simbolo,
+                    datos.decimales as u32,
+                ) {
+                    catalogo.registrar_moneda(moneda);
+                }
+            }
             EventoLibro::CuentaCreada { datos, .. } => {
                 cuentas.push(Cuenta {
                     id: datos.id_cuenta,
@@ -101,8 +114,10 @@ pub fn corregir_movimiento(
                 ),
             )
         })?;
+    
+    let decimales = catalogo.decimales(&cuenta.moneda)?;
 
-    let monto_correcto = Monto::parse_movimiento(&entrada.nuevo_monto, cuenta.moneda)?;
+    let monto_correcto = Monto::parse_movimiento(&entrada.nuevo_monto, cuenta.moneda, decimales)?;
 
     // El dominio calcula el ajuste compensatorio e instancia el Movimiento de tipo Ajuste (INV-04)
     let id_ajuste = ids.nuevo_id();

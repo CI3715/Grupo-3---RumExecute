@@ -79,6 +79,7 @@ pub struct DatosMonedaBaseCambiada {
 pub struct DatosMonedaCreada {
     pub codigo: CodigoMoneda,
     pub nombre: String,
+    pub simbolo: String,
     pub decimales: u32,
 }
 
