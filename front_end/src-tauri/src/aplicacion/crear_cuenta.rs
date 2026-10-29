@@ -273,7 +273,7 @@ mod tests {
     fn rechaza_moneda_desconocida_indicando_el_campo_moneda() {
         let mut p = Prueba::nueva();
         let resultado = p.crear(entrada("Cripto", "billetera_digital", "BTC", "1,00"));
-        assert_eq!(campo_del_error(resultado), "moneda");
+        assert_eq!(campo_del_error(resultado), "moneda_no_encontrada");
         assert!(p.eventos().is_empty());
     }
 

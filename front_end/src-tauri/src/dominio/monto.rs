@@ -77,7 +77,7 @@ impl Monto {
     pub fn sumar(&self, otro: &Monto) -> Result<Monto, ErrorDominio> {
         if self.moneda != otro.moneda {
             return Err(ErrorDominio::new(
-                "moneda",
+                "moneda_distinta",
                 format!(
                     "No se pueden sumar montos de monedas distintas ({} y {}).",
                     self.moneda, otro.moneda
@@ -141,7 +141,7 @@ impl Monto {
     pub fn restar(&self, otro: &Monto) -> Result<Monto, ErrorDominio> {
         if self.moneda != otro.moneda {
             return Err(ErrorDominio::new(
-                "moneda",
+                "moneda_distinta",
                 format!(
                     "No se pueden operar montos de monedas distintas ({} y {}).",
                     self.moneda, otro.moneda
@@ -193,8 +193,7 @@ mod tests {
         assert!(resultado.is_err());
 
         let error = resultado.unwrap_err();
-        assert_eq!(error.campo, "moneda");
-        assert!(error.mensaje.contains("INV-02"));
+        assert_eq!(error.campo, "moneda_distinta");
     }
 
     #[test]

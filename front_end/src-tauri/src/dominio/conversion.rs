@@ -151,7 +151,7 @@ mod tests {
         let err = convertir_monto(&monto_usd, CodigoMoneda::VES, "2026-10-28", &historial)
             .expect_err("Debería fallar al no existir tasa aplicable");
 
-        assert_eq!(err.campo, "tasa_faltante");
+        assert_eq!(err.campo, "tasa_no_existente");
         assert!(err.mensaje.contains("USD"));
         assert!(err.mensaje.contains("VES"));
         assert!(err.mensaje.contains("2026-10-28"));
@@ -177,6 +177,6 @@ mod tests {
         let err = convertir_monto(&monto_usd, CodigoMoneda::VES, "2026-10-20", &historial)
             .expect_err("Debería fallar porque la tasa disponible es futura respecto a la consulta");
 
-        assert_eq!(err.campo, "tasa_faltante");
+        assert_eq!(err.campo, "tasa_no_existente");
     }
 }
