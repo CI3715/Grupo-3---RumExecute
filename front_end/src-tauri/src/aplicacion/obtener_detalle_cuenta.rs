@@ -94,7 +94,11 @@ pub fn obtener_detalle_cuenta(
                     });
                 }
             }
-            EventoLibro::CategoriaCreada { .. } => {}
+            EventoLibro::CategoriaCreada { .. }
+            | EventoLibro::TasaRegistrada { .. }
+            | EventoLibro::TasaEliminada { .. }
+            | EventoLibro::MonedaBaseCambiada { .. }
+            | EventoLibro::MonedaCreada { .. } => {}
         }
     }
 
