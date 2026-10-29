@@ -389,4 +389,46 @@ mod tests {
         assert!(json_cad.contains("\"simbolo\":\"$\""));
         assert!(json_cad.contains("\"decimales\":2"));
     }
+
+    #[test]
+    fn test_catalogo_inicia_con_monedas_de_fabrica() {
+        let catalogo = CatalogoMonedas::nuevo();
+        
+        assert!(catalogo.obtener(&CodigoMoneda::USD).is_some());
+        assert!(catalogo.obtener(&CodigoMoneda::VES).is_some());
+        assert!(catalogo.obtener(&CodigoMoneda::EUR).is_some());
+        assert!(catalogo.obtener(&CodigoMoneda::USDT).is_some());
+        
+        assert_eq!(catalogo.decimales(&CodigoMoneda::USD).unwrap(), 2);
+    }
+
+    #[test]
+    fn test_catalogo_registra_y_recupera_moneda_personalizada() {
+        let mut catalogo = CatalogoMonedas::nuevo();
+        
+        let moneda_custom = Moneda::nueva_propia(
+            "BTC", 
+            "Bitcoin".to_string(), 
+            "₿".to_string(), 
+            8
+        ).unwrap();
+        
+        let codigo = moneda_custom.codigo.clone();
+        catalogo.registrar_moneda(moneda_custom);
+        
+        let recuperada = catalogo.obtener(&codigo).unwrap();
+        assert_eq!(recuperada.nombre, "Bitcoin");
+        assert_eq!(catalogo.decimales(&codigo).unwrap(), 8);
+    }
+
+    #[test]
+    fn test_catalogo_falla_al_pedir_decimales_de_moneda_inexistente() {
+        let catalogo = CatalogoMonedas::nuevo();
+        
+        // Creamos un código que no hemos registrado en el catálogo
+        let cod_fantasma = CodigoMoneda::parse("LTC").unwrap();
+        
+        let err = catalogo.decimales(&cod_fantasma).unwrap_err();
+        assert_eq!(err.campo, "moneda_no_encontrada");
+    }
 }
