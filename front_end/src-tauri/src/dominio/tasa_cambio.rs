@@ -68,3 +68,65 @@ impl TasaCambio {
         })
     }
 }
+
+pub enum TasaAplicable<'a> {
+    Directa(&'a TasaCambio),
+    Inversa(&'a TasaCambio),
+}
+
+// Colección de dominio para gestionar el historial de tasas de cambio.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HistorialTasas {
+    tasas: Vec<TasaCambio>
+}
+
+impl HistorialTasas {
+    pub fn nuevo() -> Self {
+        Self { tasas: Vec::new() }
+    }
+
+    pub fn registrar(&mut self, tasa: TasaCambio) {
+        self.tasas.push(tasa);
+    }
+
+    ///Busca la tasa aplicable para un par de monedas en una fecha dada.
+    pub fn obtener_tasa_vigente<'a>(
+        &'a self,
+        origen: CodigoMoneda,
+        destino: CodigoMoneda,
+        fecha_consulta: &str
+    )-> Option<TasaAplicable<'a>> {
+        let mut mejor_tasa: Option<TasaAplicable> = None;
+        let mut mejor_fecha = "";
+
+        for tasa in &self.tasas {
+            if tasa.fecha.as_str() <= fecha_consulta && tasa.fecha.as_str() >= mejor_fecha {
+
+                if tasa.par.origen == origen && tasa.par.destino == destino {
+                    mejor_fecha = tasa.fecha.as_str();
+                    mejor_tasa = Some(TasaAplicable::Directa(tasa));
+                } else if tasa.par.origen == destino && tasa.par.destino == origen {
+                    mejor_fecha = tasa.fecha.as_str();
+                    mejor_tasa = Some(TasaAplicable::Inversa(tasa));
+                }
+            }
+        }
+
+        mejor_tasa
+    }
+
+    pub fn eliminar_tasa(&mut self, par: ParMonedas, fecha: &str, fuente: &str) -> bool {
+        let len_inicial = self.tasas.len();
+        self.tasas.retain(|t| !(t.par == par && t.fecha == fecha && t.fuente == fuente));
+        self.tasas.len() < len_inicial
+    }
+
+    /// Obtiene todo el historial de tasas para un par determinado (Regla 5 / RF-CAM-06).
+    pub fn consultar_historial_por_par(&self, par: ParMonedas) -> Vec<TasaCambio> {
+        self.tasas
+            .iter()
+            .filter(|t| t.par == par)
+            .cloned()
+            .collect()
+    }
+}
