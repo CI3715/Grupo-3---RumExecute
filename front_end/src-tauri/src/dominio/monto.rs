@@ -35,6 +35,7 @@ impl Monto {
     pub fn nuevo_saldo_inicial(
         cantidad: Decimal,
         moneda: CodigoMoneda,
+        decimales_admitidos: u32,
     ) -> Result<Self, ErrorDominio> {
         if cantidad < Decimal::ZERO {
             return Err(ErrorDominio::saldo_invalido(
@@ -43,10 +44,10 @@ impl Monto {
         }
 
         // Verifica que la cantidad no tenga más de 2 decimales significativos
-        if cantidad.normalize().scale() > 2 {
+        if cantidad.normalize().scale() > decimales_admitidos {
             return Err(ErrorDominio::saldo_invalido(format!(
-                "El saldo inicial {} tiene más de 2 decimales, lo cual no está permitido.",
-                cantidad
+                "El saldo inicial {} tiene más de {} decimales, lo cual no está permitido para la moneda {}.",
+                cantidad, decimales_admitidos, moneda.as_str()
             )));
         }
 
@@ -57,6 +58,7 @@ impl Monto {
     pub fn parse_saldo_inicial(
         cantidad_str: &str,
         moneda: CodigoMoneda,
+        decimales_admitidos: u32
     ) -> Result<Self, ErrorDominio> {
         // Soporta separador decimal tanto punto '.' como coma ','
         let normalizado = cantidad_str.trim().replace(',', ".");
@@ -68,7 +70,7 @@ impl Monto {
             ))
         })?;
 
-        Self::nuevo_saldo_inicial(decimal, moneda)
+        Self::nuevo_saldo_inicial(decimal, moneda, decimales_admitidos)
     }
 
     /// Suma dos montos garantizando el invariante INV-02 (no sumar monedas distintas).
@@ -77,7 +79,7 @@ impl Monto {
             return Err(ErrorDominio::new(
                 "moneda",
                 format!(
-                    "Invariante INV-02 violado: No se pueden sumar montos de monedas distintas ({} y {}).",
+                    "No se pueden sumar montos de monedas distintas ({} y {}).",
                     self.moneda, otro.moneda
                 ),
             ));
@@ -96,14 +98,17 @@ impl Monto {
     /// - No puede tener más decimales que los que admite la moneda de la cuenta (RF-CAM-01).
     ///
     /// Si falla alguna validación, retorna `ErrorDominio` con `campo: "monto"`.
-    pub fn nuevo_movimiento(cantidad: Decimal, moneda: CodigoMoneda) -> Result<Self, ErrorDominio> {
+    pub fn nuevo_movimiento(
+        cantidad: Decimal,
+        moneda: CodigoMoneda,
+        decimales_admitidos: u32,
+    ) -> Result<Self, ErrorDominio> {
         if cantidad <= Decimal::ZERO {
             return Err(ErrorDominio::monto_invalido(
                 "El monto del movimiento debe ser estrictamente mayor que cero.",
             ));
         }
 
-        let decimales_admitidos = moneda.decimales();
         if cantidad.normalize().scale() > decimales_admitidos {
             return Err(ErrorDominio::monto_invalido(format!(
                 "El monto {} tiene más de {} decimales, lo cual no está permitido para la moneda {}.",
@@ -118,6 +123,7 @@ impl Monto {
     pub fn parse_movimiento(
         cantidad_str: &str,
         moneda: CodigoMoneda,
+        decimales_admitidos: u32, 
     ) -> Result<Self, ErrorDominio> {
         let normalizado = cantidad_str.trim().replace(',', ".");
 
@@ -128,7 +134,7 @@ impl Monto {
             ))
         })?;
 
-        Self::nuevo_movimiento(decimal, moneda)
+        Self::nuevo_movimiento(decimal, moneda, decimales_admitidos)
     }
 
     /// Resta dos montos garantizando el invariante INV-02 (no restar monedas distintas).
@@ -137,7 +143,7 @@ impl Monto {
             return Err(ErrorDominio::new(
                 "moneda",
                 format!(
-                    "Invariante INV-02 violado: No se pueden operar montos de monedas distintas ({} y {}).",
+                    "No se pueden operar montos de monedas distintas ({} y {}).",
                     self.moneda, otro.moneda
                 ),
             ));
