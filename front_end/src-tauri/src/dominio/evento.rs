@@ -359,7 +359,7 @@ mod tests {
 
     #[test]
     fn test_creacion_evento_cuenta_creada() {
-        let saldo = Monto::nuevo_saldo_inicial(Decimal::new(30000, 2), CodigoMoneda::USD).unwrap();
+        let saldo = Monto::nuevo_saldo_inicial(Decimal::new(30000, 2), CodigoMoneda::USD, 2).unwrap();
         let datos = DatosCuentaCreada {
             id_cuenta: "cta-123".to_string(),
             nombre: "Cuenta Ahorro".to_string(),

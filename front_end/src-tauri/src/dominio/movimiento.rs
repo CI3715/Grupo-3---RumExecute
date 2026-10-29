@@ -1052,22 +1052,22 @@ mod tests {
     #[test]
     fn test_parse_monto_movimiento_validaciones() {
         // Formato con punto y coma
-        assert!(Monto::parse_movimiento("125.50", CodigoMoneda::USD).is_ok());
-        assert!(Monto::parse_movimiento("125,50", CodigoMoneda::USD).is_ok());
+        assert!(Monto::parse_movimiento("125.50", CodigoMoneda::USD, 2).is_ok());
+        assert!(Monto::parse_movimiento("125,50", CodigoMoneda::USD, 2).is_ok());
 
         // Cero o negativo
-        let err_cero = Monto::parse_movimiento("0,00", CodigoMoneda::USD).unwrap_err();
+        let err_cero = Monto::parse_movimiento("0,00", CodigoMoneda::USD, 2).unwrap_err();
         assert_eq!(err_cero.campo, "monto");
 
-        let err_neg = Monto::parse_movimiento("-15.00", CodigoMoneda::USD).unwrap_err();
+        let err_neg = Monto::parse_movimiento("-15.00", CodigoMoneda::USD, 2).unwrap_err();
         assert_eq!(err_neg.campo, "monto");
 
         // Exceso de decimales
-        let err_dec = Monto::parse_movimiento("15.123", CodigoMoneda::USD).unwrap_err();
+        let err_dec = Monto::parse_movimiento("15.123", CodigoMoneda::USD, 2).unwrap_err();
         assert_eq!(err_dec.campo, "monto");
 
         // Texto no numérico
-        let err_nan = Monto::parse_movimiento("invalido", CodigoMoneda::USD).unwrap_err();
+        let err_nan = Monto::parse_movimiento("invalido", CodigoMoneda::USD, 2).unwrap_err();
         assert_eq!(err_nan.campo, "monto");
     }
 

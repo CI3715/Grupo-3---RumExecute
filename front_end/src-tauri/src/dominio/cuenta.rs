@@ -114,7 +114,7 @@ mod tests {
 
     #[test]
     fn test_creacion_cuenta_valida() {
-        let saldo = Monto::nuevo_saldo_inicial(Decimal::new(10000, 2), CodigoMoneda::USD).unwrap();
+        let saldo = Monto::nuevo_saldo_inicial(Decimal::new(10000, 2), CodigoMoneda::USD, 2).unwrap();
         let cuenta = Cuenta::nueva(
             "cta-1",
             "Cartera Personal",
