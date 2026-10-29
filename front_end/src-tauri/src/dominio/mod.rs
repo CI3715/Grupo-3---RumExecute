@@ -1,4 +1,5 @@
 pub mod categoria;
+pub mod conversion;
 pub mod cuenta;
 pub mod errores;
 pub mod evento;
