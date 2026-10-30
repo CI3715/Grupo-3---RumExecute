@@ -598,6 +598,7 @@ export default function HomePage() {
         }}
         onOpenNuevaCuenta={() => setModalNuevaCuenta(true)}
         onOpenDiagnostico={() => setModalDiagnostico(true)}
+        onOpenRegistrarTasa={() => setTabActivo("tasas")}
         onNavigateHome={() => {
           setTabActivo("cuentas");
           setVista("cuentas");
