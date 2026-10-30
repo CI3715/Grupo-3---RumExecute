@@ -56,18 +56,17 @@ pub fn crear_cuenta(
                     datos.codigo.as_str(),
                     datos.nombre,
                     datos.simbolo,
-                    datos.decimales as u32,
+                    datos.decimales,
                 ) {
                     catalogo.registrar_moneda(moneda);
                 }
             }
-            EventoLibro::CuentaCreada { datos, .. } => {
-                if datos.nombre.trim().to_lowercase() == nombre_nuevo {
+            EventoLibro::CuentaCreada { datos, .. }
+                if datos.nombre.trim().to_lowercase() == nombre_nuevo => {
                     return Err(
                         ErrorDominio::nombre_invalido("Ya existe una cuenta con ese nombre.").into(),
                     );
                 }
-            }
             _ => {}
         }
     }
@@ -76,7 +75,7 @@ pub fn crear_cuenta(
     let moneda = CodigoMoneda::from_str(&entrada.moneda)?;
     let tipo = TipoCuenta::from_str(&entrada.tipo)?;
     let decimales = catalogo.decimales(&moneda)?;
-    let saldo = Monto::parse_saldo_inicial(&entrada.saldo_inicial, moneda.clone(), decimales)?;
+    let saldo = Monto::parse_saldo_inicial(&entrada.saldo_inicial, moneda, decimales)?;
 
     // 3. Crear la cuenta (el dominio valida el nombre vacío)
     let cuenta = Cuenta::nueva(ids.nuevo_id(), entrada.nombre, tipo, moneda, saldo)?;
