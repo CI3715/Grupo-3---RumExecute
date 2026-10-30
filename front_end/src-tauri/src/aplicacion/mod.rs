@@ -15,3 +15,6 @@ pub mod puertos;
 pub mod proyeccion_monedas;
 pub mod registrar_tasa;
 pub mod registrar_movimiento;
+
+#[cfg(test)]
+mod pruebas_entrega4;
