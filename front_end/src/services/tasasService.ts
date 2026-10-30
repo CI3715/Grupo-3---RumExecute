@@ -349,52 +349,101 @@ function adaptarResumenPatrimonioRust(res: any, fechaConsulta: string): ResumenP
     totalNum = typeof totalRaw === "object" ? Number(totalRaw.cantidad ?? 0) : Number(totalRaw);
   }
 
+  const cuentasAdaptadas: CuentaPatrimonioItem[] = (res.cuentas || []).map((c: any) => {
+    const saldoOrig = Number(c.saldo_original ?? c.saldoOriginal ?? c.saldo ?? 0);
+    const monOrig = c.moneda_original || c.monedaOriginal || c.moneda;
+    const saldoConv = c.saldo_convertido !== undefined && c.saldo_convertido !== null ? Number(c.saldo_convertido) : null;
+    return {
+      id: c.id,
+      nombre: c.nombre,
+      tipo: c.tipo,
+      moneda_original: monOrig,
+      simbolo_original: c.simbolo_original || c.simboloOriginal || (monOrig === "VES" ? "Bs." : monOrig === "USD" ? "$" : monOrig === "EUR" ? "€" : monOrig),
+      saldo_original: saldoOrig,
+      saldo_original_formateado: c.saldo_original_formateado || c.saldoOriginalFormateado || formatearMonto(saldoOrig, monOrig),
+      tasa_aplicada: c.tasa_aplicada !== undefined && c.tasa_aplicada !== null ? Number(c.tasa_aplicada) : null,
+      tasa_texto: c.tasa_texto || c.tasaTexto || (c.tasa_aplicada ? String(c.tasa_aplicada) : "Sin tasa"),
+      saldo_convertido: saldoConv,
+      saldo_convertido_formateado: c.saldo_convertido_formateado || (saldoConv !== null ? formatearMonto(saldoConv, monedaBase) : null),
+      fecha_tasa_vigente: c.fecha_tasa_vigente || c.fechaTasaVigente || null,
+      es_tasa_inversa: Boolean(c.es_tasa_inversa ?? c.esTasaInversa),
+    };
+  });
+
+  const tasasUsadas = (res.tasas_usadas || res.tasasUsadas || []).map((t: any) => ({
+    moneda_origen: t.moneda_origen || t.monedaOrigen,
+    moneda_destino: t.moneda_destino || t.monedaDestino,
+    valor: String(t.valor),
+    valor_registrado: String(t.valor_registrado || t.valorRegistrado || t.valor),
+    fecha_vigencia: t.fecha_vigencia || t.fechaVigencia,
+    fuente: t.fuente,
+    inversa: Boolean(t.inversa),
+  }));
+
+  const subtotalesAdaptados: SubtotalPatrimonio[] = (res.subtotales || []).map((s: any) => {
+    const subtotalMonto = Number(s.subtotal ?? s.total ?? 0);
+    const esBase = s.moneda === monedaBase;
+    const cuentasMoneda = cuentasAdaptadas.filter((c) => c.moneda_original === s.moneda);
+    const cantidadCuentas = cuentasMoneda.length > 0 ? cuentasMoneda.length : Number(s.cantidad_cuentas ?? s.cantidadCuentas ?? 1);
+
+    let subtotalConvertido: number | null = null;
+    let tasaVigente: number | null = null;
+
+    if (esBase) {
+      subtotalConvertido = subtotalMonto;
+      tasaVigente = 1.0;
+    } else if (s.subtotal_convertido !== undefined && s.subtotal_convertido !== null) {
+      subtotalConvertido = Number(s.subtotal_convertido);
+    } else if (cuentasMoneda.length > 0 && cuentasMoneda.every((c) => c.saldo_convertido !== null)) {
+      subtotalConvertido = cuentasMoneda.reduce((acc, c) => acc + (c.saldo_convertido ?? 0), 0);
+      tasaVigente = cuentasMoneda[0]?.tasa_aplicada ?? null;
+    } else {
+      const tasaUsada = tasasUsadas.find(
+        (t: any) =>
+          (t.moneda_origen === s.moneda && t.moneda_destino === monedaBase) ||
+          (t.moneda_destino === s.moneda && t.moneda_origen === monedaBase)
+      );
+      if (tasaUsada) {
+        const val = Number(tasaUsada.valor);
+        if (val > 0) {
+          subtotalConvertido = tasaUsada.inversa ? subtotalMonto / val : subtotalMonto * val;
+          tasaVigente = val;
+        }
+      }
+    }
+
+    const subtotalConvertidoFormateado =
+      s.subtotal_convertido_formateado ||
+      s.subtotalConvertidoFormateado ||
+      (subtotalConvertido !== null ? formatearMonto(subtotalConvertido, monedaBase) : null);
+
+    return {
+      moneda: s.moneda,
+      simbolo: s.simbolo || (s.moneda === "VES" ? "Bs." : s.moneda === "USD" ? "$" : s.moneda === "EUR" ? "€" : s.moneda),
+      nombre: s.nombre || s.moneda,
+      subtotal: subtotalMonto,
+      subtotal_formateado: s.subtotal_formateado || s.subtotalFormateado || formatearMonto(subtotalMonto, s.moneda),
+      cantidad_cuentas: cantidadCuentas,
+      tasa_vigente: s.tasa_vigente ?? tasaVigente,
+      subtotal_convertido: subtotalConvertido,
+      subtotal_convertido_formateado: subtotalConvertidoFormateado,
+    };
+  });
+
   return {
     fecha_consulta: res.fecha_consulta || res.fechaConsulta || fechaConsulta,
     moneda_base: monedaBase,
     simbolo_base: res.simbolo_base || res.simboloBase || (monedaBase === "VES" ? "Bs." : monedaBase === "EUR" ? "€" : "$"),
     decimales_base: Number(res.decimales_base ?? res.decimalesBase ?? 2),
-    cuentas: (res.cuentas || []).map((c: any) => ({
-      id: c.id,
-      nombre: c.nombre,
-      tipo: c.tipo,
-      moneda_original: c.moneda_original || c.monedaOriginal || c.moneda,
-      simbolo_original: c.simbolo_original || c.simboloOriginal || "",
-      saldo_original: Number(c.saldo_original ?? c.saldoOriginal ?? c.saldo ?? 0),
-      saldo_original_formateado: c.saldo_original_formateado || c.saldoOriginalFormateado || formatearMonto(Number(c.saldo_original ?? c.saldo ?? 0), c.moneda_original || c.moneda),
-      tasa_aplicada: c.tasa_aplicada ?? c.tasaAplicada ?? null,
-      tasa_texto: c.tasa_texto || c.tasaTexto || (c.tasa_aplicada ? String(c.tasa_aplicada) : "Sin tasa"),
-      saldo_convertido: c.saldo_convertido !== undefined && c.saldo_convertido !== null ? Number(c.saldo_convertido) : null,
-      saldo_convertido_formateado: c.saldo_convertido_formateado || c.saldoConvertidoFormateado || null,
-      fecha_tasa_vigente: c.fecha_tasa_vigente || c.fechaTasaVigente || null,
-      es_tasa_inversa: Boolean(c.es_tasa_inversa ?? c.esTasaInversa),
-    })),
-    subtotales: (res.subtotales || []).map((s: any) => {
-      const subtotalMonto = Number(s.subtotal ?? s.total ?? 0);
-      return {
-        moneda: s.moneda,
-        simbolo: s.simbolo || (s.moneda === "VES" ? "Bs." : s.moneda === "USD" ? "$" : s.moneda === "EUR" ? "€" : s.moneda),
-        nombre: s.nombre || s.moneda,
-        subtotal: subtotalMonto,
-        subtotal_formateado: s.subtotal_formateado || s.subtotalFormateado || formatearMonto(subtotalMonto, s.moneda),
-        cantidad_cuentas: Number(s.cantidad_cuentas ?? s.cantidadCuentas ?? 1),
-        tasa_vigente: s.tasa_vigente ?? s.tasaVigente ?? null,
-        subtotal_convertido: s.subtotal_convertido !== undefined && s.subtotal_convertido !== null ? Number(s.subtotal_convertido) : null,
-        subtotal_convertido_formateado: s.subtotal_convertido_formateado || s.subtotalConvertidoFormateado || null,
-      };
-    }),
+    cuentas: cuentasAdaptadas,
+    subtotales: subtotalesAdaptados,
     total_consolidado: totalNum,
-    total_consolidado_formateado: res.total_consolidado_formateado || res.totalConsolidadoFormateado || (totalNum !== null ? formatearMonto(totalNum, monedaBase) : null),
+    total_consolidado_formateado:
+      res.total_consolidado_formateado ||
+      res.totalConsolidadoFormateado ||
+      (totalNum !== null ? formatearMonto(totalNum, monedaBase) : null),
     tasa_faltante: res.tasa_faltante || res.tasaFaltante || null,
-    tasas_usadas: (res.tasas_usadas || res.tasasUsadas || []).map((t: any) => ({
-      moneda_origen: t.moneda_origen || t.monedaOrigen,
-      moneda_destino: t.moneda_destino || t.monedaDestino,
-      valor: String(t.valor),
-      valor_registrado: String(t.valor_registrado || t.valorRegistrado || t.valor),
-      fecha_vigencia: t.fecha_vigencia || t.fechaVigencia,
-      fuente: t.fuente,
-      inversa: Boolean(t.inversa),
-    })),
+    tasas_usadas: tasasUsadas,
   };
 }
 
@@ -406,13 +455,19 @@ export async function consultarPatrimonio(
   // El cálculo de patrimonio, invariantes y tasas vigentes le corresponde al Dominio y Aplicación en Rust.
   if (enTauri()) {
     try {
-      const resRust = await invoke<any>("consultar_patrimonio", { entrada: { fechaConsulta } })
-        .catch(() => invoke<any>("consultar_patrimonio", { fechaConsulta }))
-        .catch(() => invoke<any>("consultar_patrimonio", { fecha_consulta: fechaConsulta }));
+      const resRust = await invoke<any>("consultar_patrimonio", {
+        fecha_consulta: fechaConsulta,
+        fechaConsulta: fechaConsulta,
+      }).catch(() => invoke<any>("consultar_patrimonio", {
+        fechaConsulta,
+      })).catch(() => invoke<any>("consultar_patrimonio", {
+        fecha_consulta: fechaConsulta,
+      }));
       if (resRust && (resRust.cuentas || resRust.subtotales)) {
         return adaptarResumenPatrimonioRust(resRust, fechaConsulta);
       }
-    } catch {
+    } catch (e) {
+      console.error("Error en invoke('consultar_patrimonio'):", e);
       // Si el comando Tauri aún no está compilado en la rama local (compañeros trabajando en paralelo),
       // se utiliza el adaptador visual de previsualización sin bloquear la interfaz.
     }
