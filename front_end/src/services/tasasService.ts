@@ -90,8 +90,12 @@ export async function listarMonedas(): Promise<MonedaItem[]> {
 export async function obtenerMonedaBase(): Promise<string> {
   if (enTauri()) {
     try {
-      const base = await invoke<string>("obtener_moneda_base");
-      if (base) return base;
+      const base = await invoke<any>("obtener_moneda_base");
+      if (typeof base === "string" && base) return base;
+      if (base && typeof base === "object") {
+        if (base.moneda_base) return base.moneda_base;
+        if (base.monedaBase) return base.monedaBase;
+      }
     } catch {}
   }
   if (typeof window !== "undefined") {
@@ -148,7 +152,21 @@ export async function crearMonedaPropia(entrada: EntradaCrearMoneda): Promise<Mo
 
   if (enTauri()) {
     try {
-      await invoke("crear_moneda", { entrada: nuevaMoneda });
+      await invoke("crear_moneda", {
+        entrada: {
+          codigo,
+          nombre: entrada.nombre.trim(),
+          simbolo: entrada.simbolo.trim(),
+          decimales,
+        },
+      })
+      .catch(() => invoke("crear_moneda", { entrada: nuevaMoneda }))
+      .catch(() => invoke("crear_moneda", {
+        codigo,
+        nombre: entrada.nombre.trim(),
+        simbolo: entrada.simbolo.trim(),
+        decimales,
+      }));
     } catch {
       guardarMonedaLocal(nuevaMoneda);
     }
@@ -189,14 +207,23 @@ export async function registrarTasa(entrada: EntradaRegistroTasa): Promise<TasaC
 
   if (enTauri()) {
     try {
-      await invoke("registrar_tasa", { entrada: nuevaTasa })
-        .catch(() => invoke("registrar_tasa", {
+      await invoke("registrar_tasa", {
+        entrada: {
           origen,
           destino,
           valor: valorNum.toString(),
           fecha_vigencia: entrada.fecha_vigencia,
           fuente: nuevaTasa.fuente,
-        }));
+        },
+      })
+      .catch(() => invoke("registrar_tasa", { entrada: nuevaTasa }))
+      .catch(() => invoke("registrar_tasa", {
+        origen,
+        destino,
+        valor: valorNum.toString(),
+        fecha_vigencia: entrada.fecha_vigencia,
+        fuente: nuevaTasa.fuente,
+      }));
     } catch {
       const lista = obtenerTasasLocales();
       lista.push(nuevaTasa);
@@ -230,7 +257,12 @@ export async function listarHistorialTasas(origen?: string, destino?: string): P
   let tasas: TasaCambioItem[] = [];
   if (enTauri()) {
     try {
-      const res = await invoke<any>("listar_historial_tasas", { origen, destino });
+      const res = await invoke<any>("listar_historial_tasas", {
+        entrada: { origen: origen || "", destino: destino || "" },
+      })
+      .catch(() => invoke<any>("listar_historial_tasas", { origen, destino }))
+      .catch(() => invoke<any>("listar_tasas"));
+
       if (Array.isArray(res)) {
         tasas = res.map((t: any) => ({
           id: t.id,
@@ -240,6 +272,7 @@ export async function listarHistorialTasas(origen?: string, destino?: string): P
           fecha_vigencia: t.fecha_vigencia,
           fuente: t.fuente || "Manual",
           momento_registro: t.momento_registro,
+          eliminada: Boolean(t.eliminada),
         }));
       }
     } catch {
@@ -248,6 +281,9 @@ export async function listarHistorialTasas(origen?: string, destino?: string): P
   } else {
     tasas = obtenerTasasLocales();
   }
+
+  // Filtrar tasas activas (no eliminadas) si el backend incluye tasas marcadas como eliminadas
+  tasas = tasas.filter(t => !t.eliminada);
 
   if (origen && destino) {
     tasas = tasas.filter(t => (t.origen === origen && t.destino === destino) || (t.origen === destino && t.destino === origen));
@@ -333,20 +369,32 @@ function adaptarResumenPatrimonioRust(res: any, fechaConsulta: string): ResumenP
       fecha_tasa_vigente: c.fecha_tasa_vigente || c.fechaTasaVigente || null,
       es_tasa_inversa: Boolean(c.es_tasa_inversa ?? c.esTasaInversa),
     })),
-    subtotales: (res.subtotales || []).map((s: any) => ({
-      moneda: s.moneda,
-      simbolo: s.simbolo || s.moneda,
-      nombre: s.nombre || s.moneda,
-      subtotal: Number(s.subtotal ?? 0),
-      subtotal_formateado: s.subtotal_formateado || s.subtotalFormateado || formatearMonto(Number(s.subtotal ?? 0), s.moneda),
-      cantidad_cuentas: Number(s.cantidad_cuentas ?? s.cantidadCuentas ?? 1),
-      tasa_vigente: s.tasa_vigente ?? s.tasaVigente ?? null,
-      subtotal_convertido: s.subtotal_convertido !== undefined && s.subtotal_convertido !== null ? Number(s.subtotal_convertido) : null,
-      subtotal_convertido_formateado: s.subtotal_convertido_formateado || s.subtotalConvertidoFormateado || null,
-    })),
+    subtotales: (res.subtotales || []).map((s: any) => {
+      const subtotalMonto = Number(s.subtotal ?? s.total ?? 0);
+      return {
+        moneda: s.moneda,
+        simbolo: s.simbolo || (s.moneda === "VES" ? "Bs." : s.moneda === "USD" ? "$" : s.moneda === "EUR" ? "€" : s.moneda),
+        nombre: s.nombre || s.moneda,
+        subtotal: subtotalMonto,
+        subtotal_formateado: s.subtotal_formateado || s.subtotalFormateado || formatearMonto(subtotalMonto, s.moneda),
+        cantidad_cuentas: Number(s.cantidad_cuentas ?? s.cantidadCuentas ?? 1),
+        tasa_vigente: s.tasa_vigente ?? s.tasaVigente ?? null,
+        subtotal_convertido: s.subtotal_convertido !== undefined && s.subtotal_convertido !== null ? Number(s.subtotal_convertido) : null,
+        subtotal_convertido_formateado: s.subtotal_convertido_formateado || s.subtotalConvertidoFormateado || null,
+      };
+    }),
     total_consolidado: totalNum,
     total_consolidado_formateado: res.total_consolidado_formateado || res.totalConsolidadoFormateado || (totalNum !== null ? formatearMonto(totalNum, monedaBase) : null),
     tasa_faltante: res.tasa_faltante || res.tasaFaltante || null,
+    tasas_usadas: (res.tasas_usadas || res.tasasUsadas || []).map((t: any) => ({
+      moneda_origen: t.moneda_origen || t.monedaOrigen,
+      moneda_destino: t.moneda_destino || t.monedaDestino,
+      valor: String(t.valor),
+      valor_registrado: String(t.valor_registrado || t.valorRegistrado || t.valor),
+      fecha_vigencia: t.fecha_vigencia || t.fechaVigencia,
+      fuente: t.fuente,
+      inversa: Boolean(t.inversa),
+    })),
   };
 }
 
@@ -358,7 +406,8 @@ export async function consultarPatrimonio(
   // El cálculo de patrimonio, invariantes y tasas vigentes le corresponde al Dominio y Aplicación en Rust.
   if (enTauri()) {
     try {
-      const resRust = await invoke<any>("consultar_patrimonio", { fechaConsulta })
+      const resRust = await invoke<any>("consultar_patrimonio", { entrada: { fechaConsulta } })
+        .catch(() => invoke<any>("consultar_patrimonio", { fechaConsulta }))
         .catch(() => invoke<any>("consultar_patrimonio", { fecha_consulta: fechaConsulta }));
       if (resRust && (resRust.cuentas || resRust.subtotales)) {
         return adaptarResumenPatrimonioRust(resRust, fechaConsulta);

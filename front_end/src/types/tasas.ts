@@ -15,6 +15,7 @@ export interface TasaCambioItem {
   fuente: string;
   momento_registro?: string;
   es_inversa?: boolean;
+  eliminada?: boolean;
 }
 
 export interface EntradaRegistroTasa {
@@ -68,6 +69,16 @@ export interface SubtotalPatrimonio {
   subtotal_convertido_formateado: string | null;
 }
 
+export interface TasaUsadaItem {
+  moneda_origen: string;
+  moneda_destino: string;
+  valor: string;
+  valor_registrado: string;
+  fecha_vigencia: string;
+  fuente: string;
+  inversa: boolean;
+}
+
 export interface ResumenPatrimonioData {
   fecha_consulta: string;
   moneda_base: string;
@@ -78,4 +89,5 @@ export interface ResumenPatrimonioData {
   total_consolidado: number | null;
   total_consolidado_formateado: string | null;
   tasa_faltante: TasaFaltanteInfo | null;
+  tasas_usadas?: TasaUsadaItem[];
 }
