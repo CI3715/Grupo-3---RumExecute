@@ -1,19 +1,32 @@
 "use client";
 
 interface NavbarProps {
+  tabActivo?: "cuentas" | "patrimonio" | "tasas";
+  onCambiarTab?: (tab: "cuentas" | "patrimonio" | "tasas") => void;
   onOpenNuevaCuenta: () => void;
   onOpenDiagnostico: () => void;
+  onOpenRegistrarTasa?: () => void;
   onNavigateHome?: () => void;
 }
 
 export default function Navbar({
+  tabActivo = "cuentas",
+  onCambiarTab,
   onOpenNuevaCuenta,
   onOpenDiagnostico,
+  onOpenRegistrarTasa,
   onNavigateHome,
 }: NavbarProps) {
   return (
-    <header className="app-navbar">
-      <div className="brand-container" onClick={onNavigateHome} title="Volver a Mis Cuentas">
+    <header className="app-navbar" style={{ gap: "20px" }}>
+      <div
+        className="brand-container"
+        onClick={() => {
+          onNavigateHome?.();
+          onCambiarTab?.("cuentas");
+        }}
+        title="Volver a Mis Cuentas"
+      >
         <svg viewBox="0 0 512 512" width="42" height="42" style={{ flexShrink: 0 }}>
           <defs>
             <linearGradient id="nav-emerald" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -48,11 +61,88 @@ export default function Navbar({
         </div>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-        <button onClick={onOpenDiagnostico} className="btn btn-secondary">
-          <span>📶</span>
-          <span>Diagnóstico Servidor</span>
+      {/* Tabs Principales de Navegación (Entrega 4) */}
+      {onCambiarTab && (
+        <nav
+          style={{
+            display: "flex",
+            alignItems: "center",
+            backgroundColor: "var(--surface-hover)",
+            padding: "4px",
+            borderRadius: "10px",
+            border: "1px solid var(--border-subtle)",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => onCambiarTab("cuentas")}
+            style={{
+              padding: "7px 16px",
+              borderRadius: "8px",
+              fontSize: "13px",
+              fontWeight: tabActivo === "cuentas" ? 700 : 500,
+              backgroundColor: tabActivo === "cuentas" ? "#FFFFFF" : "transparent",
+              color: tabActivo === "cuentas" ? "var(--text-primary)" : "var(--text-secondary)",
+              boxShadow: tabActivo === "cuentas" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+              transition: "all 0.15s ease",
+            }}
+          >
+            Mis Cuentas
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onCambiarTab("patrimonio")}
+            style={{
+              padding: "7px 16px",
+              borderRadius: "8px",
+              fontSize: "13px",
+              fontWeight: tabActivo === "patrimonio" ? 700 : 500,
+              backgroundColor: tabActivo === "patrimonio" ? "#FFFFFF" : "transparent",
+              color: tabActivo === "patrimonio" ? "var(--text-primary)" : "var(--text-secondary)",
+              boxShadow: tabActivo === "patrimonio" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+              transition: "all 0.15s ease",
+            }}
+          >
+            Patrimonio
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onCambiarTab("tasas")}
+            style={{
+              padding: "7px 16px",
+              borderRadius: "8px",
+              fontSize: "13px",
+              fontWeight: tabActivo === "tasas" ? 700 : 500,
+              backgroundColor: tabActivo === "tasas" ? "#FFFFFF" : "transparent",
+              color: tabActivo === "tasas" ? "var(--text-primary)" : "var(--text-secondary)",
+              boxShadow: tabActivo === "tasas" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+              transition: "all 0.15s ease",
+            }}
+          >
+            Tasas de Cambio
+          </button>
+        </nav>
+      )}
+
+      {/* Botones de acción */}
+      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <button onClick={onOpenDiagnostico} className="btn btn-secondary" title="Diagnóstico de conexión de red">
+          <span>Diagnóstico</span>
         </button>
+
+        {tabActivo !== "cuentas" && onOpenRegistrarTasa && (
+          <button
+            onClick={onOpenRegistrarTasa}
+            className="btn btn-secondary"
+            style={{ fontWeight: 700, color: "var(--emerald-primary)", borderColor: "var(--emerald-primary)" }}
+          >
+            <span>+</span>
+            <span>Registrar Tasa</span>
+          </button>
+        )}
+
         <button onClick={onOpenNuevaCuenta} className="btn btn-primary">
           <span style={{ fontSize: "16px", fontWeight: 700 }}>+</span>
           <span>Nueva cuenta</span>
