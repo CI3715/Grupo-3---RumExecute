@@ -96,3 +96,4 @@ Sigue el checklist de la Sección 5 de la guía de la entrega:
 - El usuario debe registrar manualmente cada par; no hay triangulación.
 - El replay procesa todo el log en cada consulta (ver ADR-003).
 - Los saldos se proyectan desde los eventos hasta la fecha de consulta: una cuenta existe a partir de la fecha en que fue registrada, y cada movimiento o ajuste cuenta desde su fecha declarada. Esa misma fecha selecciona la tasa aplicable. No se permiten fechas de consulta futuras.
+- Las cuentas se filtran por su fecha de registro: una consulta a una fecha anterior a la creación de una cuenta no la incluye, aunque tenga movimientos con fecha anterior.
