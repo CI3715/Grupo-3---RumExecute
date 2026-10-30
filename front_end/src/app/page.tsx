@@ -187,14 +187,27 @@ export default function HomePage() {
     try {
       const res = await invoke<any>("listar_categorias");
       if (res) {
-        if (Array.isArray(res.gastos) && res.gastos.length > 0) {
-          setCategoriasGasto(res.gastos.map((c: any) => typeof c === "string" ? c : c.nombre));
-        }
-        if (Array.isArray(res.ingresos) && res.ingresos.length > 0) {
-          setCategoriasIngreso(res.ingresos.map((c: any) => typeof c === "string" ? c : c.nombre));
+        if (Array.isArray(res)) {
+          const gastos = res
+            .filter((c: any) => c.tipo?.toLowerCase?.() === "gasto" || c.tipo === "gasto")
+            .map((c: any) => (typeof c === "string" ? c : c.nombre));
+          const ingresos = res
+            .filter((c: any) => c.tipo?.toLowerCase?.() === "ingreso" || c.tipo === "ingreso")
+            .map((c: any) => (typeof c === "string" ? c : c.nombre));
+          if (gastos.length > 0) setCategoriasGasto(gastos);
+          if (ingresos.length > 0) setCategoriasIngreso(ingresos);
+        } else if (typeof res === "object") {
+          if (Array.isArray(res.gastos) && res.gastos.length > 0) {
+            setCategoriasGasto(res.gastos.map((c: any) => (typeof c === "string" ? c : c.nombre)));
+          }
+          if (Array.isArray(res.ingresos) && res.ingresos.length > 0) {
+            setCategoriasIngreso(res.ingresos.map((c: any) => (typeof c === "string" ? c : c.nombre)));
+          }
         }
       }
-    } catch {}
+    } catch (e) {
+      console.error("Error al cargar categorías de Tauri:", e);
+    }
   };
 
   // ==========================================
@@ -358,6 +371,11 @@ export default function HomePage() {
           },
         });
         await cargarCategoriasTauri();
+        if (entrada.tipo === "gasto") {
+          setCategoriasGasto((prev) => (prev.includes(nombreLimpio) ? prev : [...prev, nombreLimpio]));
+        } else {
+          setCategoriasIngreso((prev) => (prev.includes(nombreLimpio) ? prev : [...prev, nombreLimpio]));
+        }
         return true;
       } catch (err: any) {
         const errorObj = {

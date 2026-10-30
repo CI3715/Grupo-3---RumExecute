@@ -84,7 +84,7 @@ export default function ModalNuevoMovimiento({
       setConfirmaNegativo(false);
       setErrorActivo(null);
     }
-  }, [isOpen, tipoInicial, categoriasGasto, categoriasIngreso]);
+  }, [isOpen]);
 
   useEffect(() => {
     if (errorExterno) setErrorActivo(errorExterno);
@@ -163,12 +163,14 @@ export default function ModalNuevoMovimiento({
     let categoriaFinal = categoria;
     if (mostrarCrearCategoria && nombreNuevaCategoria.trim()) {
       const nombreLimpio = nombreNuevaCategoria.trim();
+      const tieneEmojiAlInicio = /\p{Extended_Pictographic}/u.test(nombreLimpio.slice(0, 4));
+      const nombreConEmoji = (emojiNuevaCategoria && !tieneEmojiAlInicio) ? `${emojiNuevaCategoria} ${nombreLimpio}` : nombreLimpio;
       try {
         if (onCrearCategoria) {
-          await onCrearCategoria({ nombre: nombreLimpio, tipo });
+          await onCrearCategoria({ nombre: nombreConEmoji, tipo });
         }
-        categoriaFinal = nombreLimpio;
-        setCategoria(nombreLimpio);
+        categoriaFinal = nombreConEmoji;
+        setCategoria(nombreConEmoji);
         setMostrarCrearCategoria(false);
         setNombreNuevaCategoria("");
       } catch (err: any) {
@@ -418,11 +420,15 @@ export default function ModalNuevoMovimiento({
                 className={`form-select ${tieneError("categoria") && !mostrarCrearCategoria ? "input-error" : ""}`}
                 disabled={cargando || guardandoCategoria}
               >
-                {categoriasActuales.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {ICONOS_CATEGORIAS[cat] || "🏷️"} {cat}
-                  </option>
-                ))}
+                {categoriasActuales.map((cat) => {
+                  const yaTieneEmoji = /\p{Extended_Pictographic}/u.test(cat.slice(0, 4));
+                  const textoVisual = yaTieneEmoji ? cat : `${ICONOS_CATEGORIAS[cat] || "🏷️"} ${cat}`;
+                  return (
+                    <option key={cat} value={cat}>
+                      {textoVisual}
+                    </option>
+                  );
+                })}
                 <option value="__crear_nueva__">➕ + Crear nueva categoría...</option>
               </select>
               {tieneError("categoria") && !mostrarCrearCategoria && (
