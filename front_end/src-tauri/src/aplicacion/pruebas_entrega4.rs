@@ -1,3 +1,4 @@
+use super::crear_moneda::{crear_moneda, ErrorCrearMoneda};
 use super::consultar_patrimonio::consultar_patrimonio;
 use super::crear_cuenta::{crear_cuenta, EntradaCrearCuenta};
 use super::cambiar_moneda_base::cambiar_moneda_base;
@@ -6,6 +7,7 @@ use super::registrar_tasa::registrar_tasa;
 use super::dto::*;
 use super::puertos::*;
 use crate::infraestructura::memoria_repo::RepositorioLibroEnMemoria;
+use crate::dominio::evento::EventoLibro;
 use std::cell::Cell;
 
 struct RelojAjustable(Cell<&'static str>);
@@ -203,4 +205,88 @@ fn rechaza_tasas_invalidas() {
     assert!(m.tasa("VES", "USD", "-1", T1).is_err(), "valor negativo");
     assert!(m.tasa("USD", "USD", "1", T1).is_err(), "monedas iguales");
     assert!(m.tasa("VES", "USD", "0.123456789", T1).is_err(), "más de 8 decimales");
+}
+
+// ---------- crear_moneda (RF-CAM-01) ----------
+
+impl Mundo {
+    fn moneda(&mut self, codigo: &str, nombre: &str, simbolo: &str, decimales: u32) -> bool {
+        let e = CrearMonedaDto {
+            codigo: codigo.into(),
+            nombre: nombre.into(),
+            simbolo: simbolo.into(),
+            decimales,
+        };
+        match crear_moneda(&mut self.repo, &self.reloj, &mut self.ids, e) {
+            Ok(_) => true,
+            Err(ErrorCrearMoneda::Validacion(_)) => false,
+            Err(ErrorCrearMoneda::Repositorio(_)) => panic!("error de repositorio inesperado"),
+        }
+    }
+
+    fn n_eventos(&self) -> usize {
+        self.repo.listar_eventos().unwrap().len()
+    }
+}
+
+#[test]
+fn crear_moneda_valida_emite_evento_moneda_creada() {
+    let mut m = Mundo::nuevo();
+    let antes = m.n_eventos();
+    assert!(m.moneda("CAD", "Dólar Canadiense", "C$", 2));
+    let eventos = m.repo.listar_eventos().unwrap();
+    assert_eq!(eventos.len(), antes + 1);
+    assert!(matches!(eventos.last().unwrap(), EventoLibro::MonedaCreada { .. }));
+}
+
+#[test]
+fn crear_moneda_acepta_decimales_en_los_limites_0_y_8() {
+    let mut m = Mundo::nuevo();
+    assert!(m.moneda("CER", "Cero decimales", "C", 0));
+    assert!(m.moneda("OCH", "Ocho decimales", "O", 8));
+}
+
+#[test]
+fn crear_moneda_rechaza_codigo_duplicado() {
+    let mut m = Mundo::nuevo();
+    assert!(m.moneda("CAD", "Dólar Canadiense", "C$", 2));
+    let antes = m.n_eventos();
+    assert!(!m.moneda("CAD", "Otro nombre", "X", 2));
+    assert_eq!(m.n_eventos(), antes, "un rechazo no emite eventos");
+}
+
+#[test]
+fn crear_moneda_no_permite_pisar_monedas_de_fabrica() {
+    let mut m = Mundo::nuevo();
+    let antes = m.n_eventos();
+    for codigo in ["VES", "USD", "EUR", "USDT"] {
+        assert!(!m.moneda(codigo, "Intento", "X", 2), "{codigo} es de fábrica");
+    }
+    assert_eq!(m.n_eventos(), antes);
+}
+
+#[test]
+fn crear_moneda_rechaza_codigos_invalidos() {
+    let mut m = Mundo::nuevo();
+    for codigo in ["cad", "AB", "ABCDEF", "C4D", "CÁD", "", "CA D"] {
+        assert!(!m.moneda(codigo, "Nombre", "X", 2), "código inválido: {codigo:?}");
+    }
+}
+
+#[test]
+fn crear_moneda_rechaza_nombre_simbolo_y_decimales_invalidos() {
+    let mut m = Mundo::nuevo();
+    assert!(!m.moneda("AAA", "", "A", 2), "nombre vacío");
+    assert!(!m.moneda("AAB", &"N".repeat(51), "A", 2), "nombre > 50");
+    assert!(!m.moneda("AAC", "Nombre", "", 2), "símbolo vacío");
+    assert!(!m.moneda("AAD", "Nombre", "ABCDEF", 2), "símbolo > 5");
+    assert!(!m.moneda("AAE", "Nombre", "A", 9), "decimales > 8");
+    assert_eq!(m.n_eventos(), 0, "ningún rechazo emite eventos");
+}
+
+#[test]
+fn moneda_propia_puede_usarse_como_base() {
+    let mut m = Mundo::nuevo();
+    assert!(m.moneda("CAD", "Dólar Canadiense", "C$", 2));
+    m.base("CAD"); // hace unwrap: falla si CAD no se reconoce
 }
