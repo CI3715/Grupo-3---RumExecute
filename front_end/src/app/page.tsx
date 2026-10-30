@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Navbar from "../components/Navbar";
 import SubtotalesGrid, { SubtotalMoneda } from "../components/SubtotalesGrid";
@@ -23,6 +23,28 @@ import {
   calcularTotalesCuenta,
 } from "../utils/formato";
 
+// Importaciones de Entrega 4 (The Exchange Flow & Patrimonio)
+import {
+  MonedaItem,
+  TasaCambioItem,
+  ResumenPatrimonioData,
+  EntradaRegistroTasa,
+  EntradaCrearMoneda,
+} from "../types/tasas";
+import {
+  obtenerFechaHoyISO,
+  listarMonedas,
+  obtenerMonedaBase,
+  cambiarMonedaBase,
+  registrarTasa,
+  eliminarTasa,
+  listarHistorialTasas,
+  consultarPatrimonio,
+  crearMonedaPropia,
+} from "../services/tasasService";
+import VistaPatrimonio from "../components/VistaPatrimonio";
+import VistaTasas from "../components/VistaTasas";
+
 interface CuentaRust {
   id: string;
   nombre: string;
@@ -39,9 +61,14 @@ interface ResumenCuentasRust {
 const enTauri = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 export default function HomePage() {
+  // Navegación de pestañas (Entrega 4)
+  const [tabActivo, setTabActivo] = useState<"cuentas" | "patrimonio" | "tasas">("cuentas");
+
+  // Vistas internas de Cuentas
   const [vista, setVista] = useState<"cuentas" | "detalle">("cuentas");
   const [cuentaSeleccionadaId, setCuentaSeleccionadaId] = useState<string | null>(null);
 
+  // Estado de Cuentas y Movimientos
   const [cuentas, setCuentas] = useState<CuentaItem[]>([]);
   const [subtotales, setSubtotales] = useState<SubtotalMoneda[]>([]);
   const [saldosIniciales, setSaldosIniciales] = useState<Record<string, number>>({});
@@ -50,10 +77,22 @@ export default function HomePage() {
   const [categoriasGasto, setCategoriasGasto] = useState<string[]>(CATEGORIAS_GASTO);
   const [categoriasIngreso, setCategoriasIngreso] = useState<string[]>(CATEGORIAS_INGRESO);
 
+  // Estado de Tasas, Monedas y Patrimonio (Entrega 4)
+  const [fechaConsultaPatrimonio, setFechaConsultaPatrimonio] = useState<string>(obtenerFechaHoyISO());
+  const [monedaBaseActual, setMonedaBaseActual] = useState<string>("USD");
+  const [monedasDisponibles, setMonedasDisponibles] = useState<MonedaItem[]>([]);
+  const [tasasHistorial, setTasasHistorial] = useState<TasaCambioItem[]>([]);
+  const [patrimonioData, setPatrimonioData] = useState<ResumenPatrimonioData | null>(null);
+  const [filtroParHistorial, setFiltroParHistorial] = useState<{ origen?: string; destino?: string } | null>(null);
+
+  // Modales
   const [modalNuevaCuenta, setModalNuevaCuenta] = useState(false);
   const [modalDiagnostico, setModalDiagnostico] = useState(false);
   const [errorValidacion, setErrorValidacion] = useState<ErrorValidacion | null>(null);
 
+  // ==========================================
+  // CARGA DE DATOS DE CUENTAS (TAURI / LOCAL)
+  // ==========================================
   const cargarCuentasTauri = async () => {
     if (!enTauri()) return;
     try {
@@ -63,7 +102,6 @@ export default function HomePage() {
       const mapaSaldos: Record<string, number> = {};
       const mapaMovs: Record<string, MovimientoItem[]> = {};
 
-      // Consultar el detalle proyectado de cada cuenta (saldo_actual y movimientos de SQLite)
       const detalles = await Promise.all(
         res.cuentas.map(async (c) => {
           try {
@@ -120,7 +158,6 @@ export default function HomePage() {
         };
       });
 
-      // Calcular los subtotales usando los saldos actuales reales proyectados
       const monedas = Array.from(new Set(nuevasCuentas.map((c) => c.moneda)));
       const nuevosSubtotales: SubtotalMoneda[] = monedas.map((codMoneda) => {
         const cuentasMoneda = nuevasCuentas.filter((c) => c.moneda === codMoneda);
@@ -140,110 +177,118 @@ export default function HomePage() {
       setMovimientosPorCuenta((prev) => ({ ...prev, ...mapaMovs }));
       setCuentas(nuevasCuentas);
       setSubtotales(nuevosSubtotales);
-    } catch (err) {
-      console.warn("Error al cargar cuentas desde Tauri IPC:", err);
+    } catch (e) {
+      console.error("Error al cargar cuentas de Tauri:", e);
     }
   };
 
   const cargarCategoriasTauri = async () => {
     if (!enTauri()) return;
     try {
-      const cats = await invoke<
-        Array<{ id: string; nombre: string; tipo: "gasto" | "ingreso" }>
-      >("listar_categorias");
-      if (cats && Array.isArray(cats)) {
-        const gastos = cats
-          .filter((c) => c.tipo === "gasto")
-          .map((c) => c.nombre);
-        const ingresos = cats
-          .filter((c) => c.tipo === "ingreso")
-          .map((c) => c.nombre);
-
-        setCategoriasGasto(Array.from(new Set([...CATEGORIAS_GASTO, ...gastos])));
-        setCategoriasIngreso(Array.from(new Set([...CATEGORIAS_INGRESO, ...ingresos])));
+      const res = await invoke<any>("listar_categorias");
+      if (res) {
+        if (Array.isArray(res.gastos) && res.gastos.length > 0) {
+          setCategoriasGasto(res.gastos.map((c: any) => typeof c === "string" ? c : c.nombre));
+        }
+        if (Array.isArray(res.ingresos) && res.ingresos.length > 0) {
+          setCategoriasIngreso(res.ingresos.map((c: any) => typeof c === "string" ? c : c.nombre));
+        }
       }
-    } catch (err) {
-      console.warn("Error al cargar categorías desde Tauri IPC:", err);
-    }
+    } catch {}
   };
+
+  // ==========================================
+  // CARGA DE TASAS, MONEDAS Y PATRIMONIO
+  // ==========================================
+  const cargarMonedasYBase = useCallback(async () => {
+    try {
+      const mons = await listarMonedas();
+      setMonedasDisponibles(mons);
+      const base = await obtenerMonedaBase();
+      setMonedaBaseActual(base);
+    } catch (e) {
+      console.error("Error al cargar monedas:", e);
+    }
+  }, []);
+
+  const cargarTasas = useCallback(async () => {
+    try {
+      const lista = await listarHistorialTasas();
+      setTasasHistorial(lista);
+    } catch (e) {
+      console.error("Error al cargar tasas:", e);
+    }
+  }, []);
+
+  const actualizarPatrimonio = useCallback(async () => {
+    try {
+      const cuentasSimples = cuentas.map((c) => {
+        const saldoIni = saldosIniciales[c.id] ?? 0;
+        const movs = movimientosPorCuenta[c.id] || [];
+        const { saldoActual } = calcularTotalesCuenta(saldoIni, movs);
+        return {
+          id: c.id,
+          nombre: c.nombre,
+          tipo: c.tipo,
+          moneda: c.moneda,
+          saldo: saldoActual,
+        };
+      });
+
+      const res = await consultarPatrimonio(fechaConsultaPatrimonio, cuentasSimples);
+      setPatrimonioData(res);
+    } catch (e) {
+      console.error("Error al consultar patrimonio:", e);
+    }
+  }, [cuentas, saldosIniciales, movimientosPorCuenta, fechaConsultaPatrimonio]);
 
   useEffect(() => {
     cargarCuentasTauri();
     cargarCategoriasTauri();
-  }, []);
+    cargarMonedasYBase();
+    cargarTasas();
+  }, [cargarMonedasYBase, cargarTasas]);
 
-  const sincronizarSaldosYSubtotales = (
-    listaCuentas: CuentaItem[],
-    mapaInicial: Record<string, number>,
-    mapaMovs: Record<string, MovimientoItem[]>
-  ) => {
-    const cuentasActualizadas = listaCuentas.map((c) => {
-      const { saldoActual } = calcularTotalesCuenta(mapaInicial[c.id] ?? 0, mapaMovs[c.id]);
-      return { ...c, saldo_formateado: formatearMonto(saldoActual, c.moneda) };
-    });
+  useEffect(() => {
+    if (tabActivo === "patrimonio") {
+      actualizarPatrimonio();
+    }
+  }, [tabActivo, fechaConsultaPatrimonio, monedaBaseActual, cuentas, actualizarPatrimonio]);
 
-    const monedas = Array.from(new Set(cuentasActualizadas.map((c) => c.moneda)));
-    const nuevosSubtotales: SubtotalMoneda[] = monedas.map((codMoneda) => {
-      const delGrupo = cuentasActualizadas.filter((c) => c.moneda === codMoneda);
-      const total = delGrupo.reduce((acum, c) => {
-        const { saldoActual } = calcularTotalesCuenta(mapaInicial[c.id] ?? 0, mapaMovs[c.id]);
-        return acum + saldoActual;
-      }, 0);
-      return {
-        moneda: codMoneda,
-        subtotal_formateado: formatearMonto(total, codMoneda),
-        cantidad_cuentas: delGrupo.length,
-      };
-    });
-
-    setCuentas(cuentasActualizadas);
-    setSubtotales(nuevosSubtotales);
-  };
-
-  const abrirDetalleCuenta = async (id: string) => {
-    setCuentaSeleccionadaId(id);
-    setVista("detalle");
-
-    if (!enTauri()) return;
+  // ==========================================
+  // HANDLERS DE TASAS Y MONEDA BASE
+  // ==========================================
+  const handleCambiarMonedaBase = async (nuevaBase: string) => {
     try {
-      // Intenta primero obtener el detalle completo proyectado por Rust (PR #10)
-      const detalle = await invoke<any>("obtener_detalle_cuenta", { idCuenta: id })
-        .catch(() => invoke<any>("obtener_detalle_cuenta", { id_cuenta: id }))
-        .catch(() => null);
-
-      const listaMovs = detalle?.movimientos ?? detalle;
-
-      if (Array.isArray(listaMovs)) {
-        const moneda = cuentas.find((c) => c.id === id)?.moneda || "VES";
-        const movs: MovimientoItem[] = listaMovs.map((m: any) => {
-          const montoNum = Number(m.monto?.cantidad ?? m.monto ?? 0);
-          const tipoNorm = (typeof m.tipo === "string" ? m.tipo : m.tipo?.tipo || "gasto").toLowerCase();
-          
-          // En Rust m.categoria es un struct { id, nombre, tipo }
-          const catTexto = typeof m.categoria === "object" && m.categoria !== null
-            ? (m.categoria.nombre || m.categoria.id || "Varios")
-            : (typeof m.categoria === "string" ? m.categoria : "Varios");
-
-          return {
-            id: m.id,
-            id_cuenta: m.id_cuenta || id,
-            tipo: tipoNorm as "gasto" | "ingreso" | "ajuste",
-            monto_num: montoNum,
-            monto_formateado: formatearMontoConSigno(montoNum, moneda, tipoNorm),
-            fecha: m.fecha || new Date().toISOString().split("T")[0],
-            categoria: catTexto,
-            nota: m.descripcion || m.nota || "",
-            estado: (tipoNorm === "ajuste" ? "ajuste" : "vigente") as "vigente" | "corregido" | "ajuste",
-            id_movimiento_referenciado: m.id_movimiento_referenciado,
-          };
-        });
-        setMovimientosPorCuenta((prev) => ({ ...prev, [id]: movs }));
-      }
-    } catch (err) {
-      console.warn("No se pudo cargar detalle desde Tauri, usando almacén local:", err);
+      await cambiarMonedaBase(nuevaBase);
+      setMonedaBaseActual(nuevaBase);
+      await actualizarPatrimonio();
+    } catch (err: any) {
+      alert(err?.message || "Error al cambiar moneda base.");
     }
   };
 
+  const handleGuardarTasa = async (entrada: EntradaRegistroTasa) => {
+    await registrarTasa(entrada);
+    await cargarTasas();
+    await actualizarPatrimonio();
+  };
+
+  const handleEliminarTasa = async (idTasa: string) => {
+    await eliminarTasa(idTasa);
+    await cargarTasas();
+    await actualizarPatrimonio();
+  };
+
+  const handleCrearMoneda = async (entrada: EntradaCrearMoneda) => {
+    await crearMonedaPropia(entrada);
+    await cargarMonedasYBase();
+    await actualizarPatrimonio();
+  };
+
+  // ==========================================
+  // HANDLERS DE CUENTAS Y MOVIMIENTOS
+  // ==========================================
   const handleCrearCuenta = async (entrada: EntradaCuentaForm): Promise<boolean> => {
     setErrorValidacion(null);
 
@@ -251,6 +296,7 @@ export default function HomePage() {
       try {
         await invoke("crear_cuenta", { entrada });
         await cargarCuentasTauri();
+        setModalNuevaCuenta(false);
         return true;
       } catch (err: any) {
         setErrorValidacion({
@@ -273,32 +319,19 @@ export default function HomePage() {
       return false;
     }
 
-    const saldoNorm = entrada.saldo_inicial.replace(",", ".");
-    const numeroSaldo = Number(saldoNorm);
-    if (isNaN(numeroSaldo) || numeroSaldo < 0) {
-      setErrorValidacion({
-        campo: "saldo_inicial",
-        mensaje: "El saldo inicial no puede ser negativo ni contener letras.",
-      });
-      return false;
-    }
-
-    const nuevoId = `cta-${Date.now()}`;
+    const nuevaId = `cta-${Date.now()}`;
+    const saldoNum = parseFloat(entrada.saldo_inicial.replace(",", "."));
     const nuevaCuenta: CuentaItem = {
-      id: nuevoId,
-      nombre: entrada.nombre.trim(),
+      id: nuevaId,
+      nombre: entrada.nombre,
       tipo: entrada.tipo,
       moneda: entrada.moneda,
-      saldo_formateado: formatearMonto(numeroSaldo, entrada.moneda),
+      saldo_formateado: formatearMonto(saldoNum, entrada.moneda),
     };
 
-    const nuevasCuentas = [...cuentas, nuevaCuenta];
-    const nuevosIniciales = { ...saldosIniciales, [nuevoId]: numeroSaldo };
-    const nuevosMovs = { ...movimientosPorCuenta, [nuevoId]: [] };
-
-    setSaldosIniciales(nuevosIniciales);
-    setMovimientosPorCuenta(nuevosMovs);
-    sincronizarSaldosYSubtotales(nuevasCuentas, nuevosIniciales, nuevosMovs);
+    setSaldosIniciales((prev) => ({ ...prev, [nuevaId]: saldoNum }));
+    setCuentas((prev) => [...prev, nuevaCuenta]);
+    setModalNuevaCuenta(false);
     return true;
   };
 
@@ -331,26 +364,11 @@ export default function HomePage() {
           campo: err?.campo || "categoria",
           mensaje:
             err?.mensaje ||
-            (typeof err === "string" ? err : "Error al crear la categoría."),
+            (typeof err === "string" ? err : "Error al crear la categoría"),
         };
         setErrorValidacion(errorObj);
         throw errorObj;
       }
-    }
-
-    // Modo fallback sin Tauri
-    const listaActual =
-      entrada.tipo === "gasto" ? categoriasGasto : categoriasIngreso;
-    const yaExiste = listaActual.some(
-      (c) => c.trim().toLowerCase() === nombreLimpio.toLowerCase()
-    );
-    if (yaExiste) {
-      const err = {
-        campo: "categoria",
-        mensaje: `Ya existe una categoría de ${entrada.tipo} con el nombre '${nombreLimpio}'. Elige un nombre distinto.`,
-      };
-      setErrorValidacion(err);
-      throw err;
     }
 
     if (entrada.tipo === "gasto") {
@@ -377,7 +395,6 @@ export default function HomePage() {
       throw errorObj;
     }
 
-    // Si el usuario indicó crear una nueva categoría, primero la creamos
     if (entrada.esNuevaCategoria) {
       try {
         await handleCrearCategoria({
@@ -385,7 +402,6 @@ export default function HomePage() {
           tipo: entrada.tipo,
         });
       } catch (errCat: any) {
-        // Si el backend o fallback reporta que ya existe, no es un error bloqueante para el movimiento
         const msg = (
           errCat?.mensaje ||
           (typeof errCat === "string" ? errCat : "")
@@ -408,12 +424,13 @@ export default function HomePage() {
         };
         await invoke("registrar_movimiento", { entrada: payloadRust });
         await cargarCuentasTauri();
-        await cargarCategoriasTauri();
-        await abrirDetalleCuenta(entrada.id_cuenta);
+        if (cuentaSeleccionadaId) {
+          await abrirDetalleCuenta(cuentaSeleccionadaId);
+        }
         return true;
       } catch (err: any) {
         const errorObj = {
-          campo: err?.campo || "categoria",
+          campo: err?.campo || "monto",
           mensaje:
             err?.mensaje ||
             (typeof err === "string" ? err : "Error al registrar el movimiento"),
@@ -435,16 +452,14 @@ export default function HomePage() {
       monto_formateado: formatearMontoConSigno(montoNum, cuenta.moneda, entrada.tipo),
       fecha: fechaMovimiento,
       categoria: entrada.categoria,
-      nota: entrada.nota?.trim(),
+      nota: entrada.nota,
       estado: "vigente",
     };
 
-    const nuevosMovs = {
-      ...movimientosPorCuenta,
-      [entrada.id_cuenta]: [nuevoMov, ...(movimientosPorCuenta[entrada.id_cuenta] || [])],
-    };
-    setMovimientosPorCuenta(nuevosMovs);
-    sincronizarSaldosYSubtotales(cuentas, saldosIniciales, nuevosMovs);
+    setMovimientosPorCuenta((prev) => ({
+      ...prev,
+      [entrada.id_cuenta]: [nuevoMov, ...(prev[entrada.id_cuenta] || [])],
+    }));
     return true;
   };
 
@@ -474,42 +489,53 @@ export default function HomePage() {
       }
     }
 
-    if (!cuentaSeleccionadaId) return false;
     const cuenta = cuentas.find((c) => c.id === cuentaSeleccionadaId);
-    const movsActuales = movimientosPorCuenta[cuentaSeleccionadaId] || [];
-    const original = movsActuales.find((m) => m.id === entrada.id_movimiento_original);
-    if (!cuenta || !original) return false;
+    if (!cuenta) return false;
 
-    const montoCorrectoNum = parseFloat(entrada.monto_correcto.replace(",", "."));
-    const diff =
-      original.tipo === "gasto"
-        ? original.monto_num - montoCorrectoNum
-        : montoCorrectoNum - original.monto_num;
+    const montoNuevoNum = parseFloat(entrada.monto_correcto.replace(",", "."));
+    const movsActuales = movimientosPorCuenta[cuenta.id] || [];
+    const movOriginal = movsActuales.find((m) => m.id === entrada.id_movimiento_original);
+    if (!movOriginal) return false;
 
-    const movAjuste: MovimientoItem = {
-      id: `mov-ajuste-${Date.now()}`,
-      id_cuenta: cuentaSeleccionadaId,
-      tipo: "ajuste",
-      monto_num: diff,
-      monto_formateado: formatearMontoConSigno(diff, cuenta.moneda, "ajuste"),
-      fecha: new Date().toISOString().split("T")[0],
-      categoria: original.categoria,
-      nota: entrada.motivo?.trim()
-        ? `Ajuste: ${entrada.motivo.trim()}`
-        : `Ajuste por corrección de monto (${original.monto_num} → ${montoCorrectoNum})`,
-      estado: "ajuste",
-      id_movimiento_referenciado: original.id,
+    let delta = 0;
+    if (movOriginal.tipo === "gasto") {
+      delta = movOriginal.monto_num - montoNuevoNum;
+    } else {
+      delta = montoNuevoNum - movOriginal.monto_num;
+    }
+
+    const movCorregido: MovimientoItem = {
+      ...movOriginal,
+      estado: "corregido",
     };
 
-    const listaActualizada = [
-      movAjuste,
-      ...movsActuales.map((m) => (m.id === original.id ? { ...m, estado: "corregido" as const } : m)),
-    ];
+    const movAjuste: MovimientoItem = {
+      id: `adj-${Date.now()}`,
+      id_cuenta: cuenta.id,
+      tipo: "ajuste",
+      monto_num: Math.abs(delta),
+      monto_formateado: formatearMontoConSigno(Math.abs(delta), cuenta.moneda, "ajuste"),
+      fecha: new Date().toISOString().split("T")[0],
+      categoria: "Ajuste por corrección",
+      nota: entrada.motivo?.trim() || `Corrección del movimiento #${movOriginal.id}`,
+      estado: "ajuste",
+      id_movimiento_referenciado: movOriginal.id,
+    };
 
-    const nuevosMovs = { ...movimientosPorCuenta, [cuentaSeleccionadaId]: listaActualizada };
-    setMovimientosPorCuenta(nuevosMovs);
-    sincronizarSaldosYSubtotales(cuentas, saldosIniciales, nuevosMovs);
+    setMovimientosPorCuenta((prev) => ({
+      ...prev,
+      [cuenta.id]: [
+        movAjuste,
+        ...prev[cuenta.id].map((m) => (m.id === movOriginal.id ? movCorregido : m)),
+      ],
+    }));
+
     return true;
+  };
+
+  const abrirDetalleCuenta = (id: string) => {
+    setCuentaSeleccionadaId(id);
+    setVista("detalle");
   };
 
   const cuentaActivaDetalle = useMemo<DetalleCuentaData | null>(() => {
@@ -520,7 +546,6 @@ export default function HomePage() {
     const saldoIni = saldosIniciales[cuenta.id] ?? 0;
     const movsBrutos = movimientosPorCuenta[cuenta.id] || [];
 
-    // Sanitización exhaustiva para asegurar tipos primitivos a prueba de fallos de React
     const movs: MovimientoItem[] = movsBrutos.map((m: any) => {
       const catTexto = typeof m.categoria === "object" && m.categoria !== null
         ? (m.categoria.nombre || m.categoria.id || "Varios")
@@ -563,9 +588,19 @@ export default function HomePage() {
   return (
     <div className="app-wrapper">
       <Navbar
+        tabActivo={tabActivo}
+        onCambiarTab={(tab) => {
+          setTabActivo(tab);
+          if (tab === "cuentas") {
+            setVista("cuentas");
+            setCuentaSeleccionadaId(null);
+          }
+        }}
         onOpenNuevaCuenta={() => setModalNuevaCuenta(true)}
         onOpenDiagnostico={() => setModalDiagnostico(true)}
+        onOpenRegistrarTasa={() => setTabActivo("tasas")}
         onNavigateHome={() => {
+          setTabActivo("cuentas");
           setVista("cuentas");
           setCuentaSeleccionadaId(null);
           cargarCuentasTauri();
@@ -574,52 +609,99 @@ export default function HomePage() {
       />
 
       <main className="app-main">
-        {vista === "cuentas" ? (
-          <>
-            <div className="hero-section">
-              <div>
-                <h1 className="hero-title">Tu dinero, en orden.</h1>
-                <p className="hero-subtitle">
-                  Todas tus cuentas en un solo lugar, sin mezclar monedas.
-                </p>
+        {/* ======================================================== */}
+        {/* TAB 1: MIS CUENTAS Y MOVIMIENTOS                         */}
+        {/* ======================================================== */}
+        {tabActivo === "cuentas" && (
+          vista === "cuentas" ? (
+            <>
+              <div className="hero-section">
+                <div>
+                  <h1 className="hero-title">Tu dinero, en orden.</h1>
+                  <p className="hero-subtitle">
+                    Todas tus cuentas en un solo lugar, sin mezclar monedas.
+                  </p>
+                </div>
+                <div className="security-pill">
+                  <span>Solo en este dispositivo</span>
+                </div>
               </div>
-              <div className="security-pill">
-                <span>🛡️</span>
-                <span>Solo en este dispositivo</span>
-              </div>
-            </div>
 
-            <SubtotalesGrid subtotales={subtotales} />
+              <SubtotalesGrid subtotales={subtotales} />
 
-            <ListaCuentas
-              cuentas={cuentas}
-              onCrearPrimeraCuenta={() => setModalNuevaCuenta(true)}
-              onSeleccionarCuenta={abrirDetalleCuenta}
-            />
-          </>
-        ) : (
-          cuentaActivaDetalle && (
-            <DetalleCuenta
-              cuenta={cuentaActivaDetalle}
-              categoriasGasto={categoriasGasto}
-              categoriasIngreso={categoriasIngreso}
-              onCrearCategoria={handleCrearCategoria}
-              onVolver={() => {
-                setVista("cuentas");
-                setCuentaSeleccionadaId(null);
-                cargarCuentasTauri();
-                cargarCategoriasTauri();
-              }}
-              onRegistrarMovimiento={handleRegistrarMovimiento}
-              onCorregirMovimiento={handleCorregirMovimiento}
-            />
+              <ListaCuentas
+                cuentas={cuentas}
+                onCrearPrimeraCuenta={() => setModalNuevaCuenta(true)}
+                onSeleccionarCuenta={abrirDetalleCuenta}
+              />
+            </>
+          ) : (
+            cuentaActivaDetalle && (
+              <DetalleCuenta
+                cuenta={cuentaActivaDetalle}
+                categoriasGasto={categoriasGasto}
+                categoriasIngreso={categoriasIngreso}
+                onCrearCategoria={handleCrearCategoria}
+                onVolver={() => {
+                  setVista("cuentas");
+                  setCuentaSeleccionadaId(null);
+                  cargarCuentasTauri();
+                  cargarCategoriasTauri();
+                }}
+                onRegistrarMovimiento={handleRegistrarMovimiento}
+                onCorregirMovimiento={handleCorregirMovimiento}
+              />
+            )
           )
+        )}
+
+        {/* ======================================================== */}
+        {/* TAB 2: PATRIMONIO CONSOLIDADO                            */}
+        {/* ======================================================== */}
+        {tabActivo === "patrimonio" && (
+          patrimonioData ? (
+            <VistaPatrimonio
+              data={patrimonioData}
+              monedasDisponibles={monedasDisponibles}
+              monedaBaseActual={monedaBaseActual}
+              fechaConsulta={fechaConsultaPatrimonio}
+              onCambiarFecha={(f) => setFechaConsultaPatrimonio(f)}
+              onCambiarMonedaBase={handleCambiarMonedaBase}
+              onGuardarTasa={handleGuardarTasa}
+              onIrATasas={(origen, destino) => {
+                if (origen && destino) {
+                  setFiltroParHistorial({ origen, destino });
+                }
+                setTabActivo("tasas");
+              }}
+              onOpenCrearMoneda={() => {
+                setTabActivo("tasas");
+              }}
+            />
+          ) : (
+            <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>
+              Cargando valuación de patrimonio...
+            </div>
+          )
+        )}
+
+        {/* ======================================================== */}
+        {/* TAB 3: TASAS DE CAMBIO E HISTORIAL                       */}
+        {/* ======================================================== */}
+        {tabActivo === "tasas" && (
+          <VistaTasas
+            tasas={tasasHistorial}
+            monedas={monedasDisponibles}
+            filtroPar={filtroParHistorial}
+            onRegistrarTasa={handleGuardarTasa}
+            onEliminarTasa={handleEliminarTasa}
+            onCrearMoneda={handleCrearMoneda}
+          />
         )}
       </main>
 
       <footer className="app-footer">
         <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 500 }}>
-          <span>💾</span>
           <span>Datos guardados localmente</span>
         </div>
         <div style={{ color: "var(--text-muted)", fontWeight: 500 }}>
@@ -627,6 +709,7 @@ export default function HomePage() {
         </div>
       </footer>
 
+      {/* Modales de Entrega 2 y 3 */}
       <ModalNuevaCuenta
         isOpen={modalNuevaCuenta}
         onClose={() => {
