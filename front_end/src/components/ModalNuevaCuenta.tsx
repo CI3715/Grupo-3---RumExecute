@@ -57,7 +57,7 @@ export default function ModalNuevaCuenta({
         .then((cat) => cat?.length && setListaMonedas(cat))
         .catch(() => {});
     }
-  }, []);
+  }, [isOpen]);
 
   useEffect(() => {
     if (errorExterno) setErrorActivo(errorExterno);
