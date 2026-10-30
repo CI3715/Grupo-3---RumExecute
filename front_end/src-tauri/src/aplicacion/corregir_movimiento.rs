@@ -57,7 +57,7 @@ pub fn corregir_movimiento(
                     datos.codigo.as_str(),
                     datos.nombre,
                     datos.simbolo,
-                    datos.decimales as u32,
+                    datos.decimales,
                 ) {
                     catalogo.registrar_moneda(moneda);
                 }

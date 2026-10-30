@@ -12,7 +12,7 @@ pub fn convertir_monto(
 
     // Si las monedas son iguales, no hay conversión que hacer
     if monto.moneda == moneda_objetivo {
-        return Ok(monto.clone());
+        return Ok(*monto);
     }
 
     // Busca la tasa vigente en el historial (RF-CAM-03, RF-CAM-04)

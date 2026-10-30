@@ -479,7 +479,7 @@ fn validar_fecha(fecha: &str, campo: &str) -> Result<(), ErrorValidacionDto> {
 }
 
 fn es_bisiesto(anio: u32) -> bool {
-    anio % 400 == 0 || (anio % 4 == 0 && anio % 100 != 0)
+    anio.is_multiple_of(400) || (anio.is_multiple_of(4) && !anio.is_multiple_of(100))
 }
 
 fn formatear_decimal(valor: Decimal, decimales: u32) -> String {

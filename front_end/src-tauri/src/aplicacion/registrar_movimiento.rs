@@ -60,7 +60,7 @@ pub fn registrar_movimiento(
                     datos.codigo.as_str(),
                     datos.nombre,
                     datos.simbolo,
-                    datos.decimales as u32,
+                    datos.decimales,
                 ) {
                     catalogo_monedas.registrar_moneda(moneda);
                 }
@@ -98,7 +98,7 @@ pub fn registrar_movimiento(
     })?;
 
     let decimales = catalogo_monedas.decimales(&cuenta.moneda)?;
-    let monto = Monto::parse_movimiento(&entrada.monto, cuenta.moneda.clone(), decimales)?;
+    let monto = Monto::parse_movimiento(&entrada.monto, cuenta.moneda, decimales)?;
 
     // Crear el movimiento según el tipo validando contra el catálogo disponible
     let id_movimiento = ids.nuevo_id();
