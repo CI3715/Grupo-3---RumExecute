@@ -5,7 +5,6 @@ interface NavbarProps {
   onCambiarTab?: (tab: "cuentas" | "patrimonio" | "tasas") => void;
   onOpenNuevaCuenta: () => void;
   onOpenDiagnostico: () => void;
-  onOpenRegistrarTasa?: () => void;
   onNavigateHome?: () => void;
 }
 
@@ -14,7 +13,6 @@ export default function Navbar({
   onCambiarTab,
   onOpenNuevaCuenta,
   onOpenDiagnostico,
-  onOpenRegistrarTasa,
   onNavigateHome,
 }: NavbarProps) {
   return (
@@ -131,17 +129,6 @@ export default function Navbar({
         <button onClick={onOpenDiagnostico} className="btn btn-secondary" title="Diagnóstico de conexión de red">
           <span>Diagnóstico</span>
         </button>
-
-        {tabActivo !== "cuentas" && onOpenRegistrarTasa && (
-          <button
-            onClick={onOpenRegistrarTasa}
-            className="btn btn-secondary"
-            style={{ fontWeight: 700, color: "var(--emerald-primary)", borderColor: "var(--emerald-primary)" }}
-          >
-            <span>+</span>
-            <span>Registrar Tasa</span>
-          </button>
-        )}
 
         <button onClick={onOpenNuevaCuenta} className="btn btn-primary">
           <span style={{ fontSize: "16px", fontWeight: 700 }}>+</span>

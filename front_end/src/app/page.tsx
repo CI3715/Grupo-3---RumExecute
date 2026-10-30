@@ -286,13 +286,6 @@ export default function HomePage() {
     await actualizarPatrimonio();
   };
 
-  const abrirRegistroTasaConPar = (origen?: string, destino?: string) => {
-    if (origen && destino) {
-      setFiltroParHistorial({ origen, destino });
-    }
-    setTabActivo("tasas");
-  };
-
   // ==========================================
   // HANDLERS DE CUENTAS Y MOVIMIENTOS
   // ==========================================
@@ -605,7 +598,6 @@ export default function HomePage() {
         }}
         onOpenNuevaCuenta={() => setModalNuevaCuenta(true)}
         onOpenDiagnostico={() => setModalDiagnostico(true)}
-        onOpenRegistrarTasa={() => abrirRegistroTasaConPar()}
         onNavigateHome={() => {
           setTabActivo("cuentas");
           setVista("cuentas");
