@@ -128,19 +128,19 @@ se corrige mediante un ajuste, sin borrar ni editar el original.
 Este escenario demuestra la deteccion de tasa faltante, la seleccion de tasa por fecha y la tasa inversa, sin inventar nunca una tasa.
 
 1. Ejecutar `pnpm tauri dev`. En la pantalla de Patrimonio, confirmar que la moneda base es USD.
-2. Crear una cuenta "Banesco" en VES con saldo inicial de 1.000,00 y una cuenta "Efectivo" en USD con saldo inicial de 50,00.
-3. Consultar el patrimonio a una fecha t1 (por ejemplo, 2026-10-20) sin ninguna tasa registrada.
-   → Se muestran las cuentas y los subtotales por moneda, pero **no** hay total consolidado. Aparece una alerta: falta la tasa VES -> USD al 2026-10-20.
-4. Pulsar "Registrar Tasa Ahora" y registrar VES -> USD = 0,025 con fecha t1 (fuente: "BCV Oficial").
-   → El total consolidado a t1 es **75,00 USD**.
-5. Registrar una nueva tasa VES -> USD = 0,020 con una fecha t2 posterior (por ejemplo, 2026-11-10).
-   → A t1 se sigue aplicando 0,025 (75,00 USD). A t2 se aplica 0,020 (70,00 USD).
-6. Con solo la tasa VES -> USD registrada, cambiar la moneda base a VES.
-   → Se aplica la tasa inversa (1 / 0,025 = 40) sin registrar USD -> VES. El total es 3.000,00 VES y los saldos originales de las cuentas no cambian.
-7. Registrar tambien EUR -> USD, agregar una cuenta en EUR y cambiar la moneda base a EUR.
+2. Crear una cuenta "Banesco" en VES con saldo inicial de 1.000,00 y una cuenta "Efectivo" en USD con saldo inicial de 50,00. **Importante:** una cuenta solo aparece en consultas con fecha igual o posterior a su dia de registro, y no se aceptan fechas futuras. Para demostrar fechas distintas (t1 y t2), las cuentas deben haberse creado antes de t1; si se crean el mismo dia de la demo, todas las consultas se hacen a la fecha de hoy.
+3. Consultar el patrimonio a la fecha de hoy sin ninguna tasa registrada.
+   → Se muestran las cuentas y los subtotales por moneda, pero **no** hay total consolidado. Aparece una alerta: falta la tasa VES -> USD a la fecha consultada.
+4. Pulsar "Registrar Tasa Ahora" y registrar VES -> USD = 0,025 con fecha de vigencia t1 (hoy menos 2 dias, fuente: "BCV Oficial").
+   → El total consolidado es **75,00 USD**.
+5. Registrar una nueva tasa VES -> USD = 0,020 con fecha de vigencia t2 (ayer).
+   → Al consultar hoy se aplica la mas reciente: 0,020 (**70,00 USD**). Si las cuentas fueron creadas antes de t1, tambien se puede consultar a t1 (0,025, 75,00 USD) y a t2 (0,020, 70,00 USD).
+6. En el historial de tasas del par, eliminar la tasa de 0,020.
+   → Deja de aplicarse: al consultar hoy vuelve a aplicarse 0,025 (75,00 USD) y el evento `TasaEliminada` permanece en la base de datos.
+7. Con solo la tasa VES -> USD = 0,025 vigente, cambiar la moneda base a VES.
+   → Se aplica la tasa inversa (1 / 0,025 = 40) sin registrar USD -> VES. El total es 3.000,00 VES y los saldos originales no cambian.
+8. Volver la base a USD, registrar tambien EUR -> USD, agregar una cuenta en EUR y cambiar la moneda base a EUR.
    → No se inventa la tasa VES -> EUR (no hay conversion triangular): la alerta exige registrarla.
-8. Intentar registrar una tasa con fecha futura, con valor menor o igual a 0 o con monedas identicas.
+9. Intentar registrar una tasa con fecha futura, con valor menor o igual a 0 o con monedas identicas.
    → Cada intento se rechaza con un mensaje en espanol que indica el campo que falla.
-9. En el historial de tasas del par, eliminar una tasa.
-   → Deja de aplicarse en los calculos, pero el evento `TasaEliminada` permanece en la base de datos.
 10. Crear una moneda propia (por ejemplo, `CAD`, 2 decimales). Confirmar que VES, USD, EUR y USDT no se pueden editar ni eliminar.

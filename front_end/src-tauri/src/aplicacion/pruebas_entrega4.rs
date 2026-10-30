@@ -341,3 +341,16 @@ fn moneda_propia_puede_usarse_como_base() {
     assert!(m.moneda("CAD", "Dólar Canadiense", "C$", 2));
     m.base("CAD"); // hace unwrap: falla si CAD no se reconoce
 }
+
+#[test]
+fn cuenta_creada_despues_de_la_fecha_consultada_no_aparece() {
+    let mut m = Mundo::nuevo();
+    m.hoy_es_diciembre();
+    m.cuenta("Banesco", "banco", "VES", "1000,00"); // registrada en diciembre
+    assert_eq!(
+        m.patrimonio(T1).cuentas.len(),
+        0,
+        "a t1 la cuenta aun no existia"
+    );
+    assert_eq!(m.patrimonio("2026-12-01").cuentas.len(), 1);
+}
