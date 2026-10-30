@@ -1,13 +1,13 @@
-use super::crear_moneda::{crear_moneda, ErrorCrearMoneda};
+use super::cambiar_moneda_base::cambiar_moneda_base;
 use super::consultar_patrimonio::consultar_patrimonio;
 use super::crear_cuenta::{crear_cuenta, EntradaCrearCuenta};
-use super::cambiar_moneda_base::cambiar_moneda_base;
-use super::eliminar_tasa::eliminar_tasa;
-use super::registrar_tasa::registrar_tasa;
+use super::crear_moneda::{crear_moneda, ErrorCrearMoneda};
 use super::dto::*;
+use super::eliminar_tasa::eliminar_tasa;
 use super::puertos::*;
-use crate::infraestructura::memoria_repo::RepositorioLibroEnMemoria;
+use super::registrar_tasa::registrar_tasa;
 use crate::dominio::evento::EventoLibro;
+use crate::infraestructura::memoria_repo::RepositorioLibroEnMemoria;
 use std::cell::Cell;
 
 struct RelojAjustable(Cell<&'static str>);
@@ -58,7 +58,13 @@ impl Mundo {
         crear_cuenta(&mut self.repo, &self.reloj, &mut self.ids, e).unwrap();
     }
 
-    fn tasa(&mut self, o: &str, d: &str, v: &str, f: &str) -> Result<ResultadoTasaDto, super::registrar_tasa::ErrorRegistrarTasa> {
+    fn tasa(
+        &mut self,
+        o: &str,
+        d: &str,
+        v: &str,
+        f: &str,
+    ) -> Result<ResultadoTasaDto, super::registrar_tasa::ErrorRegistrarTasa> {
         let e = RegistrarTasaDto {
             origen: o.into(),
             destino: d.into(),
@@ -70,12 +76,16 @@ impl Mundo {
     }
 
     fn base(&mut self, codigo: &str) {
-        let e = CambiarMonedaBaseDto { nuevo_codigo: codigo.into() };
+        let e = CambiarMonedaBaseDto {
+            nuevo_codigo: codigo.into(),
+        };
         cambiar_moneda_base(&mut self.repo, &self.reloj, &mut self.ids, e).unwrap();
     }
 
     fn patrimonio(&self, fecha: &str) -> PatrimonioDto {
-        let e = ConsultarPatrimonioEntrada { fecha_consulta: Some(fecha.into()) };
+        let e = ConsultarPatrimonioEntrada {
+            fecha_consulta: Some(fecha.into()),
+        };
         consultar_patrimonio(&self.repo, &self.reloj, e).unwrap()
     }
 }
@@ -172,11 +182,31 @@ fn cambiar_base_no_muta_saldos_originales() {
     m.cuenta("Banesco", "banco", "VES", "1000,00");
     m.cuenta("Efectivo", "efectivo", "USD", "50,00");
     m.hoy_es_diciembre();
-    let antes: Vec<_> = m.patrimonio(T1).cuentas.iter()
-        .map(|c| (c.id.clone(), c.saldo_original.clone(), c.moneda_original.clone())).collect();
+    let antes: Vec<_> = m
+        .patrimonio(T1)
+        .cuentas
+        .iter()
+        .map(|c| {
+            (
+                c.id.clone(),
+                c.saldo_original.clone(),
+                c.moneda_original.clone(),
+            )
+        })
+        .collect();
     m.base("EUR");
-    let despues: Vec<_> = m.patrimonio(T1).cuentas.iter()
-        .map(|c| (c.id.clone(), c.saldo_original.clone(), c.moneda_original.clone())).collect();
+    let despues: Vec<_> = m
+        .patrimonio(T1)
+        .cuentas
+        .iter()
+        .map(|c| {
+            (
+                c.id.clone(),
+                c.saldo_original.clone(),
+                c.moneda_original.clone(),
+            )
+        })
+        .collect();
     assert_eq!(antes, despues);
 }
 
@@ -189,7 +219,13 @@ fn tasa_eliminada_ya_no_aplica() {
     let id = m.tasa("VES", "USD", "0.025", T1).unwrap().id_tasa;
     assert_eq!(m.patrimonio(T1).total_consolidado.as_deref(), Some("25.00"));
 
-    eliminar_tasa(&mut m.repo, &m.reloj, &mut m.ids, EliminarTasaDto { id_tasa: id }).unwrap();
+    eliminar_tasa(
+        &mut m.repo,
+        &m.reloj,
+        &mut m.ids,
+        EliminarTasaDto { id_tasa: id },
+    )
+    .unwrap();
     let p = m.patrimonio(T1);
     assert_eq!(p.total_consolidado, None);
     assert!(p.tasa_faltante.is_some());
@@ -200,11 +236,17 @@ fn tasa_eliminada_ya_no_aplica() {
 fn rechaza_tasas_invalidas() {
     let mut m = Mundo::nuevo();
     m.hoy_es_diciembre();
-    assert!(m.tasa("VES", "USD", "0.025", "2027-01-01").is_err(), "fecha futura");
+    assert!(
+        m.tasa("VES", "USD", "0.025", "2027-01-01").is_err(),
+        "fecha futura"
+    );
     assert!(m.tasa("VES", "USD", "0", T1).is_err(), "valor cero");
     assert!(m.tasa("VES", "USD", "-1", T1).is_err(), "valor negativo");
     assert!(m.tasa("USD", "USD", "1", T1).is_err(), "monedas iguales");
-    assert!(m.tasa("VES", "USD", "0.123456789", T1).is_err(), "más de 8 decimales");
+    assert!(
+        m.tasa("VES", "USD", "0.123456789", T1).is_err(),
+        "más de 8 decimales"
+    );
 }
 
 // ---------- crear_moneda (RF-CAM-01) ----------
@@ -236,7 +278,10 @@ fn crear_moneda_valida_emite_evento_moneda_creada() {
     assert!(m.moneda("CAD", "Dólar Canadiense", "C$", 2));
     let eventos = m.repo.listar_eventos().unwrap();
     assert_eq!(eventos.len(), antes + 1);
-    assert!(matches!(eventos.last().unwrap(), EventoLibro::MonedaCreada { .. }));
+    assert!(matches!(
+        eventos.last().unwrap(),
+        EventoLibro::MonedaCreada { .. }
+    ));
 }
 
 #[test]
@@ -260,7 +305,10 @@ fn crear_moneda_no_permite_pisar_monedas_de_fabrica() {
     let mut m = Mundo::nuevo();
     let antes = m.n_eventos();
     for codigo in ["VES", "USD", "EUR", "USDT"] {
-        assert!(!m.moneda(codigo, "Intento", "X", 2), "{codigo} es de fábrica");
+        assert!(
+            !m.moneda(codigo, "Intento", "X", 2),
+            "{codigo} es de fábrica"
+        );
     }
     assert_eq!(m.n_eventos(), antes);
 }
@@ -269,7 +317,10 @@ fn crear_moneda_no_permite_pisar_monedas_de_fabrica() {
 fn crear_moneda_rechaza_codigos_invalidos() {
     let mut m = Mundo::nuevo();
     for codigo in ["cad", "AB", "ABCDEF", "C4D", "CÁD", "", "CA D"] {
-        assert!(!m.moneda(codigo, "Nombre", "X", 2), "código inválido: {codigo:?}");
+        assert!(
+            !m.moneda(codigo, "Nombre", "X", 2),
+            "código inválido: {codigo:?}"
+        );
     }
 }
 

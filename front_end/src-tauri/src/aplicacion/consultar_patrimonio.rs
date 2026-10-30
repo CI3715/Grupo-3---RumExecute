@@ -8,7 +8,7 @@ use crate::dominio::errores::ErrorDominio;
 use crate::dominio::evento::EventoLibro;
 use crate::dominio::monto::Monto;
 use crate::dominio::movimiento::{
-    aplicar_movimiento_a_saldo, Movimiento, TipoMovimiento, validar_fecha_no_futura,
+    aplicar_movimiento_a_saldo, validar_fecha_no_futura, Movimiento, TipoMovimiento,
 };
 use rust_decimal::Decimal;
 use std::collections::HashSet;
@@ -218,7 +218,10 @@ pub fn calcular_patrimonio(
             .find(|(moneda, _)| moneda == &cuenta.moneda)
         {
             *total = total.checked_add(cuenta.saldo).ok_or_else(|| {
-                error_validacion("saldo", "El subtotal excede la precisión decimal permitida.")
+                error_validacion(
+                    "saldo",
+                    "El subtotal excede la precisión decimal permitida.",
+                )
             })?;
         } else {
             subtotales.push((cuenta.moneda.clone(), cuenta.saldo));
@@ -255,12 +258,8 @@ pub fn calcular_patrimonio(
     let mut tasa_faltante = None;
 
     for cuenta in cuentas {
-        let seleccion = seleccionar_tasa(
-            &cuenta.moneda,
-            &moneda_base.codigo,
-            fecha_consulta,
-            tasas,
-        );
+        let seleccion =
+            seleccionar_tasa(&cuenta.moneda, &moneda_base.codigo, fecha_consulta, tasas);
 
         if cuenta.moneda == moneda_base.codigo {
             total = total.checked_add(cuenta.saldo).ok_or_else(|| {
@@ -433,9 +432,7 @@ fn tasa_vigente<'a>(
 
 fn validar_codigo_moneda(codigo: &str, campo: &str) -> Result<(), ErrorValidacionDto> {
     let valido = (3..=5).contains(&codigo.len())
-        && codigo
-            .bytes()
-            .all(|caracter| caracter.is_ascii_uppercase());
+        && codigo.bytes().all(|caracter| caracter.is_ascii_uppercase());
     if valido {
         Ok(())
     } else {

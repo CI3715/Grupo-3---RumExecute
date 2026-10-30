@@ -315,28 +315,60 @@ impl EventoLibro {
     /// Retorna el momento de registro (ISO 8601).
     pub fn momento_registro(&self) -> &str {
         match self {
-            EventoLibro::CuentaCreada { momento_registro, .. }
-            | EventoLibro::MovimientoRegistrado { momento_registro, .. }
-            | EventoLibro::MovimientoCorregido { momento_registro, .. }
-            | EventoLibro::CategoriaCreada { momento_registro, .. }
-            | EventoLibro::TasaRegistrada { momento_registro, .. }
-            | EventoLibro::TasaEliminada { momento_registro, .. }
-            | EventoLibro::MonedaBaseCambiada { momento_registro, .. }
-            | EventoLibro::MonedaCreada { momento_registro, .. } => momento_registro,
+            EventoLibro::CuentaCreada {
+                momento_registro, ..
+            }
+            | EventoLibro::MovimientoRegistrado {
+                momento_registro, ..
+            }
+            | EventoLibro::MovimientoCorregido {
+                momento_registro, ..
+            }
+            | EventoLibro::CategoriaCreada {
+                momento_registro, ..
+            }
+            | EventoLibro::TasaRegistrada {
+                momento_registro, ..
+            }
+            | EventoLibro::TasaEliminada {
+                momento_registro, ..
+            }
+            | EventoLibro::MonedaBaseCambiada {
+                momento_registro, ..
+            }
+            | EventoLibro::MonedaCreada {
+                momento_registro, ..
+            } => momento_registro,
         }
     }
 
     /// Retorna el dispositivo origen donde se originó el evento.
     pub fn dispositivo_origen(&self) -> &str {
         match self {
-            EventoLibro::CuentaCreada { dispositivo_origen, .. }
-            | EventoLibro::MovimientoRegistrado { dispositivo_origen, .. }
-            | EventoLibro::MovimientoCorregido { dispositivo_origen, .. }
-            | EventoLibro::CategoriaCreada { dispositivo_origen, .. }
-            | EventoLibro::TasaRegistrada { dispositivo_origen, .. }
-            | EventoLibro::TasaEliminada { dispositivo_origen, .. }
-            | EventoLibro::MonedaBaseCambiada { dispositivo_origen, .. }
-            | EventoLibro::MonedaCreada { dispositivo_origen, .. } => dispositivo_origen,
+            EventoLibro::CuentaCreada {
+                dispositivo_origen, ..
+            }
+            | EventoLibro::MovimientoRegistrado {
+                dispositivo_origen, ..
+            }
+            | EventoLibro::MovimientoCorregido {
+                dispositivo_origen, ..
+            }
+            | EventoLibro::CategoriaCreada {
+                dispositivo_origen, ..
+            }
+            | EventoLibro::TasaRegistrada {
+                dispositivo_origen, ..
+            }
+            | EventoLibro::TasaEliminada {
+                dispositivo_origen, ..
+            }
+            | EventoLibro::MonedaBaseCambiada {
+                dispositivo_origen, ..
+            }
+            | EventoLibro::MonedaCreada {
+                dispositivo_origen, ..
+            } => dispositivo_origen,
         }
     }
 
@@ -362,7 +394,8 @@ mod tests {
 
     #[test]
     fn test_creacion_evento_cuenta_creada() {
-        let saldo = Monto::nuevo_saldo_inicial(Decimal::new(30000, 2), CodigoMoneda::USD, 2).unwrap();
+        let saldo =
+            Monto::nuevo_saldo_inicial(Decimal::new(30000, 2), CodigoMoneda::USD, 2).unwrap();
         let datos = DatosCuentaCreada {
             id_cuenta: "cta-123".to_string(),
             nombre: "Cuenta Ahorro".to_string(),

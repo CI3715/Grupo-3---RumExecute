@@ -3,6 +3,12 @@ use std::sync::Mutex;
 use serde::Serialize;
 use tauri::State;
 
+use crate::aplicacion::cambiar_moneda_base::{
+    cambiar_moneda_base as ejecutar_cambiar_moneda_base, ErrorCambiarMonedaBase,
+};
+use crate::aplicacion::consultar_patrimonio::{
+    consultar_patrimonio as ejecutar_consultar_patrimonio, ErrorConsultarPatrimonio,
+};
 use crate::aplicacion::corregir_movimiento::{
     corregir_movimiento as ejecutar_corregir_movimiento, EntradaCorregirMovimiento,
     ErrorCorregirMovimiento,
@@ -13,21 +19,7 @@ use crate::aplicacion::crear_categoria::{
 use crate::aplicacion::crear_cuenta::{
     crear_cuenta as ejecutar_crear_cuenta, EntradaCrearCuenta, ErrorCrearCuenta,
 };
-use crate::aplicacion::listar_categorias::{
-    listar_categorias as ejecutar_listar_categorias, ErrorListarCategorias,
-};
-use crate::aplicacion::listar_cuentas::{
-    listar_cuentas as ejecutar_listar_cuentas, ErrorListarCuentas, ResumenCuentas,
-};
-use crate::aplicacion::cambiar_moneda_base::{
-    cambiar_moneda_base as ejecutar_cambiar_moneda_base, ErrorCambiarMonedaBase,
-};
-use crate::aplicacion::crear_moneda::{
-    crear_moneda as ejecutar_crear_moneda, ErrorCrearMoneda,
-};
-use crate::aplicacion::consultar_patrimonio::{
-    consultar_patrimonio as ejecutar_consultar_patrimonio, ErrorConsultarPatrimonio,
-};
+use crate::aplicacion::crear_moneda::{crear_moneda as ejecutar_crear_moneda, ErrorCrearMoneda};
 use crate::aplicacion::dto::{
     CambiarMonedaBaseDto, ConsultarPatrimonioEntrada, CrearMonedaDto, EliminarTasaDto,
     ListarHistorialTasasEntrada, PatrimonioDto, RegistrarTasaDto, ResultadoMonedaBaseDto,
@@ -36,22 +28,26 @@ use crate::aplicacion::dto::{
 use crate::aplicacion::eliminar_tasa::{
     eliminar_tasa as ejecutar_eliminar_tasa, ErrorEliminarTasa,
 };
+use crate::aplicacion::listar_categorias::{
+    listar_categorias as ejecutar_listar_categorias, ErrorListarCategorias,
+};
+use crate::aplicacion::listar_cuentas::{
+    listar_cuentas as ejecutar_listar_cuentas, ErrorListarCuentas, ResumenCuentas,
+};
 use crate::aplicacion::listar_historial_tasas::{
     listar_historial_tasas as ejecutar_listar_historial_tasas, ErrorListarHistorialTasas,
 };
-use crate::aplicacion::listar_monedas::{
-    self as ejecutar_listar_monedas, ErrorListarMonedas,
-};
+use crate::aplicacion::listar_monedas::{self as ejecutar_listar_monedas, ErrorListarMonedas};
 use crate::aplicacion::obtener_detalle_cuenta::{
     obtener_detalle_cuenta as ejecutar_obtener_detalle_cuenta, DetalleCuenta,
     ErrorObtenerDetalleCuenta,
 };
-use crate::aplicacion::registrar_tasa::{
-    registrar_tasa as ejecutar_registrar_tasa, ErrorRegistrarTasa,
-};
 use crate::aplicacion::registrar_movimiento::{
     registrar_movimiento as ejecutar_registrar_movimiento, EntradaRegistrarMovimiento,
     ErrorRegistrarMovimiento,
+};
+use crate::aplicacion::registrar_tasa::{
+    registrar_tasa as ejecutar_registrar_tasa, ErrorRegistrarTasa,
 };
 use crate::dominio::categoria::Categoria;
 use crate::dominio::cuenta::Cuenta;
@@ -76,10 +72,12 @@ pub fn listar_monedas(
         .lock()
         .map_err(|error| format!("No se pudo acceder al libro local: {error}"))?;
 
-    ejecutar_listar_monedas::listar_monedas_registradas(&*repositorio).map_err(|error| match error {
-        ErrorListarMonedas::Dominio(error) => error.to_string(),
-        ErrorListarMonedas::Repositorio(error) => error.0,
-    })
+    ejecutar_listar_monedas::listar_monedas_registradas(&*repositorio).map_err(
+        |error| match error {
+            ErrorListarMonedas::Dominio(error) => error.to_string(),
+            ErrorListarMonedas::Repositorio(error) => error.0,
+        },
+    )
 }
 
 #[tauri::command]
@@ -129,12 +127,12 @@ pub fn registrar_tasa(
     })?;
     let mut ids = GeneradorIdUuid;
 
-    ejecutar_registrar_tasa(&mut *repositorio, &RelojSistema, &mut ids, entrada).map_err(
-        |error| match error {
+    ejecutar_registrar_tasa(&mut *repositorio, &RelojSistema, &mut ids, entrada).map_err(|error| {
+        match error {
             ErrorRegistrarTasa::Validacion(error) => ErrorComando::Validacion(error),
             ErrorRegistrarTasa::Repositorio(error) => ErrorComando::Tecnico(error.0),
-        },
-    )
+        }
+    })
 }
 
 #[tauri::command]
@@ -148,12 +146,12 @@ pub fn eliminar_tasa(
     let mut ids = GeneradorIdUuid;
 
     let entrada = EliminarTasaDto { id_tasa };
-    ejecutar_eliminar_tasa(&mut *repositorio, &RelojSistema, &mut ids, entrada).map_err(
-        |error| match error {
+    ejecutar_eliminar_tasa(&mut *repositorio, &RelojSistema, &mut ids, entrada).map_err(|error| {
+        match error {
             ErrorEliminarTasa::Validacion(error) => ErrorComando::Validacion(error),
             ErrorEliminarTasa::Repositorio(error) => ErrorComando::Tecnico(error.0),
-        },
-    )
+        }
+    })
 }
 
 #[tauri::command]
@@ -181,12 +179,12 @@ pub fn consultar_patrimonio(
     })?;
 
     let entrada = ConsultarPatrimonioEntrada { fecha_consulta };
-    ejecutar_consultar_patrimonio(&*repositorio, &RelojSistema, entrada).map_err(|error| {
-        match error {
+    ejecutar_consultar_patrimonio(&*repositorio, &RelojSistema, entrada).map_err(
+        |error| match error {
             ErrorConsultarPatrimonio::Validacion(error) => ErrorComando::Validacion(error),
             ErrorConsultarPatrimonio::Repositorio(error) => ErrorComando::Tecnico(error.0),
-        }
-    })
+        },
+    )
 }
 
 #[tauri::command]

@@ -69,7 +69,7 @@ impl TasaCambio {
             ));
         }
 
-        Ok(Self { 
+        Ok(Self {
             par,
             valor,
             fecha: fecha.trim().to_string(),
@@ -86,7 +86,7 @@ pub enum TasaAplicable<'a> {
 // Colección de dominio para gestionar el historial de tasas de cambio.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct HistorialTasas {
-    tasas: Vec<TasaCambio>
+    tasas: Vec<TasaCambio>,
 }
 
 impl HistorialTasas {
@@ -103,14 +103,13 @@ impl HistorialTasas {
         &'a self,
         origen: CodigoMoneda,
         destino: CodigoMoneda,
-        fecha_consulta: &str
-    )-> Option<TasaAplicable<'a>> {
+        fecha_consulta: &str,
+    ) -> Option<TasaAplicable<'a>> {
         let mut mejor_tasa: Option<TasaAplicable> = None;
         let mut mejor_fecha = "";
 
         for tasa in &self.tasas {
             if tasa.fecha.as_str() <= fecha_consulta && tasa.fecha.as_str() >= mejor_fecha {
-
                 if tasa.par.origen == origen && tasa.par.destino == destino {
                     mejor_fecha = tasa.fecha.as_str();
                     mejor_tasa = Some(TasaAplicable::Directa(tasa));
@@ -126,7 +125,8 @@ impl HistorialTasas {
 
     pub fn eliminar_tasa(&mut self, par: ParMonedas, fecha: &str, fuente: &str) -> bool {
         let len_inicial = self.tasas.len();
-        self.tasas.retain(|t| !(t.par == par && t.fecha == fecha && t.fuente == fuente));
+        self.tasas
+            .retain(|t| !(t.par == par && t.fecha == fecha && t.fuente == fuente));
         self.tasas.len() < len_inicial
     }
 
@@ -258,20 +258,38 @@ mod tests {
     #[test]
     fn test_historial_tasas_obtener_tasa_vigente_directa_mas_reciente() {
         let mut historial = HistorialTasas::nuevo();
-        
-        let tasa_vieja = TasaCambio::nueva(CodigoMoneda::USD, CodigoMoneda::VES, Decimal::from_str("30.0").unwrap(), "2026-10-25", "BCV", MOMENTO_ACTUAL).unwrap();
-        let tasa_nueva = TasaCambio::nueva(CodigoMoneda::USD, CodigoMoneda::VES, Decimal::from_str("35.0").unwrap(), "2026-10-28", "BCV", MOMENTO_ACTUAL).unwrap();
-        
+
+        let tasa_vieja = TasaCambio::nueva(
+            CodigoMoneda::USD,
+            CodigoMoneda::VES,
+            Decimal::from_str("30.0").unwrap(),
+            "2026-10-25",
+            "BCV",
+            MOMENTO_ACTUAL,
+        )
+        .unwrap();
+        let tasa_nueva = TasaCambio::nueva(
+            CodigoMoneda::USD,
+            CodigoMoneda::VES,
+            Decimal::from_str("35.0").unwrap(),
+            "2026-10-28",
+            "BCV",
+            MOMENTO_ACTUAL,
+        )
+        .unwrap();
+
         historial.registrar(tasa_vieja);
         historial.registrar(tasa_nueva);
 
-        let encontrada = historial.obtener_tasa_vigente(CodigoMoneda::USD, CodigoMoneda::VES, "2026-10-29").unwrap();
-        
+        let encontrada = historial
+            .obtener_tasa_vigente(CodigoMoneda::USD, CodigoMoneda::VES, "2026-10-29")
+            .unwrap();
+
         match encontrada {
             TasaAplicable::Directa(t) => {
                 assert_eq!(t.fecha, "2026-10-28");
                 assert_eq!(t.valor, Decimal::from_str("35.0").unwrap());
-            },
+            }
             _ => panic!("Debería ser una tasa directa"),
         }
     }
@@ -279,20 +297,41 @@ mod tests {
     #[test]
     fn test_historial_tasas_desempate_por_registro_mas_reciente_misma_fecha() {
         let mut historial = HistorialTasas::nuevo();
-        
+
         // Se registran dos tasas el mismo día (ej. apertura y cierre)
-        let tasa_manana = TasaCambio::nueva(CodigoMoneda::USD, CodigoMoneda::VES, Decimal::from_str("36.0").unwrap(), "2026-10-28", "BCV_Manana", MOMENTO_ACTUAL).unwrap();
-        let tasa_tarde = TasaCambio::nueva(CodigoMoneda::USD, CodigoMoneda::VES, Decimal::from_str("36.5").unwrap(), "2026-10-28", "BCV_Tarde", MOMENTO_ACTUAL).unwrap();
-        
+        let tasa_manana = TasaCambio::nueva(
+            CodigoMoneda::USD,
+            CodigoMoneda::VES,
+            Decimal::from_str("36.0").unwrap(),
+            "2026-10-28",
+            "BCV_Manana",
+            MOMENTO_ACTUAL,
+        )
+        .unwrap();
+        let tasa_tarde = TasaCambio::nueva(
+            CodigoMoneda::USD,
+            CodigoMoneda::VES,
+            Decimal::from_str("36.5").unwrap(),
+            "2026-10-28",
+            "BCV_Tarde",
+            MOMENTO_ACTUAL,
+        )
+        .unwrap();
+
         historial.registrar(tasa_manana);
         historial.registrar(tasa_tarde);
 
-        let encontrada = historial.obtener_tasa_vigente(CodigoMoneda::USD, CodigoMoneda::VES, "2026-10-28").unwrap();
-        
+        let encontrada = historial
+            .obtener_tasa_vigente(CodigoMoneda::USD, CodigoMoneda::VES, "2026-10-28")
+            .unwrap();
+
         match encontrada {
             TasaAplicable::Directa(t) => {
-                assert_eq!(t.fuente, "BCV_Tarde", "Debería tomar la última registrada en esa fecha");
-            },
+                assert_eq!(
+                    t.fuente, "BCV_Tarde",
+                    "Debería tomar la última registrada en esa fecha"
+                );
+            }
             _ => panic!("Debería ser una tasa directa"),
         }
     }
@@ -300,20 +339,30 @@ mod tests {
     #[test]
     fn test_historial_tasas_obtener_tasa_inversa() {
         let mut historial = HistorialTasas::nuevo();
-        
+
         // Registramos USD -> VES
-        let tasa_base = TasaCambio::nueva(CodigoMoneda::USD, CodigoMoneda::VES, Decimal::from_str("36.5").unwrap(), "2026-10-28", "BCV", MOMENTO_ACTUAL).unwrap();
+        let tasa_base = TasaCambio::nueva(
+            CodigoMoneda::USD,
+            CodigoMoneda::VES,
+            Decimal::from_str("36.5").unwrap(),
+            "2026-10-28",
+            "BCV",
+            MOMENTO_ACTUAL,
+        )
+        .unwrap();
         historial.registrar(tasa_base);
 
         // Consultamos VES -> USD (Debe devolver la inversa automáticamente)
-        let encontrada = historial.obtener_tasa_vigente(CodigoMoneda::VES, CodigoMoneda::USD, "2026-10-29").unwrap();
-        
+        let encontrada = historial
+            .obtener_tasa_vigente(CodigoMoneda::VES, CodigoMoneda::USD, "2026-10-29")
+            .unwrap();
+
         match encontrada {
             TasaAplicable::Inversa(t) => {
                 assert_eq!(t.par.origen, CodigoMoneda::USD);
                 assert_eq!(t.par.destino, CodigoMoneda::VES);
                 assert_eq!(t.valor, Decimal::from_str("36.5").unwrap());
-            },
+            }
             _ => panic!("Debería identificar que es una tasa inversa"),
         }
     }
@@ -322,12 +371,20 @@ mod tests {
     fn test_historial_tasas_eliminar_tasa_existente() {
         let mut historial = HistorialTasas::nuevo();
         let par = ParMonedas::nuevo(CodigoMoneda::USD, CodigoMoneda::VES).unwrap();
-        
-        let tasa = TasaCambio::nueva(CodigoMoneda::USD, CodigoMoneda::VES, Decimal::from_str("36.5").unwrap(), "2026-10-28", "ErrorHumano", MOMENTO_ACTUAL).unwrap();
+
+        let tasa = TasaCambio::nueva(
+            CodigoMoneda::USD,
+            CodigoMoneda::VES,
+            Decimal::from_str("36.5").unwrap(),
+            "2026-10-28",
+            "ErrorHumano",
+            MOMENTO_ACTUAL,
+        )
+        .unwrap();
         historial.registrar(tasa);
-        
+
         assert_eq!(historial.tasas.len(), 1);
-        
+
         let eliminada = historial.eliminar_tasa(par, "2026-10-28", "ErrorHumano");
         assert!(eliminada);
         assert_eq!(historial.tasas.len(), 0);

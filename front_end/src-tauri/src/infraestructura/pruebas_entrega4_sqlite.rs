@@ -38,13 +38,18 @@ fn ruta_temporal(nombre: &str) -> PathBuf {
 }
 
 fn patrimonio(repo: &RepositorioLibroSqlite, reloj: &Reloj2026, fecha: &str) -> PatrimonioDto {
-    let e = ConsultarPatrimonioEntrada { fecha_consulta: Some(fecha.into()) };
+    let e = ConsultarPatrimonioEntrada {
+        fecha_consulta: Some(fecha.into()),
+    };
     consultar_patrimonio(repo, reloj, e).unwrap()
 }
 
 /// Ejecuta un recorrido que emite los 4 eventos nuevos sobre SQLite real.
 fn poblar(repo: &mut RepositorioLibroSqlite, reloj: &Reloj2026, ids: &mut Ids) -> String {
-    for (n, t, m, s) in [("Banesco", "banco", "VES", "1000,00"), ("Efectivo", "efectivo", "USD", "50,00")] {
+    for (n, t, m, s) in [
+        ("Banesco", "banco", "VES", "1000,00"),
+        ("Efectivo", "efectivo", "USD", "50,00"),
+    ] {
         let e = EntradaCrearCuenta {
             nombre: n.into(),
             tipo: t.into(),
@@ -57,29 +62,76 @@ fn poblar(repo: &mut RepositorioLibroSqlite, reloj: &Reloj2026, ids: &mut Ids) -
 
     // MonedaCreada
     crear_moneda(
-        repo, reloj, ids,
-        CrearMonedaDto { codigo: "CAD".into(), nombre: "Dólar Canadiense".into(), simbolo: "C$".into(), decimales: 2 },
+        repo,
+        reloj,
+        ids,
+        CrearMonedaDto {
+            codigo: "CAD".into(),
+            nombre: "Dólar Canadiense".into(),
+            simbolo: "C$".into(),
+            decimales: 2,
+        },
     )
     .unwrap();
 
     // TasaRegistrada (la buena y una errónea que luego se elimina)
     registrar_tasa(
-        repo, reloj, ids,
-        RegistrarTasaDto { origen: "VES".into(), destino: "USD".into(), valor: "0.025".into(), fecha_vigencia: T1.into(), fuente: "Prueba".into() },
+        repo,
+        reloj,
+        ids,
+        RegistrarTasaDto {
+            origen: "VES".into(),
+            destino: "USD".into(),
+            valor: "0.025".into(),
+            fecha_vigencia: T1.into(),
+            fuente: "Prueba".into(),
+        },
     )
     .unwrap();
     let mala = registrar_tasa(
-        repo, reloj, ids,
-        RegistrarTasaDto { origen: "VES".into(), destino: "USD".into(), valor: "9.99".into(), fecha_vigencia: "2026-10-25".into(), fuente: "Error".into() },
+        repo,
+        reloj,
+        ids,
+        RegistrarTasaDto {
+            origen: "VES".into(),
+            destino: "USD".into(),
+            valor: "9.99".into(),
+            fecha_vigencia: "2026-10-25".into(),
+            fuente: "Error".into(),
+        },
     )
     .unwrap();
 
     // TasaEliminada
-    eliminar_tasa(repo, reloj, ids, EliminarTasaDto { id_tasa: mala.id_tasa.clone() }).unwrap();
+    eliminar_tasa(
+        repo,
+        reloj,
+        ids,
+        EliminarTasaDto {
+            id_tasa: mala.id_tasa.clone(),
+        },
+    )
+    .unwrap();
 
     // MonedaBaseCambiada (ida y vuelta, la base final es USD)
-    cambiar_moneda_base(repo, reloj, ids, CambiarMonedaBaseDto { nuevo_codigo: "EUR".into() }).unwrap();
-    cambiar_moneda_base(repo, reloj, ids, CambiarMonedaBaseDto { nuevo_codigo: "USD".into() }).unwrap();
+    cambiar_moneda_base(
+        repo,
+        reloj,
+        ids,
+        CambiarMonedaBaseDto {
+            nuevo_codigo: "EUR".into(),
+        },
+    )
+    .unwrap();
+    cambiar_moneda_base(
+        repo,
+        reloj,
+        ids,
+        CambiarMonedaBaseDto {
+            nuevo_codigo: "USD".into(),
+        },
+    )
+    .unwrap();
 
     mala.id_tasa
 }
@@ -95,10 +147,18 @@ fn eventos_nuevos_son_inmutables_en_sqlite() {
 
     // Los 4 tipos nuevos realmente quedaron en el libro
     let eventos = repo.listar_eventos().unwrap();
-    assert!(eventos.iter().any(|e| matches!(e, EventoLibro::MonedaCreada { .. })));
-    assert!(eventos.iter().any(|e| matches!(e, EventoLibro::MonedaBaseCambiada { .. })));
-    assert!(eventos.iter().any(|e| matches!(e, EventoLibro::TasaRegistrada { .. })));
-    assert!(eventos.iter().any(|e| matches!(e, EventoLibro::TasaEliminada { .. })));
+    assert!(eventos
+        .iter()
+        .any(|e| matches!(e, EventoLibro::MonedaCreada { .. })));
+    assert!(eventos
+        .iter()
+        .any(|e| matches!(e, EventoLibro::MonedaBaseCambiada { .. })));
+    assert!(eventos
+        .iter()
+        .any(|e| matches!(e, EventoLibro::TasaRegistrada { .. })));
+    assert!(eventos
+        .iter()
+        .any(|e| matches!(e, EventoLibro::TasaEliminada { .. })));
 
     // Segunda conexión al mismo archivo: los triggers deben rechazar todo
     let otra = Connection::open(&ruta).unwrap();
@@ -113,15 +173,24 @@ fn eventos_nuevos_son_inmutables_en_sqlite() {
 
     for (id, tipo) in &filas {
         assert!(
-            otra.execute("UPDATE eventos_libro SET evento_json = '{}' WHERE id = ?1", [id]).is_err(),
+            otra.execute(
+                "UPDATE eventos_libro SET evento_json = '{}' WHERE id = ?1",
+                [id]
+            )
+            .is_err(),
             "UPDATE debe fallar sobre {tipo} ({id})"
         );
         assert!(
-            otra.execute("DELETE FROM eventos_libro WHERE id = ?1", [id]).is_err(),
+            otra.execute("DELETE FROM eventos_libro WHERE id = ?1", [id])
+                .is_err(),
             "DELETE debe fallar sobre {tipo} ({id})"
         );
     }
-    assert_eq!(repo.listar_eventos().unwrap(), eventos, "el libro no cambió");
+    assert_eq!(
+        repo.listar_eventos().unwrap(),
+        eventos,
+        "el libro no cambió"
+    );
 
     drop(otra);
     drop(repo);
@@ -148,17 +217,32 @@ fn escenario_2_3_sobre_sqlite_persiste_al_reabrir() {
     let repo = RepositorioLibroSqlite::abrir(&ruta).unwrap();
     let p = patrimonio(&repo, &reloj, T1);
     assert_eq!(p.moneda_base, "USD", "MonedaBaseCambiada se reconstruye");
-    assert_eq!(p.total_consolidado.as_deref(), Some("75.00"), "TasaRegistrada se reconstruye");
+    assert_eq!(
+        p.total_consolidado.as_deref(),
+        Some("75.00"),
+        "TasaRegistrada se reconstruye"
+    );
     assert!(p.tasa_faltante.is_none());
 
     // La tasa eliminada sigue eliminada tras reabrir (a 2026-10-25 aplica la de 0.025, no la de 9.99)
     let p = patrimonio(&repo, &reloj, "2026-10-25");
-    assert_eq!(p.total_consolidado.as_deref(), Some("75.00"), "TasaEliminada se reconstruye ({id_mala})");
+    assert_eq!(
+        p.total_consolidado.as_deref(),
+        Some("75.00"),
+        "TasaEliminada se reconstruye ({id_mala})"
+    );
 
     // La moneda propia sobrevive: se puede usar como base
     let mut repo = repo;
-    cambiar_moneda_base(&mut repo, &reloj, &mut ids, CambiarMonedaBaseDto { nuevo_codigo: "CAD".into() })
-        .expect("CAD debe existir tras reabrir");
+    cambiar_moneda_base(
+        &mut repo,
+        &reloj,
+        &mut ids,
+        CambiarMonedaBaseDto {
+            nuevo_codigo: "CAD".into(),
+        },
+    )
+    .expect("CAD debe existir tras reabrir");
 
     drop(repo);
     let _ = std::fs::remove_file(&ruta);

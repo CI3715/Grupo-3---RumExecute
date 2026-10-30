@@ -1,6 +1,4 @@
-use crate::aplicacion::dto::{
-    ListarHistorialTasasEntrada, TasaCambioDto,
-};
+use crate::aplicacion::dto::{ListarHistorialTasasEntrada, TasaCambioDto};
 use crate::aplicacion::proyeccion_monedas::{
     catalogo_desde_eventos, historial_tasas_desde_eventos, validar_par_en_catalogo,
 };

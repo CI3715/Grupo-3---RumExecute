@@ -18,7 +18,10 @@ impl StringCodigo {
         let cod = s.trim().to_uppercase();
         let bytes_vec = cod.as_bytes();
 
-        if bytes_vec.len() < 3 || bytes_vec.len() > 5 || !cod.chars().all(|c| c.is_ascii_uppercase()) {
+        if bytes_vec.len() < 3
+            || bytes_vec.len() > 5
+            || !cod.chars().all(|c| c.is_ascii_uppercase())
+        {
             return Err(ErrorDominio::codigo_moneda_invalido());
         }
 
@@ -200,7 +203,7 @@ impl CatalogoMonedas {
 
         for moneda in Moneda::monedas_de_fabrica() {
             catalogo.monedas.insert(moneda.codigo, moneda);
-        };
+        }
 
         catalogo
     }
@@ -303,13 +306,9 @@ mod tests {
 
     #[test]
     fn test_crear_moneda_propia_exitosa() {
-        let moneda = Moneda::nueva_propia(
-            "CAD",
-            "Dólar canadiense".to_string(),
-            "$".to_string(),
-            5
-        )
-        .unwrap();
+        let moneda =
+            Moneda::nueva_propia("CAD", "Dólar canadiense".to_string(), "$".to_string(), 5)
+                .unwrap();
 
         assert_eq!(moneda.codigo.as_str(), "CAD");
         assert_eq!(moneda.nombre, "Dólar canadiense");
@@ -319,33 +318,16 @@ mod tests {
 
     #[test]
     fn test_rechazo_moneda_propia_invalida() {
-
         // Nombre vacío
-        assert!(Moneda::nueva_propia(
-            "CAD", 
-            "".to_string(),
-            "C$".to_string(),
-            2
-        )
-        .is_err());
+        assert!(Moneda::nueva_propia("CAD", "".to_string(), "C$".to_string(), 2).is_err());
 
         // Nombre demasiado largo
-        assert!(Moneda::nueva_propia(
-            "CAD", 
-            "C".repeat(51),
-            "C$".to_string(),
-            2
-        )
-        .is_err());
+        assert!(Moneda::nueva_propia("CAD", "C".repeat(51), "C$".to_string(), 2).is_err());
 
         // Símbolo vacío
-        assert!(Moneda::nueva_propia(
-            "CAD",
-            "Dólar canadiense".to_string(),
-            "".to_string(),
-            2
-        )
-        .is_err());
+        assert!(
+            Moneda::nueva_propia("CAD", "Dólar canadiense".to_string(), "".to_string(), 2).is_err()
+        );
 
         // Símbolo demasiado largo
         assert!(Moneda::nueva_propia(
@@ -357,13 +339,10 @@ mod tests {
         .is_err());
 
         // Decimales mayores a 8
-        assert!(Moneda::nueva_propia(
-            "CAD",
-            "Dólar canadiense".to_string(),
-            "$".to_string(),
-            9
-        )
-        .is_err());
+        assert!(
+            Moneda::nueva_propia("CAD", "Dólar canadiense".to_string(), "$".to_string(), 9)
+                .is_err()
+        );
     }
 
     #[test]
@@ -373,7 +352,7 @@ mod tests {
             .into_iter()
             .find(|m| m.codigo == CodigoMoneda::USD)
             .expect("USD debe existir en el catálogo de fábrica");
-        
+
         let json_usd = serde_json::to_string(&moneda_usd).unwrap();
         assert!(json_usd.contains("\"codigo\":\"USD\""));
         assert!(json_usd.contains("\"nombre\":\"Dólar estadounidense\""));
@@ -381,13 +360,9 @@ mod tests {
         assert!(json_usd.contains("\"decimales\":2"));
 
         // Prueba serialización de una moneda personalizada
-        let moneda_cad = Moneda::nueva_propia(
-            "CAD",
-            "Dólar canadiense".to_string(),
-            "$".to_string(),
-            2
-        )
-        .unwrap();
+        let moneda_cad =
+            Moneda::nueva_propia("CAD", "Dólar canadiense".to_string(), "$".to_string(), 2)
+                .unwrap();
 
         let json_cad = serde_json::to_string(&moneda_cad).unwrap();
         assert!(json_cad.contains("\"codigo\":\"CAD\""));
@@ -399,29 +374,25 @@ mod tests {
     #[test]
     fn test_catalogo_inicia_con_monedas_de_fabrica() {
         let catalogo = CatalogoMonedas::nuevo();
-        
+
         assert!(catalogo.obtener(&CodigoMoneda::USD).is_some());
         assert!(catalogo.obtener(&CodigoMoneda::VES).is_some());
         assert!(catalogo.obtener(&CodigoMoneda::EUR).is_some());
         assert!(catalogo.obtener(&CodigoMoneda::USDT).is_some());
-        
+
         assert_eq!(catalogo.decimales(&CodigoMoneda::USD).unwrap(), 2);
     }
 
     #[test]
     fn test_catalogo_registra_y_recupera_moneda_personalizada() {
         let mut catalogo = CatalogoMonedas::nuevo();
-        
-        let moneda_custom = Moneda::nueva_propia(
-            "BTC", 
-            "Bitcoin".to_string(), 
-            "₿".to_string(), 
-            8
-        ).unwrap();
-        
+
+        let moneda_custom =
+            Moneda::nueva_propia("BTC", "Bitcoin".to_string(), "₿".to_string(), 8).unwrap();
+
         let codigo = moneda_custom.codigo.clone();
         catalogo.registrar_moneda(moneda_custom);
-        
+
         let recuperada = catalogo.obtener(&codigo).unwrap();
         assert_eq!(recuperada.nombre, "Bitcoin");
         assert_eq!(catalogo.decimales(&codigo).unwrap(), 8);
@@ -430,10 +401,10 @@ mod tests {
     #[test]
     fn test_catalogo_falla_al_pedir_decimales_de_moneda_inexistente() {
         let catalogo = CatalogoMonedas::nuevo();
-        
+
         // Creamos un código que no hemos registrado en el catálogo
         let cod_fantasma = CodigoMoneda::parse("LTC").unwrap();
-        
+
         let err = catalogo.decimales(&cod_fantasma).unwrap_err();
         assert_eq!(err.campo, "moneda_no_encontrada");
     }
