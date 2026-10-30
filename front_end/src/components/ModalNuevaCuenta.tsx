@@ -143,9 +143,9 @@ export default function ModalNuevaCuenta({
                 className={`form-select ${tieneError("tipo") ? "input-error" : ""}`}
                 disabled={cargando}
               >
-                <option value="banco">🏦 Banco (Cuenta de ahorros / corriente)</option>
-                <option value="efectivo">💵 Efectivo (Billetes físicos, cartera)</option>
-                <option value="billetera_digital">📱 Billetera digital (PayPal, Zinli, etc.)</option>
+                <option value="banco">Banco (Cuenta de ahorros / corriente)</option>
+                <option value="efectivo">Efectivo (Billetes físicos, cartera)</option>
+                <option value="billetera_digital">Billetera digital (PayPal, Zinli, etc.)</option>
               </select>
               {tieneError("tipo") && <span className="error-text">{errorActivo?.mensaje}</span>}
             </div>
@@ -167,7 +167,7 @@ export default function ModalNuevaCuenta({
                   </option>
                 ))}
               </select>
-              <span className="helper-text">🔒 La moneda no podrá cambiarse luego</span>
+              <span className="helper-text">La moneda de la cuenta no podrá modificarse una vez creada</span>
               {tieneError("moneda") && <span className="error-text">{errorActivo?.mensaje}</span>}
             </div>
 

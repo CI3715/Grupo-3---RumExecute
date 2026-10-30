@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import SelectorEmoji from "./SelectorEmoji";
 
 export interface EntradaNuevaCategoriaForm {
   nombre: string;
@@ -29,6 +30,7 @@ export default function ModalNuevaCategoria({
 }: ModalNuevaCategoriaProps) {
   const [tipo, setTipo] = useState<"gasto" | "ingreso">(tipoInicial);
   const [nombre, setNombre] = useState("");
+  const [emoji, setEmoji] = useState(tipoInicial === "gasto" ? "🛒" : "💼");
   const [cargando, setCargando] = useState(false);
   const [errorActivo, setErrorActivo] = useState<ErrorValidacion | null>(null);
 
@@ -36,6 +38,7 @@ export default function ModalNuevaCategoria({
     if (isOpen) {
       setTipo(tipoInicial);
       setNombre("");
+      setEmoji(tipoInicial === "gasto" ? "🛒" : "💼");
       setErrorActivo(null);
     }
   }, [isOpen, tipoInicial]);
@@ -60,10 +63,14 @@ export default function ModalNuevaCategoria({
       });
     }
 
+    // Si seleccionó un emoji y el texto aún no lo tiene al inicio, adjuntarlo
+    const tieneEmojiAlInicio = /\p{Extended_Pictographic}/u.test(nombreLimpio.slice(0, 4));
+    const nombreFinal = (emoji && !tieneEmojiAlInicio) ? `${emoji} ${nombreLimpio}` : nombreLimpio;
+
     setCargando(true);
     try {
       const exito = await onSubmit({
-        nombre: nombreLimpio,
+        nombre: nombreFinal,
         tipo,
       });
       if (exito) {
@@ -104,21 +111,23 @@ export default function ModalNuevaCategoria({
             type="button"
             onClick={() => {
               setTipo("gasto");
+              setEmoji("🛒");
               setErrorActivo(null);
             }}
             className={`tab-btn ${tipo === "gasto" ? "active-expense" : ""}`}
           >
-            📉 Categoría de Gasto
+            Categoría de Gasto
           </button>
           <button
             type="button"
             onClick={() => {
               setTipo("ingreso");
+              setEmoji("💼");
               setErrorActivo(null);
             }}
             className={`tab-btn ${tipo === "ingreso" ? "active-income" : ""}`}
           >
-            📈 Categoría de Ingreso
+            Categoría de Ingreso
           </button>
         </div>
 
@@ -129,27 +138,35 @@ export default function ModalNuevaCategoria({
             )}
 
             <div className="form-group">
-              <label className="form-label">Nombre de la Categoría</label>
-              <input
-                type="text"
-                value={nombre}
-                onChange={(e) => {
-                  setNombre(e.target.value);
-                  if (errorActivo?.campo === "categoria") setErrorActivo(null);
-                }}
-                placeholder={
-                  tipo === "gasto"
-                    ? "Ej. Gimnasio, Cursos online, Mascotas"
-                    : "Ej. Freelance, Inversiones, Bono"
-                }
-                className={`form-input ${
-                  errorActivo?.campo === "categoria" ? "input-error" : ""
-                }`}
-                disabled={cargando}
-                autoFocus
-              />
+              <label className="form-label">Icono y Nombre de la Categoría</label>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <SelectorEmoji
+                  emojiSeleccionado={emoji}
+                  onSeleccionarEmoji={setEmoji}
+                  tipo={tipo}
+                />
+                <input
+                  type="text"
+                  value={nombre}
+                  onChange={(e) => {
+                    setNombre(e.target.value);
+                    if (errorActivo?.campo === "categoria") setErrorActivo(null);
+                  }}
+                  placeholder={
+                    tipo === "gasto"
+                      ? "Ej. Gimnasio, Cursos online, Mascotas"
+                      : "Ej. Freelance, Inversiones, Bono"
+                  }
+                  className={`form-input ${
+                    errorActivo?.campo === "categoria" ? "input-error" : ""
+                  }`}
+                  disabled={cargando}
+                  autoFocus
+                  style={{ flex: 1 }}
+                />
+              </div>
               <span className="helper-text">
-                No puede haber dos categorías de {tipo} con el mismo nombre.
+                Puedes elegir un icono descriptivo y escribir el nombre de tu categoría.
               </span>
               {errorActivo?.campo === "categoria" && (
                 <span className="error-text">{errorActivo.mensaje}</span>
