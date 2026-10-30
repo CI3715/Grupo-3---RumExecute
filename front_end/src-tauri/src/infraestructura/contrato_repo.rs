@@ -24,7 +24,7 @@ fn crear_evento(id_evento: &str, id_cuenta: &str) -> EventoLibro {
             nombre: format!("Cuenta {id_cuenta}"),
             tipo: TipoCuenta::Banco,
             moneda: CodigoMoneda::USD,
-            saldo_inicial: Monto::parse_saldo_inicial("10,00", CodigoMoneda::USD).unwrap(),
+            saldo_inicial: Monto::parse_saldo_inicial("10,00", CodigoMoneda::USD, 2).unwrap(),
         },
     )
 }
@@ -38,7 +38,7 @@ fn crear_evento_movimiento() -> EventoLibro {
             id_movimiento: "movimiento-1".to_string(),
             id_cuenta: "cuenta-1".to_string(),
             tipo: TipoMovimiento::Gasto,
-            monto: Monto::parse_movimiento("500,00", CodigoMoneda::USD).unwrap(),
+            monto: Monto::parse_movimiento("500,00", CodigoMoneda::USD, 2).unwrap(),
             categoria: None,
             fecha: "2026-10-15".to_string(),
             descripcion: "Gasto de prueba".to_string(),
@@ -56,8 +56,8 @@ fn crear_evento_ajuste() -> EventoLibro {
             id_cuenta: "cuenta-1".to_string(),
             id_movimiento_original: "movimiento-1".to_string(),
             monto_ajuste: Monto::new(Decimal::new(45_000, 2), CodigoMoneda::USD),
-            monto_original: Monto::parse_movimiento("500,00", CodigoMoneda::USD).unwrap(),
-            monto_nuevo: Monto::parse_movimiento("50,00", CodigoMoneda::USD).unwrap(),
+            monto_original: Monto::parse_movimiento("500,00", CodigoMoneda::USD, 2).unwrap(),
+            monto_nuevo: Monto::parse_movimiento("50,00", CodigoMoneda::USD, 2).unwrap(),
             fecha: "2026-10-15".to_string(),
             descripcion: "Corrección de prueba".to_string(),
         },

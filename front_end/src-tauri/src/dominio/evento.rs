@@ -1,3 +1,4 @@
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use super::categoria::{Categoria, TipoCategoria};
@@ -5,6 +6,7 @@ use super::cuenta::TipoCuenta;
 use super::moneda::CodigoMoneda;
 use super::monto::Monto;
 use super::movimiento::TipoMovimiento;
+use super::tasa_cambio::ParMonedas;
 
 /// Datos específicos asociados a la creación de una cuenta en el libro.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -49,6 +51,40 @@ pub struct DatosCategoriaCreada {
     pub tipo: TipoCategoria,
 }
 
+/// Datos específicos asociados al registro de una nueva tasa de cambio.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DatosTasaRegistrada {
+    pub par_monedas: ParMonedas,
+    pub valor: Decimal,
+    pub fecha: String,
+    pub fuente: String,
+}
+
+/// Datos específicos asociados a la eliminación lógica de una tasa de cambio registrada.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DatosTasaEliminada {
+    pub par_monedas: ParMonedas,
+    pub fecha: String,
+    pub fuente: String,
+    #[serde(default)]
+    pub id_tasa: Option<String>,
+}
+
+/// Datos específicos asociados al cambio de la moneda base de consolidación de la aplicación.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DatosMonedaBaseCambiada {
+    pub nueva_moneda: CodigoMoneda,
+}
+
+/// Datos específicos asociados a la creación de una moneda personalizada.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DatosMonedaCreada {
+    pub codigo: CodigoMoneda,
+    pub nombre: String,
+    pub simbolo: String,
+    pub decimales: u32,
+}
+
 /// Evento inmutable del libro contable (Event Sourcing - INV-13, INV-04).
 ///
 /// Cada evento representa un hecho consumado que nunca se modifica ni se borra.
@@ -88,6 +124,34 @@ pub enum EventoLibro {
         momento_registro: String,
         dispositivo_origen: String,
         datos: DatosCategoriaCreada,
+    },
+    TasaRegistrada {
+        id: String,
+        tipo: String,
+        momento_registro: String,
+        dispositivo_origen: String,
+        datos: DatosTasaRegistrada,
+    },
+    TasaEliminada {
+        id: String,
+        tipo: String,
+        momento_registro: String,
+        dispositivo_origen: String,
+        datos: DatosTasaEliminada,
+    },
+    MonedaBaseCambiada {
+        id: String,
+        tipo: String,
+        momento_registro: String,
+        dispositivo_origen: String,
+        datos: DatosMonedaBaseCambiada,
+    },
+    MonedaCreada {
+        id: String,
+        tipo: String,
+        momento_registro: String,
+        dispositivo_origen: String,
+        datos: DatosMonedaCreada,
     },
 }
 
@@ -156,13 +220,81 @@ impl EventoLibro {
         }
     }
 
+    /// Constructor para un evento de registro de tasa nueva
+    pub fn nuevo_tasa_registrada(
+        id: impl Into<String>,
+        momento_registro: impl Into<String>,
+        dispositivo_origen: impl Into<String>,
+        datos: DatosTasaRegistrada,
+    ) -> Self {
+        Self::TasaRegistrada {
+            id: id.into(),
+            tipo: "tasa_registrada".to_string(),
+            momento_registro: momento_registro.into(),
+            dispositivo_origen: dispositivo_origen.into(),
+            datos,
+        }
+    }
+
+    /// Constructor para un evento de eliminación de tasa nueva
+    pub fn nuevo_tasa_eliminada(
+        id: impl Into<String>,
+        momento_registro: impl Into<String>,
+        dispositivo_origen: impl Into<String>,
+        datos: DatosTasaEliminada,
+    ) -> Self {
+        Self::TasaEliminada {
+            id: id.into(),
+            tipo: "tasa_eliminada".to_string(),
+            momento_registro: momento_registro.into(),
+            dispositivo_origen: dispositivo_origen.into(),
+            datos,
+        }
+    }
+
+    /// Constructor para un evento de cambio de moneda base
+    pub fn nuevo_moneda_base_cambiada(
+        id: impl Into<String>,
+        momento_registro: impl Into<String>,
+        dispositivo_origen: impl Into<String>,
+        datos: DatosMonedaBaseCambiada,
+    ) -> Self {
+        Self::MonedaBaseCambiada {
+            id: id.into(),
+            tipo: "moneda_base_cambiada".to_string(),
+            momento_registro: momento_registro.into(),
+            dispositivo_origen: dispositivo_origen.into(),
+            datos,
+        }
+    }
+
+    /// Constructor para un evento de creación de moneda
+    pub fn nuevo_moneda_creada(
+        id: impl Into<String>,
+        momento_registro: impl Into<String>,
+        dispositivo_origen: impl Into<String>,
+        datos: DatosMonedaCreada,
+    ) -> Self {
+        Self::MonedaCreada {
+            id: id.into(),
+            tipo: "moneda_creada".to_string(),
+            momento_registro: momento_registro.into(),
+            dispositivo_origen: dispositivo_origen.into(),
+            datos,
+        }
+    }
+
     /// Retorna el ID único del evento.
     pub fn id(&self) -> &str {
         match self {
             EventoLibro::CuentaCreada { id, .. }
             | EventoLibro::MovimientoRegistrado { id, .. }
             | EventoLibro::MovimientoCorregido { id, .. }
-            | EventoLibro::CategoriaCreada { id, .. } => id,
+            | EventoLibro::CategoriaCreada { id, .. }
+            | EventoLibro::TasaRegistrada { id, .. }
+            | EventoLibro::TasaEliminada { id, .. }
+            | EventoLibro::MonedaBaseCambiada { id, .. }
+            | EventoLibro::MonedaCreada { id, .. } => id,
         }
     }
 
@@ -172,43 +304,39 @@ impl EventoLibro {
             EventoLibro::CuentaCreada { tipo, .. }
             | EventoLibro::MovimientoRegistrado { tipo, .. }
             | EventoLibro::MovimientoCorregido { tipo, .. }
-            | EventoLibro::CategoriaCreada { tipo, .. } => tipo,
+            | EventoLibro::CategoriaCreada { tipo, .. }
+            | EventoLibro::TasaRegistrada { tipo, .. }
+            | EventoLibro::TasaEliminada { tipo, .. }
+            | EventoLibro::MonedaBaseCambiada { tipo, .. }
+            | EventoLibro::MonedaCreada { tipo, .. } => tipo,
         }
     }
 
     /// Retorna el momento de registro (ISO 8601).
     pub fn momento_registro(&self) -> &str {
         match self {
-            EventoLibro::CuentaCreada {
-                momento_registro, ..
-            }
-            | EventoLibro::MovimientoRegistrado {
-                momento_registro, ..
-            }
-            | EventoLibro::MovimientoCorregido {
-                momento_registro, ..
-            }
-            | EventoLibro::CategoriaCreada {
-                momento_registro, ..
-            } => momento_registro,
+            EventoLibro::CuentaCreada { momento_registro, .. }
+            | EventoLibro::MovimientoRegistrado { momento_registro, .. }
+            | EventoLibro::MovimientoCorregido { momento_registro, .. }
+            | EventoLibro::CategoriaCreada { momento_registro, .. }
+            | EventoLibro::TasaRegistrada { momento_registro, .. }
+            | EventoLibro::TasaEliminada { momento_registro, .. }
+            | EventoLibro::MonedaBaseCambiada { momento_registro, .. }
+            | EventoLibro::MonedaCreada { momento_registro, .. } => momento_registro,
         }
     }
 
     /// Retorna el dispositivo origen donde se originó el evento.
     pub fn dispositivo_origen(&self) -> &str {
         match self {
-            EventoLibro::CuentaCreada {
-                dispositivo_origen, ..
-            }
-            | EventoLibro::MovimientoRegistrado {
-                dispositivo_origen, ..
-            }
-            | EventoLibro::MovimientoCorregido {
-                dispositivo_origen, ..
-            }
-            | EventoLibro::CategoriaCreada {
-                dispositivo_origen, ..
-            } => dispositivo_origen,
+            EventoLibro::CuentaCreada { dispositivo_origen, .. }
+            | EventoLibro::MovimientoRegistrado { dispositivo_origen, .. }
+            | EventoLibro::MovimientoCorregido { dispositivo_origen, .. }
+            | EventoLibro::CategoriaCreada { dispositivo_origen, .. }
+            | EventoLibro::TasaRegistrada { dispositivo_origen, .. }
+            | EventoLibro::TasaEliminada { dispositivo_origen, .. }
+            | EventoLibro::MonedaBaseCambiada { dispositivo_origen, .. }
+            | EventoLibro::MonedaCreada { dispositivo_origen, .. } => dispositivo_origen,
         }
     }
 
@@ -218,7 +346,11 @@ impl EventoLibro {
             EventoLibro::CuentaCreada { datos, .. } => Some(&datos.id_cuenta),
             EventoLibro::MovimientoRegistrado { datos, .. } => Some(&datos.id_cuenta),
             EventoLibro::MovimientoCorregido { datos, .. } => Some(&datos.id_cuenta),
-            EventoLibro::CategoriaCreada { .. } => None,
+            EventoLibro::CategoriaCreada { .. }
+            | EventoLibro::TasaRegistrada { .. }
+            | EventoLibro::TasaEliminada { .. }
+            | EventoLibro::MonedaBaseCambiada { .. }
+            | EventoLibro::MonedaCreada { .. } => None,
         }
     }
 }
@@ -230,7 +362,7 @@ mod tests {
 
     #[test]
     fn test_creacion_evento_cuenta_creada() {
-        let saldo = Monto::nuevo_saldo_inicial(Decimal::new(30000, 2), CodigoMoneda::USD).unwrap();
+        let saldo = Monto::nuevo_saldo_inicial(Decimal::new(30000, 2), CodigoMoneda::USD, 2).unwrap();
         let datos = DatosCuentaCreada {
             id_cuenta: "cta-123".to_string(),
             nombre: "Cuenta Ahorro".to_string(),

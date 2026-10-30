@@ -77,8 +77,8 @@ mod tests {
     use crate::dominio::moneda::CodigoMoneda;
     use crate::infraestructura::memoria_repo::RepositorioLibroEnMemoria;
 
-    fn monto(texto: &str, moneda: CodigoMoneda) -> Monto {
-        Monto::parse_saldo_inicial(texto, moneda).unwrap()
+    fn monto(texto: &str, moneda: CodigoMoneda, decimales: u32) -> Monto {
+        Monto::parse_saldo_inicial(texto, moneda, decimales).unwrap()
     }
 
     fn evento(
@@ -87,13 +87,14 @@ mod tests {
         nombre: &str,
         moneda: CodigoMoneda,
         saldo: &str,
+        decimales: u32,
     ) -> EventoLibro {
         let datos = DatosCuentaCreada {
             id_cuenta: id_cuenta.to_string(),
             nombre: nombre.to_string(),
             tipo: TipoCuenta::Banco,
             moneda,
-            saldo_inicial: monto(saldo, moneda),
+            saldo_inicial: monto(saldo, moneda, decimales),
         };
         EventoLibro::nuevo_cuenta_creada(id_evento, "2026-10-14T20:00:00Z", "disp-test", datos)
     }
@@ -109,9 +110,9 @@ mod tests {
     #[test]
     fn reconstruye_las_cuentas_en_orden_de_creacion() {
         let mut repo = RepositorioLibroEnMemoria::nuevo();
-        repo.guardar(evento("e1", "c1", "Ahorros", CodigoMoneda::USD, "100,00"))
+        repo.guardar(evento("e1", "c1", "Ahorros", CodigoMoneda::USD, "100,00", 2))
             .unwrap();
-        repo.guardar(evento("e2", "c2", "Efectivo", CodigoMoneda::VES, "20,50"))
+        repo.guardar(evento("e2", "c2", "Efectivo", CodigoMoneda::VES, "20,50", 2))
             .unwrap();
 
         let resumen = listar_cuentas(&repo).unwrap();
@@ -127,11 +128,11 @@ mod tests {
     fn subtotales_separados_por_moneda_sin_mezclarlas() {
         // INV-02 y Criterio de aceptación #4
         let mut repo = RepositorioLibroEnMemoria::nuevo();
-        repo.guardar(evento("e1", "c1", "Ahorros", CodigoMoneda::USD, "100,00"))
+        repo.guardar(evento("e1", "c1", "Ahorros", CodigoMoneda::USD, "100,00", 2))
             .unwrap();
-        repo.guardar(evento("e2", "c2", "Caja", CodigoMoneda::USD, "50,00"))
+        repo.guardar(evento("e2", "c2", "Caja", CodigoMoneda::USD, "50,00", 2))
             .unwrap();
-        repo.guardar(evento("e3", "c3", "Efectivo", CodigoMoneda::VES, "20,00"))
+        repo.guardar(evento("e3", "c3", "Efectivo", CodigoMoneda::VES, "20,00", 2))
             .unwrap();
 
         let resumen = listar_cuentas(&repo).unwrap();
@@ -139,25 +140,25 @@ mod tests {
         assert_eq!(resumen.subtotales_por_moneda.len(), 2);
         assert!(resumen
             .subtotales_por_moneda
-            .contains(&monto("150,00", CodigoMoneda::USD)));
+            .contains(&monto("150,00", CodigoMoneda::USD, 2)));
         assert!(resumen
             .subtotales_por_moneda
-            .contains(&monto("20,00", CodigoMoneda::VES)));
+            .contains(&monto("20,00", CodigoMoneda::VES, 2)));
     }
 
     #[test]
     fn inv13_aplicar_dos_veces_el_mismo_evento_equivale_a_aplicarlo_una() {
         let mut repo_una_vez = RepositorioLibroEnMemoria::nuevo();
         repo_una_vez
-            .guardar(evento("e1", "c1", "Ahorros", CodigoMoneda::USD, "100,00"))
+            .guardar(evento("e1", "c1", "Ahorros", CodigoMoneda::USD, "100,00", 2))
             .unwrap();
 
         let mut repo_dos_veces = RepositorioLibroEnMemoria::nuevo();
         repo_dos_veces
-            .guardar(evento("e1", "c1", "Ahorros", CodigoMoneda::USD, "100,00"))
+            .guardar(evento("e1", "c1", "Ahorros", CodigoMoneda::USD, "100,00", 2))
             .unwrap();
         repo_dos_veces
-            .guardar(evento("e1", "c1", "Ahorros", CodigoMoneda::USD, "100,00"))
+            .guardar(evento("e1", "c1", "Ahorros", CodigoMoneda::USD, "100,00", 2))
             .unwrap();
 
         let una = listar_cuentas(&repo_una_vez).unwrap();
