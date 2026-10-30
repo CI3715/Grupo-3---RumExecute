@@ -199,7 +199,7 @@ impl CatalogoMonedas {
         };
 
         for moneda in Moneda::monedas_de_fabrica() {
-            catalogo.monedas.insert(moneda.codigo.clone(), moneda);
+            catalogo.monedas.insert(moneda.codigo, moneda);
         };
 
         catalogo
@@ -208,7 +208,7 @@ impl CatalogoMonedas {
     // Registra una moneda personalizada en el catálogo.
     // Esto se llama al procesar un evento `MonedaCreada`.
     pub fn registrar_moneda(&mut self, moneda: Moneda) {
-        self.monedas.insert(moneda.codigo.clone(), moneda);
+        self.monedas.insert(moneda.codigo, moneda);
     }
 
     // Recupera la entidad `Moneda` completa por su código.

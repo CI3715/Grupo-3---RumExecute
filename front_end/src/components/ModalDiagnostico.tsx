@@ -82,7 +82,7 @@ export default function ModalDiagnostico({ isOpen, onClose }: ModalDiagnosticoPr
           </div>
 
           <button onClick={handlePing} disabled={loading} className="btn btn-primary" style={{ width: "100%" }}>
-            {loading ? "Verificando enlace..." : "📡 Probar Conexión (Ping)"}
+            {loading ? "Verificando enlace..." : "Probar Conexión (Ping)"}
           </button>
 
           {data && (

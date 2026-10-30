@@ -99,7 +99,7 @@ pub(crate) fn moneda_base_desde_eventos(eventos: &[EventoLibro]) -> CodigoMoneda
             EventoLibro::MonedaBaseCambiada { datos, .. } => Some(datos.nueva_moneda),
             _ => None,
         })
-        .last()
+        .next_back()
         .unwrap_or(CodigoMoneda::USD)
 }
 

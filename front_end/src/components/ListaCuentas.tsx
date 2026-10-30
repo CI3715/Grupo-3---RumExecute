@@ -15,10 +15,10 @@ interface ListaCuentasProps {
   onSeleccionarCuenta?: (id: string) => void;
 }
 
-const CONFIG_TIPOS: Record<string, { etiqueta: string; icono: string; bg: string; text: string }> = {
-  efectivo: { etiqueta: "Efectivo", icono: "💵", bg: "var(--badge-cash-bg)", text: "var(--badge-cash-text)" },
-  banco: { etiqueta: "Banco", icono: "🏦", bg: "var(--badge-bank-bg)", text: "var(--badge-bank-text)" },
-  billetera_digital: { etiqueta: "Billetera digital", icono: "📱", bg: "var(--badge-wallet-bg)", text: "var(--badge-wallet-text)" },
+const CONFIG_TIPOS: Record<string, { etiqueta: string; bg: string; text: string }> = {
+  efectivo: { etiqueta: "Efectivo", bg: "var(--badge-cash-bg)", text: "var(--badge-cash-text)" },
+  banco: { etiqueta: "Banco", bg: "var(--badge-bank-bg)", text: "var(--badge-bank-text)" },
+  billetera_digital: { etiqueta: "Billetera digital", bg: "var(--badge-wallet-bg)", text: "var(--badge-wallet-text)" },
 };
 
 export default function ListaCuentas({
@@ -30,7 +30,6 @@ export default function ListaCuentas({
     return (
       <section style={{ width: "100%", marginBottom: "48px" }}>
         <div className="empty-card">
-          <div style={{ fontSize: "32px", marginBottom: "14px" }}>👛</div>
           <h3 style={{ fontSize: "20px", fontWeight: 700, marginBottom: "8px" }}>
             Aún no tienes cuentas registradas
           </h3>
@@ -48,14 +47,19 @@ export default function ListaCuentas({
 
   return (
     <section style={{ width: "100%", marginBottom: "48px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "14px", fontSize: "11px", color: "var(--text-secondary)", fontWeight: 600 }}>
-        <span style={{ letterSpacing: "1px" }}>TUS CUENTAS ({cuentas.length})</span>
-        <span>Haz clic en una cuenta para ver sus movimientos</span>
-      </div>
-
       <div className="table-card">
-        <div style={{ height: "38px", padding: "0 24px", display: "flex", alignItems: "center", fontSize: "10px", fontWeight: 700, color: "var(--text-secondary)", borderBottom: "1px solid var(--border-subtle)" }}>
-          <span style={{ flex: 1.2 }}>CUENTA</span>
+        <div className="account-row-header" style={{
+          display: "flex",
+          alignItems: "center",
+          padding: "12px 24px",
+          background: "var(--bg-app)",
+          borderBottom: "1px solid var(--border-subtle)",
+          fontSize: "11px",
+          fontWeight: 700,
+          color: "var(--text-secondary)",
+          letterSpacing: "0.5px"
+        }}>
+          <span style={{ flex: 1.2 }}>NOMBRE DE CUENTA</span>
           <span style={{ width: "160px" }}>TIPO</span>
           <span style={{ width: "180px", textAlign: "right" }}>SALDO DISPONIBLE</span>
           <span style={{ width: "140px", textAlign: "right" }}>DETALLE</span>
@@ -64,7 +68,6 @@ export default function ListaCuentas({
         {cuentas.map((cuenta) => {
           const config = CONFIG_TIPOS[cuenta.tipo.toLowerCase()] || {
             etiqueta: cuenta.tipo,
-            icono: "💰",
             bg: "#F1F5F9",
             text: "#475569",
           };
@@ -76,14 +79,12 @@ export default function ListaCuentas({
               className="account-row"
               title="Ver movimientos y registrar gastos o ingresos"
             >
-              <div style={{ flex: 1.2, display: "flex", alignItems: "center", gap: "16px" }}>
-                <div style={{ width: "40px", height: "40px", borderRadius: "10px", border: "1px solid var(--border-subtle)", backgroundColor: "var(--bg-app)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>
-                  {config.icono}
-                </div>
+              <div style={{ flex: 1.2, display: "flex", alignItems: "center", gap: "12px" }}>
+                <span className="currency-code-pill">{cuenta.moneda}</span>
                 <div>
                   <div style={{ fontSize: "14px", fontWeight: 600 }}>{cuenta.nombre}</div>
                   <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
-                    {cuenta.moneda} · Moneda fija
+                    Moneda fija ({cuenta.moneda})
                   </div>
                 </div>
               </div>

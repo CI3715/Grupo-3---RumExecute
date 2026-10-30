@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import SelectorEmoji from "./SelectorEmoji";
 import {
   CATEGORIAS_GASTO,
   CATEGORIAS_INGRESO,
@@ -60,6 +61,7 @@ export default function ModalNuevoMovimiento({
   const [categoria, setCategoria] = useState("");
   const [mostrarCrearCategoria, setMostrarCrearCategoria] = useState(false);
   const [nombreNuevaCategoria, setNombreNuevaCategoria] = useState("");
+  const [emojiNuevaCategoria, setEmojiNuevaCategoria] = useState("🛒");
   const [guardandoCategoria, setGuardandoCategoria] = useState(false);
   const [nota, setNota] = useState("");
   const [confirmaNegativo, setConfirmaNegativo] = useState(false);
@@ -77,6 +79,7 @@ export default function ModalNuevoMovimiento({
       setCategoria(lista[0] || "");
       setMostrarCrearCategoria(false);
       setNombreNuevaCategoria("");
+      setEmojiNuevaCategoria(tipoInicial === "gasto" ? "🛒" : "💼");
       setNota("");
       setConfirmaNegativo(false);
       setErrorActivo(null);
@@ -93,6 +96,7 @@ export default function ModalNuevoMovimiento({
     setTipo(nuevoTipo);
     setMostrarCrearCategoria(false);
     setNombreNuevaCategoria("");
+    setEmojiNuevaCategoria(nuevoTipo === "gasto" ? "🛒" : "💼");
     const lista = nuevoTipo === "gasto" ? categoriasGasto : categoriasIngreso;
     setCategoria(lista[0] || "");
     setErrorActivo(null);
@@ -105,13 +109,16 @@ export default function ModalNuevoMovimiento({
       return;
     }
 
+    const tieneEmojiAlInicio = /\p{Extended_Pictographic}/u.test(nombreLimpio.slice(0, 4));
+    const nombreFinal = (emojiNuevaCategoria && !tieneEmojiAlInicio) ? `${emojiNuevaCategoria} ${nombreLimpio}` : nombreLimpio;
+
     setGuardandoCategoria(true);
     setErrorActivo(null);
     try {
       if (onCrearCategoria) {
-        await onCrearCategoria({ nombre: nombreLimpio, tipo });
+        await onCrearCategoria({ nombre: nombreFinal, tipo });
       }
-      setCategoria(nombreLimpio);
+      setCategoria(nombreFinal);
       setNombreNuevaCategoria("");
       setMostrarCrearCategoria(false);
     } catch (err: any) {
@@ -228,14 +235,14 @@ export default function ModalNuevoMovimiento({
             onClick={() => handleCambiarTipo("gasto")}
             className={`tab-btn ${tipo === "gasto" ? "active-expense" : ""}`}
           >
-            📉 Gasto (Salida)
+            Gasto (Salida)
           </button>
           <button
             type="button"
             onClick={() => handleCambiarTipo("ingreso")}
             className={`tab-btn ${tipo === "ingreso" ? "active-income" : ""}`}
           >
-            📈 Ingreso (Entrada)
+            Ingreso (Entrada)
           </button>
         </div>
 
@@ -341,7 +348,12 @@ export default function ModalNuevoMovimiento({
                   <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>
                     Crear nueva categoría de {tipo === "gasto" ? "Gasto" : "Ingreso"}:
                   </div>
-                  <div style={{ display: "flex", gap: "8px" }}>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    <SelectorEmoji
+                      emojiSeleccionado={emojiNuevaCategoria}
+                      onSeleccionarEmoji={setEmojiNuevaCategoria}
+                      tipo={tipo}
+                    />
                     <input
                       type="text"
                       value={nombreNuevaCategoria}
@@ -355,16 +367,17 @@ export default function ModalNuevoMovimiento({
                           handleCrearCategoriaDirecta();
                         }
                       }}
-                      placeholder="Ej. Gimnasio, Cursos online, Freelance..."
+                      placeholder="Ej. Gimnasio, Freelance..."
                       className={`form-input ${tieneError("categoria") ? "input-error" : ""}`}
                       disabled={guardandoCategoria || cargando}
                       autoFocus
+                      style={{ flex: 1 }}
                     />
                     <button
                       type="button"
                       onClick={handleCrearCategoriaDirecta}
                       className="btn btn-primary"
-                      style={{ padding: "6px 12px", fontSize: "13px", whiteSpace: "nowrap" }}
+                      style={{ padding: "6px 14px", fontSize: "13px", whiteSpace: "nowrap" }}
                       disabled={guardandoCategoria || !nombreNuevaCategoria.trim() || cargando}
                     >
                       {guardandoCategoria ? "Guardando..." : "Guardar categoría"}

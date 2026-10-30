@@ -36,9 +36,9 @@ interface DetalleCuentaProps {
 }
 
 const ETIQUETA_TIPO: Record<string, string> = {
-  efectivo: "💵 Efectivo",
-  banco: "🏦 Banco",
-  billetera_digital: "📱 Billetera digital",
+  efectivo: "Efectivo",
+  banco: "Banco",
+  billetera_digital: "Billetera digital",
 };
 
 export default function DetalleCuenta({
@@ -73,7 +73,6 @@ export default function DetalleCuenta({
           ← Volver a Mis Cuentas
         </button>
         <div className="security-pill">
-          <span>🔒</span>
           <span>100% Local y Privado</span>
         </div>
       </div>
@@ -190,7 +189,6 @@ export default function DetalleCuenta({
 
         {cuenta.movimientos.length === 0 ? (
           <div className="empty-card" style={{ borderStyle: "dashed" }}>
-            <div style={{ fontSize: "32px", marginBottom: "8px" }}>📖</div>
             <h4 style={{ fontSize: "15px", fontWeight: 700 }}>Aún no hay movimientos en esta cuenta</h4>
             <p className="helper-text" style={{ maxWidth: "420px", marginTop: "4px" }}>
               Comienza registrando tu primera compra o entrada de dinero con los botones superiores.
@@ -225,6 +223,9 @@ export default function DetalleCuenta({
                     ? ((mov.categoria as any).nombre || (mov.categoria as any).id || "Varios")
                     : String(mov.categoria || "Varios");
 
+                  const matchEmoji = nombreCat.match(/^(\p{Extended_Pictographic})/u);
+                  const iconoMostrar = matchEmoji ? "" : (ICONOS_CATEGORIAS[nombreCat] || "🏷️");
+
                   return (
                     <tr
                       key={mov.id}
@@ -238,7 +239,7 @@ export default function DetalleCuenta({
                       </td>
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                          <span style={{ fontSize: "18px" }}>{ICONOS_CATEGORIAS[nombreCat] || "🏷️"}</span>
+                          {iconoMostrar && <span style={{ fontSize: "18px" }}>{iconoMostrar}</span>}
                           <div>
                             <div style={{ fontWeight: 600 }}>{nombreCat}</div>
                             <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
@@ -273,11 +274,11 @@ export default function DetalleCuenta({
                       </td>
                       <td style={{ textAlign: "center" }}>
                         {esCorregido ? (
-                          <span className="badge-pill badge-corregido">⚪ Corregido</span>
+                          <span className="badge-pill badge-corregido">Corregido</span>
                         ) : esAjuste ? (
-                          <span className="badge-pill badge-ajuste">🔵 Ajuste</span>
+                          <span className="badge-pill badge-ajuste">Ajuste</span>
                         ) : (
-                          <span className="badge-pill badge-vigente">🟢 Vigente</span>
+                          <span className="badge-pill badge-vigente">Vigente</span>
                         )}
                       </td>
                       <td style={{ textAlign: "right" }}>
