@@ -114,6 +114,7 @@ mod tests {
     fn las_cuentas_movimientos_y_ajustes_persistidos_no_se_pueden_actualizar_ni_eliminar() {
         let mut repo = RepositorioLibroSqlite::abrir(":memory:").unwrap();
         let moneda = CodigoMoneda::USD;
+        let decimales = 2;
         let eventos = [
             EventoLibro::nuevo_cuenta_creada(
                 "evento-cuenta",
@@ -135,7 +136,7 @@ mod tests {
                     id_movimiento: "movimiento-1".to_string(),
                     id_cuenta: "cuenta-1".to_string(),
                     tipo: TipoMovimiento::Gasto,
-                    monto: Monto::parse_movimiento("500,00", moneda).unwrap(),
+                    monto: Monto::parse_movimiento("500,00", moneda, decimales).unwrap(),
                     categoria: None,
                     fecha: "2026-10-15".to_string(),
                     descripcion: "Gasto de prueba".to_string(),
@@ -150,8 +151,8 @@ mod tests {
                     id_cuenta: "cuenta-1".to_string(),
                     id_movimiento_original: "movimiento-1".to_string(),
                     monto_ajuste: Monto::new(Decimal::new(45_000, 2), moneda),
-                    monto_original: Monto::parse_movimiento("500,00", moneda).unwrap(),
-                    monto_nuevo: Monto::parse_movimiento("50,00", moneda).unwrap(),
+                    monto_original: Monto::parse_movimiento("500,00", moneda, decimales).unwrap(),
+                    monto_nuevo: Monto::parse_movimiento("50,00", moneda, decimales).unwrap(),
                     fecha: "2026-10-15".to_string(),
                     descripcion: "Corrección de prueba".to_string(),
                 },

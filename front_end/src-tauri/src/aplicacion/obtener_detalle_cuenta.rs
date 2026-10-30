@@ -94,7 +94,11 @@ pub fn obtener_detalle_cuenta(
                     });
                 }
             }
-            EventoLibro::CategoriaCreada { .. } => {}
+            EventoLibro::CategoriaCreada { .. }
+            | EventoLibro::TasaRegistrada { .. }
+            | EventoLibro::TasaEliminada { .. }
+            | EventoLibro::MonedaBaseCambiada { .. }
+            | EventoLibro::MonedaCreada { .. } => {}
         }
     }
 
@@ -153,7 +157,7 @@ mod tests {
             nombre: "Cuenta Banco".to_string(),
             tipo: TipoCuenta::Banco,
             moneda: CodigoMoneda::USD,
-            saldo_inicial: Monto::parse_saldo_inicial(saldo, CodigoMoneda::USD).unwrap(),
+            saldo_inicial: Monto::parse_saldo_inicial(saldo, CodigoMoneda::USD, 2).unwrap(),
         };
         repo.guardar(EventoLibro::nuevo_cuenta_creada(
             "evt-c1",
@@ -174,7 +178,7 @@ mod tests {
             id_movimiento: "mov-1".to_string(),
             id_cuenta: "cta-1".to_string(),
             tipo: TipoMovimiento::Gasto,
-            monto: Monto::parse_movimiento("30,00", CodigoMoneda::USD).unwrap(),
+            monto: Monto::parse_movimiento("30,00", CodigoMoneda::USD, 2).unwrap(),
             categoria: None,
             fecha: "2026-10-21".to_string(),
             descripcion: "Comida".to_string(),

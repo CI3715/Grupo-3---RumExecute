@@ -3,6 +3,8 @@ use crate::dominio::categoria::{catalogo_categorias, Categoria};
 use crate::dominio::cuenta::Cuenta;
 use crate::dominio::errores::ErrorDominio;
 use crate::dominio::evento::{DatosMovimientoRegistrado, EventoLibro};
+use crate::dominio::moneda::CatalogoMonedas;
+use crate::dominio::moneda::Moneda;
 use crate::dominio::monto::Monto;
 use crate::dominio::movimiento::Movimiento;
 use serde::{Deserialize, Serialize};
@@ -46,12 +48,23 @@ pub fn registrar_movimiento(
 ) -> Result<Movimiento, ErrorRegistrarMovimiento> {
     let momento_actual_utc = reloj.ahora();
 
-    // Reconstruir la cuenta afectada y el catálogo de categorías (fábrica + creadas)
+    // Reconstruir la cuenta afectada, el catálogo de monetas y el de categorías (fábrica + creadas)
     let mut cuenta_opt: Option<Cuenta> = None;
+    let mut catalogo_monedas = CatalogoMonedas::nuevo();
     let mut categorias_disponibles = catalogo_categorias();
 
     for evento in repo.listar_eventos()? {
         match evento {
+            EventoLibro::MonedaCreada { datos, .. } => {
+                if let Ok(moneda) = Moneda::nueva_propia(
+                    datos.codigo.as_str(),
+                    datos.nombre,
+                    datos.simbolo,
+                    datos.decimales as u32,
+                ) {
+                    catalogo_monedas.registrar_moneda(moneda);
+                }
+            }
             EventoLibro::CuentaCreada { datos, .. } => {
                 if datos.id_cuenta == entrada.id_cuenta {
                     cuenta_opt = Some(Cuenta {
@@ -84,7 +97,8 @@ pub fn registrar_movimiento(
         )
     })?;
 
-    let monto = Monto::parse_movimiento(&entrada.monto, cuenta.moneda)?;
+    let decimales = catalogo_monedas.decimales(&cuenta.moneda)?;
+    let monto = Monto::parse_movimiento(&entrada.monto, cuenta.moneda.clone(), decimales)?;
 
     // Crear el movimiento según el tipo validando contra el catálogo disponible
     let id_movimiento = ids.nuevo_id();

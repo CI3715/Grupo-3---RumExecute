@@ -35,6 +35,7 @@ impl Monto {
     pub fn nuevo_saldo_inicial(
         cantidad: Decimal,
         moneda: CodigoMoneda,
+        decimales_admitidos: u32,
     ) -> Result<Self, ErrorDominio> {
         if cantidad < Decimal::ZERO {
             return Err(ErrorDominio::saldo_invalido(
@@ -43,10 +44,10 @@ impl Monto {
         }
 
         // Verifica que la cantidad no tenga más de 2 decimales significativos
-        if cantidad.normalize().scale() > 2 {
+        if cantidad.normalize().scale() > decimales_admitidos {
             return Err(ErrorDominio::saldo_invalido(format!(
-                "El saldo inicial {} tiene más de 2 decimales, lo cual no está permitido.",
-                cantidad
+                "El saldo inicial {} tiene más de {} decimales, lo cual no está permitido para la moneda {}.",
+                cantidad, decimales_admitidos, moneda.as_str()
             )));
         }
 
@@ -57,6 +58,7 @@ impl Monto {
     pub fn parse_saldo_inicial(
         cantidad_str: &str,
         moneda: CodigoMoneda,
+        decimales_admitidos: u32
     ) -> Result<Self, ErrorDominio> {
         // Soporta separador decimal tanto punto '.' como coma ','
         let normalizado = cantidad_str.trim().replace(',', ".");
@@ -68,16 +70,16 @@ impl Monto {
             ))
         })?;
 
-        Self::nuevo_saldo_inicial(decimal, moneda)
+        Self::nuevo_saldo_inicial(decimal, moneda, decimales_admitidos)
     }
 
     /// Suma dos montos garantizando el invariante INV-02 (no sumar monedas distintas).
     pub fn sumar(&self, otro: &Monto) -> Result<Monto, ErrorDominio> {
         if self.moneda != otro.moneda {
             return Err(ErrorDominio::new(
-                "moneda",
+                "moneda_distinta",
                 format!(
-                    "Invariante INV-02 violado: No se pueden sumar montos de monedas distintas ({} y {}).",
+                    "No se pueden sumar montos de monedas distintas ({} y {}).",
                     self.moneda, otro.moneda
                 ),
             ));
@@ -96,14 +98,17 @@ impl Monto {
     /// - No puede tener más decimales que los que admite la moneda de la cuenta (RF-CAM-01).
     ///
     /// Si falla alguna validación, retorna `ErrorDominio` con `campo: "monto"`.
-    pub fn nuevo_movimiento(cantidad: Decimal, moneda: CodigoMoneda) -> Result<Self, ErrorDominio> {
+    pub fn nuevo_movimiento(
+        cantidad: Decimal,
+        moneda: CodigoMoneda,
+        decimales_admitidos: u32,
+    ) -> Result<Self, ErrorDominio> {
         if cantidad <= Decimal::ZERO {
             return Err(ErrorDominio::monto_invalido(
                 "El monto del movimiento debe ser estrictamente mayor que cero.",
             ));
         }
 
-        let decimales_admitidos = moneda.decimales();
         if cantidad.normalize().scale() > decimales_admitidos {
             return Err(ErrorDominio::monto_invalido(format!(
                 "El monto {} tiene más de {} decimales, lo cual no está permitido para la moneda {}.",
@@ -118,6 +123,7 @@ impl Monto {
     pub fn parse_movimiento(
         cantidad_str: &str,
         moneda: CodigoMoneda,
+        decimales_admitidos: u32, 
     ) -> Result<Self, ErrorDominio> {
         let normalizado = cantidad_str.trim().replace(',', ".");
 
@@ -128,16 +134,16 @@ impl Monto {
             ))
         })?;
 
-        Self::nuevo_movimiento(decimal, moneda)
+        Self::nuevo_movimiento(decimal, moneda, decimales_admitidos)
     }
 
     /// Resta dos montos garantizando el invariante INV-02 (no restar monedas distintas).
     pub fn restar(&self, otro: &Monto) -> Result<Monto, ErrorDominio> {
         if self.moneda != otro.moneda {
             return Err(ErrorDominio::new(
-                "moneda",
+                "moneda_distinta",
                 format!(
-                    "Invariante INV-02 violado: No se pueden operar montos de monedas distintas ({} y {}).",
+                    "No se pueden operar montos de monedas distintas ({} y {}).",
                     self.moneda, otro.moneda
                 ),
             ));
@@ -187,8 +193,7 @@ mod tests {
         assert!(resultado.is_err());
 
         let error = resultado.unwrap_err();
-        assert_eq!(error.campo, "moneda");
-        assert!(error.mensaje.contains("INV-02"));
+        assert_eq!(error.campo, "moneda_distinta");
     }
 
     #[test]
@@ -217,7 +222,7 @@ mod tests {
     #[test]
     fn test_inv03_rechazo_saldo_inicial_negativo() {
         let negativo = Decimal::from_str("-10.00").unwrap();
-        let resultado = Monto::nuevo_saldo_inicial(negativo, CodigoMoneda::USD);
+        let resultado = Monto::nuevo_saldo_inicial(negativo, CodigoMoneda::USD, 2);
 
         assert!(resultado.is_err());
         let error = resultado.unwrap_err();
@@ -228,7 +233,7 @@ mod tests {
     fn test_inv03_rechazo_saldo_inicial_con_mas_de_dos_decimales() {
         // Ejemplo de la especificación: 10,555 USD
         let saldo_tres_decimales = Decimal::from_str("10.555").unwrap();
-        let resultado = Monto::nuevo_saldo_inicial(saldo_tres_decimales, CodigoMoneda::USD);
+        let resultado = Monto::nuevo_saldo_inicial(saldo_tres_decimales, CodigoMoneda::USD, 2);
 
         assert!(resultado.is_err());
         let error = resultado.unwrap_err();
@@ -239,15 +244,15 @@ mod tests {
     #[test]
     fn test_saldo_inicial_valido() {
         // Saldo cero es permitido por especificación
-        let cero = Monto::nuevo_saldo_inicial(Decimal::ZERO, CodigoMoneda::VES);
+        let cero = Monto::nuevo_saldo_inicial(Decimal::ZERO, CodigoMoneda::VES, 2);
         assert!(cero.is_ok());
 
         // Saldo exacto con dos decimales
-        let valido = Monto::parse_saldo_inicial("1250.50", CodigoMoneda::VES);
+        let valido = Monto::parse_saldo_inicial("1250.50", CodigoMoneda::VES, 2);
         assert!(valido.is_ok());
 
         // Saldo con coma decimal
-        let valido_coma = Monto::parse_saldo_inicial("300,00", CodigoMoneda::USD);
+        let valido_coma = Monto::parse_saldo_inicial("300,00", CodigoMoneda::USD, 2);
         assert!(valido_coma.is_ok());
     }
 }

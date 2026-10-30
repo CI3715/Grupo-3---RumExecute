@@ -1,7 +1,9 @@
 pub mod categoria;
+pub mod conversion;
 pub mod cuenta;
 pub mod errores;
 pub mod evento;
 pub mod moneda;
 pub mod monto;
 pub mod movimiento;
+pub mod tasa_cambio;
