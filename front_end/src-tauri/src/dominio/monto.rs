@@ -58,7 +58,7 @@ impl Monto {
     pub fn parse_saldo_inicial(
         cantidad_str: &str,
         moneda: CodigoMoneda,
-        decimales_admitidos: u32
+        decimales_admitidos: u32,
     ) -> Result<Self, ErrorDominio> {
         // Soporta separador decimal tanto punto '.' como coma ','
         let normalizado = cantidad_str.trim().replace(',', ".");
@@ -123,7 +123,7 @@ impl Monto {
     pub fn parse_movimiento(
         cantidad_str: &str,
         moneda: CodigoMoneda,
-        decimales_admitidos: u32, 
+        decimales_admitidos: u32,
     ) -> Result<Self, ErrorDominio> {
         let normalizado = cantidad_str.trim().replace(',', ".");
 

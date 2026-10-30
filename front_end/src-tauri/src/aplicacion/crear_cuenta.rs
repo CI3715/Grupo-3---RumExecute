@@ -62,11 +62,12 @@ pub fn crear_cuenta(
                 }
             }
             EventoLibro::CuentaCreada { datos, .. }
-                if datos.nombre.trim().to_lowercase() == nombre_nuevo => {
-                    return Err(
-                        ErrorDominio::nombre_invalido("Ya existe una cuenta con ese nombre.").into(),
-                    );
-                }
+                if datos.nombre.trim().to_lowercase() == nombre_nuevo =>
+            {
+                return Err(
+                    ErrorDominio::nombre_invalido("Ya existe una cuenta con ese nombre.").into(),
+                );
+            }
             _ => {}
         }
     }

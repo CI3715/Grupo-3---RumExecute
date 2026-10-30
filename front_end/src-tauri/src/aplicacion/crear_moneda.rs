@@ -43,7 +43,10 @@ pub fn crear_moneda(
     if catalogo.obtener(&moneda.codigo).is_some() {
         return Err(ErrorDominio::new(
             "codigo",
-            format!("Ya existe una moneda registrada con el código '{}'.", moneda.codigo),
+            format!(
+                "Ya existe una moneda registrada con el código '{}'.",
+                moneda.codigo
+            ),
         )
         .into());
     }
@@ -61,5 +64,8 @@ pub fn crear_moneda(
         },
     ))?;
 
-    Ok(ResultadoMonedaDto { exito: true, codigo })
+    Ok(ResultadoMonedaDto {
+        exito: true,
+        codigo,
+    })
 }

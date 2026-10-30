@@ -100,7 +100,7 @@ impl ErrorDominio {
             format!(
                 "El par de monedas no puede tener la misma moneda de origen y destino: '{}'.",
                 origen
-            )
+            ),
         )
     }
 
@@ -116,7 +116,7 @@ impl ErrorDominio {
             format!(
                 "Falta una tasa de {} a {} con fecha igual o anterior al {}",
                 origen, destino, fecha
-            )
+            ),
         )
     }
 }

@@ -114,7 +114,7 @@ pub fn corregir_movimiento(
                 ),
             )
         })?;
-    
+
     let decimales = catalogo.decimales(&cuenta.moneda)?;
 
     let monto_correcto = Monto::parse_movimiento(&entrada.nuevo_monto, cuenta.moneda, decimales)?;

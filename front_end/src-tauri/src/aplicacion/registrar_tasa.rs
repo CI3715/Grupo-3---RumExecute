@@ -41,9 +41,8 @@ pub fn registrar_tasa(
     let origen = CodigoMoneda::parse(&entrada.origen)?;
     let destino = CodigoMoneda::parse(&entrada.destino)?;
     let par = validar_par_en_catalogo(&catalogo, origen, destino)?;
-    let valor = Decimal::from_str(entrada.valor.trim()).map_err(|_| {
-        ErrorDominio::new("valor", "El valor de la tasa no es un decimal válido.")
-    })?;
+    let valor = Decimal::from_str(entrada.valor.trim())
+        .map_err(|_| ErrorDominio::new("valor", "El valor de la tasa no es un decimal válido."))?;
     let momento_actual = reloj.ahora();
     let tasa = TasaCambio::nueva(
         par.origen,

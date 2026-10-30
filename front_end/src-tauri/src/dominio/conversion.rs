@@ -9,18 +9,14 @@ pub fn convertir_monto(
     fecha_consulta: &str,
     historial: &HistorialTasas,
 ) -> Result<Monto, ErrorDominio> {
-
     // Si las monedas son iguales, no hay conversión que hacer
     if monto.moneda == moneda_objetivo {
         return Ok(*monto);
     }
 
     // Busca la tasa vigente en el historial (RF-CAM-03, RF-CAM-04)
-    let tasa_vigente = historial.obtener_tasa_vigente(
-        monto.moneda,
-        moneda_objetivo,
-        fecha_consulta
-    );
+    let tasa_vigente =
+        historial.obtener_tasa_vigente(monto.moneda, moneda_objetivo, fecha_consulta);
 
     match tasa_vigente {
         Some(TasaAplicable::Directa(tasa)) => {
@@ -32,19 +28,22 @@ pub fn convertir_monto(
         }
         Some(TasaAplicable::Inversa(tasa)) => {
             // De moneda B a moneda A. Monto en B / Tasa = Monto en A
-            let mut nueva_cantidad = monto
-                .cantidad
-                .checked_div(tasa.valor)
-                .ok_or_else(|| ErrorDominio::tasa_invalida("Error matemático: división por cero al aplicar tasa inversa"))?;
-                // NUNCA debería dar este error porque ninguna tasa es igual a 0, pero se toma por si acaso
+            let mut nueva_cantidad = monto.cantidad.checked_div(tasa.valor).ok_or_else(|| {
+                ErrorDominio::tasa_invalida(
+                    "Error matemático: división por cero al aplicar tasa inversa",
+                )
+            })?;
+            // NUNCA debería dar este error porque ninguna tasa es igual a 0, pero se toma por si acaso
 
             nueva_cantidad = nueva_cantidad.round_dp(moneda_objetivo.decimales());
 
             Ok(Monto::new(nueva_cantidad, moneda_objetivo))
         }
-        None => {
-            Err(ErrorDominio::tasa_no_existente(monto.moneda.as_str(), moneda_objetivo.as_str(), fecha_consulta))
-        }
+        None => Err(ErrorDominio::tasa_no_existente(
+            monto.moneda.as_str(),
+            moneda_objetivo.as_str(),
+            fecha_consulta,
+        )),
     }
 }
 
@@ -175,7 +174,9 @@ mod tests {
         // Consultamos con fecha 2026-10-20 (anterior a la tasa disponible)
         let monto_usd = Monto::new(Decimal::from_str("10.00").unwrap(), CodigoMoneda::USD);
         let err = convertir_monto(&monto_usd, CodigoMoneda::VES, "2026-10-20", &historial)
-            .expect_err("Debería fallar porque la tasa disponible es futura respecto a la consulta");
+            .expect_err(
+                "Debería fallar porque la tasa disponible es futura respecto a la consulta",
+            );
 
         assert_eq!(err.campo, "tasa_no_existente");
     }

@@ -1,8 +1,8 @@
-use crate::dominio::moneda::{catalogo_monedas, Moneda};
 use crate::aplicacion::proyeccion_monedas::catalogo_desde_eventos;
 use crate::aplicacion::puertos::{ErrorRepositorio, RepositorioLibro};
 use crate::dominio::errores::ErrorDominio;
 use crate::dominio::evento::EventoLibro;
+use crate::dominio::moneda::{catalogo_monedas, Moneda};
 
 /// Caso de uso: listar las monedas del catálogo base (RF-CAM-01).
 pub fn listar_monedas() -> Vec<Moneda> {
