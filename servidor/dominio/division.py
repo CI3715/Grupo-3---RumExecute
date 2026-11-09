@@ -47,4 +47,50 @@ def repartir_residuo(
         lleva_residuo = indice < centimos_restantes #True si aun quedan, False si ya se acabaron
         monto = truncadas[nombre] + (centimo if lleva_residuo else Decimal("0"))
         cuotas.append(CuotaDivision(nombre, monto, lleva_residuo))
-    return cuotas    
+    return cuotas
+
+def dividir_partes_iguales(
+    total: Decimal, participantes: list[str]
+) -> list[CuotaDivision]:
+    if not participantes:
+        raise ErrorDominio("participantes", "Debe de haber al menos un participante.")
+    if len(set(participantes)) != len(participantes):
+        raise ErrorDominio("participantes", "Hay participantes repetidos.")
+    """
+    Como aquí es en partes iguales, lo cual no siempre da porcentajes exactos,
+    no nos interesan los porcentajes en general, solo los montos
+    """
+    cuota = total / len(participantes)
+    return repartir_residuo(total, {nombre: cuota for nombre in participantes})
+
+def dividir_por_porcentajes(
+    total: Decimal, porcentajes: dict[str, Decimal]
+) -> list[CuotaDivision]:
+    if not porcentajes:
+        raise ErrorDominio("participantes", "Debe de haber al menos un participante con su porcentaje")
+
+    # Chequeo de que el porcentajes introducidos son, en efecto, porcentajes válidos
+    for p in porcentajes.values():
+        if p <= Decimal("0") or p >= Decimal("100"):
+            raise ErrorDominio("porcentajes", "Los porcentajes deben de estar entre 0 y 100")
+        if p != p.quantize(Decimal("0.01")):
+            raise ErrorDominio("porcentajes", "Los porcentajes deben tener como máximo 2 decimales")
+
+    suma = sum(porcentajes.values(), Decimal("0"))
+    # Chequeo de que la suma de los porcentajes da, en efecto, el total (100%)
+    if suma < Decimal("100"):
+        raise ErrorDominio(
+            "porcentajes",
+            f"Los porcentajes suman {suma}, es decir, faltan {Decimal("100") - suma}",
+        )
+    if suma > Decimal("100"):
+        raise ErrorDominio(
+            "porcentajes",
+            f"Los porcentajes suman {suma}, es decir, sobran {suma - Decimal("100")}", 
+        )
+    # A cada nombre se le asigna su monto referente al porcentaje de su cuota
+    cuotas = {nombre: total * p /Decimal("100") for nombre, p in porcentajes.items()}
+    return repartir_residuo(total, cuotas)
+
+    
+        
