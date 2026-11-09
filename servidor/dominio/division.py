@@ -13,6 +13,8 @@ class CuotaDivision:
     monto: Decimal
     lleva_residuo: bool
 
+
+
 def repartir_residuo(
         total: Decimal, cuotas_exactas: dict[str, Decimal]
 ) -> list[CuotaDivision]:
@@ -49,6 +51,7 @@ def repartir_residuo(
         cuotas.append(CuotaDivision(nombre, monto, lleva_residuo))
     return cuotas
 
+
 def dividir_partes_iguales(
     total: Decimal, participantes: list[str]
 ) -> list[CuotaDivision]:
@@ -62,6 +65,7 @@ def dividir_partes_iguales(
     """
     cuota = total / len(participantes)
     return repartir_residuo(total, {nombre: cuota for nombre in participantes})
+
 
 def dividir_por_porcentajes(
     total: Decimal, porcentajes: dict[str, Decimal]
@@ -83,7 +87,7 @@ def dividir_por_porcentajes(
             "porcentajes",
             f"Los porcentajes suman {suma}, es decir, faltan {Decimal("100") - suma}",
         )
-    if suma > Decimal("100"):
+    elif suma > Decimal("100"):
         raise ErrorDominio(
             "porcentajes",
             f"Los porcentajes suman {suma}, es decir, sobran {suma - Decimal("100")}", 
@@ -92,5 +96,27 @@ def dividir_por_porcentajes(
     cuotas = {nombre: total * p /Decimal("100") for nombre, p in porcentajes.items()}
     return repartir_residuo(total, cuotas)
 
-    
-        
+def dividir_por_montos(
+        total: Decimal, montos: dict[str, Decimal]
+) -> list[CuotaDivision]:
+    if not montos:
+        raise ErrorDominio("participantes", "Debe de haber al menos un participante con su monto")
+    for m in montos.values():
+        if m <= Decimal("0") or m >= total:
+            raise ErrorDominio("monto", f"El monto debe de estar entre 0 y {total}")
+        if m != m.quantize(Decimal("0.01")):
+            raise ErrorDominio("monto", "El monto debe tener como máximo 2 decimales")
+
+    suma = sum(montos.values(), Decimal("0"))
+
+    if suma < total:
+        raise ErrorDominio(
+            "montos",
+            f"Los montos suman {suma}, es decir, faltan {total - suma}"
+        )
+    elif suma > total:
+        raise ErrorDominio(
+            "montos",
+            f"Los montos suman {suma}, es decir, sobran {suma - total}"
+        )
+    return repartir_residuo(total, montos)
