@@ -16,11 +16,12 @@ class Amistad:
     nombre_usuario_receptor: str
     estado: EstadoAmistad = EstadoAmistad.PENDIENTE
 
+# Verifica si hay una solicitud ya sea a->b o b->a
 
 def _es_entre(amistad: Amistad, a: str, b: str) -> bool:
     return {amistad.nombre_usuario_solicitante, amistad.nombre_usuario_receptor} == {a, b}
 
-
+# Verifica si la solicitud de amistad es válida
 def validar_solicitud_amistad(
     nom_us_solicitante: str,
     nom_us_receptor: str,

@@ -1,5 +1,6 @@
 import re
 from dataclasses import dataclass
+from datetime import datetime
 
 from dominio.errores import ErrorDominio
 # Caractéres requeridos para el nombre de usuario
@@ -17,12 +18,16 @@ class Usuario:
     nombre_usuario: str
     nombre_visible: str
     correo: str
+    fecha_alta: datetime
 
     def __post_init__(self):
         # Primero se normaliza el correo
         object.__setattr__(self, "correo", self.correo.strip().lower())
         # Ahora, normalizamos los espacios al final y comienzo del nombre
         object.__setattr__(self, "nombre_visible", self.nombre_visible.strip())
+
+        if self.fecha_alta.tzinfo is None:
+            raise ErrorDominio("fecha_alta", "La fecha de alta debe incluir zona horaria (UTC).")
         
         if not PATRON_NOMBRE_USUARIO.fullmatch(self.nombre_usuario):
             raise ErrorDominio(
