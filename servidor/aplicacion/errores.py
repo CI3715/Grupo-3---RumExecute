@@ -56,3 +56,15 @@ class CredencialesInvalidas(ErrorAplicacion):
             "credenciales",
             "Correo o contraseña incorrectos."
         )
+
+
+
+class UsuarioNoEncontrado(ErrorAplicacion):
+    """
+    No existe un usuario con el nombre de usuario proporcionado
+    """
+    def __init__(self):
+        super().__init__(
+            "nombre_usuario",
+            "Usuario no encontrado."
+        )
