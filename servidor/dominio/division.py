@@ -75,7 +75,7 @@ def dividir_por_porcentajes(
 
     # Chequeo de que el porcentajes introducidos son, en efecto, porcentajes válidos
     for p in porcentajes.values():
-        if p <= Decimal("0") or p >= Decimal("100"):
+        if p < Decimal("0") or p > Decimal("100"):
             raise ErrorDominio("porcentajes", "Los porcentajes deben de estar entre 0 y 100")
         if p != p.quantize(Decimal("0.01")):
             raise ErrorDominio("porcentajes", "Los porcentajes deben tener como máximo 2 decimales")
@@ -102,7 +102,7 @@ def dividir_por_montos(
     if not montos:
         raise ErrorDominio("participantes", "Debe de haber al menos un participante con su monto")
     for m in montos.values():
-        if m <= Decimal("0") or m >= total:
+        if m < Decimal("0") or m > total:
             raise ErrorDominio("monto", f"El monto debe de estar entre 0 y {total}")
         if m != m.quantize(Decimal("0.01")):
             raise ErrorDominio("monto", "El monto debe tener como máximo 2 decimales")

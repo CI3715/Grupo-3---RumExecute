@@ -37,7 +37,7 @@ def validar_balances_suma_cero(
     suma = sum(balances.values(), Decimal("0"))
 
     if suma != Decimal("0"):
-        raise ErrorDominio("balance", "Los balances de los miembros del grupo no suman 0")
+        raise ErrorDominio("balances", "Los balances de los miembros del grupo no suman 0")
 
 def calcular_balances(
     miembros: tuple[str, ...], gastos: list[Gasto]
