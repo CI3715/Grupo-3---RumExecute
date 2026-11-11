@@ -19,6 +19,7 @@ pub mod puertos;
 pub mod registrar_movimiento;
 pub mod registrar_tasa;
 pub mod registrar_usuario;
+pub mod restaurar_sesion;
 
 #[cfg(test)]
 mod pruebas_entrega4;

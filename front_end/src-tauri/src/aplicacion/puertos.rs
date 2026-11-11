@@ -17,6 +17,7 @@ pub enum ErrorAutenticacion {
     },
     ServicioNoDisponible,
     ErrorTecnico(String),
+    SesionInvalida,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
