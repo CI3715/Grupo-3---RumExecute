@@ -13,9 +13,3 @@ class RepositorioCredenciales(Protocol):
             usuario_id: str
     ) -> Credenciales | None:
         ...
-
-    def guardar_credenciales(
-            self,
-            credenciales: Credenciales
-    ) -> None:
-        ...

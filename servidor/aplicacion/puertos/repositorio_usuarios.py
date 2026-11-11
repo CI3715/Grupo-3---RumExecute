@@ -32,12 +32,3 @@ class RepositorioUsuarios(Protocol):
             Usuario o None si no se encuentra
         """
         ...
-
-    def guardar_usuario(self, usuario: Usuario) -> None:
-        """
-        Guarda un usuario en el repositorio.
-        
-        Args:
-            usuario (Usuario): Usuario a guardar
-        """
-        ...

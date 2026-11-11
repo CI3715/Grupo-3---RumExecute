@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 import uuid
 
 from aplicacion.puertos.repositorio_usuarios import RepositorioUsuarios
-from aplicacion.puertos.repositorio_credenciales import RepositorioCredenciales
+from aplicacion.puertos.persistencia_registro import PersistenciaRegistro
 from aplicacion.puertos.servicio_hash_contrasenas import ServicioHashContrasenas
 
 from dominio.usuario import Usuario
@@ -18,7 +18,7 @@ class RegistrarUsuario:
     def __init__(
             self,
             repositorio_usuarios: RepositorioUsuarios,
-            repositorio_credenciales: RepositorioCredenciales,
+            persistencia_registro: PersistenciaRegistro,
             servicio_hash: ServicioHashContrasenas):
         """
         Inicializa el caso de uso RegistrarUsuario.
@@ -28,7 +28,7 @@ class RegistrarUsuario:
                 repositorio de usuarios para almacenar los datos
         """
         self.repositorio_usuarios = repositorio_usuarios
-        self.repositorio_credenciales = repositorio_credenciales
+        self.persistencia_registro = persistencia_registro
         self.servicio_hash = servicio_hash
 
     def ejecutar(
@@ -77,8 +77,10 @@ class RegistrarUsuario:
         )
         
         # Guardar en el repositorio
-        self.repositorio_usuarios.guardar_usuario(usuario)
-        self.repositorio_credenciales.guardar_credenciales(credenciales)
+        self.persistencia_registro.guardar_registro(
+            usuario,
+            credenciales
+        )
         
         return usuario
 
