@@ -44,3 +44,15 @@ class TokenInvalido(ErrorAplicacion):
             "token",
             "El token de sesión es inválido o ha expirado."
         )
+
+
+
+class CredencialesInvalidas(ErrorAplicacion):
+    """
+    Correo o contraseña incorrectos
+    """
+    def __init__(self):
+        super().__init__(
+            "credenciales",
+            "Correo o contraseña incorrectos."
+        )
