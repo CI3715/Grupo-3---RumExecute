@@ -2,6 +2,8 @@ use crate::dominio::evento::EventoLibro; // Importa el tipo EventoLibro del mód
 use crate::aplicacion::dto::{
     RegistrarUsuarioEntrada,
     UsuarioRegistradoDto,
+    IniciarSesionEntrada,
+    SesionDto,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -15,6 +17,11 @@ pub enum ErrorAutenticacion {
     },
     ServicioNoDisponible,
     ErrorTecnico(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ErrorSesion {
+    Almacenamiento(String),
 }
 
 #[derive(Debug)]
@@ -40,4 +47,18 @@ pub trait ServicioAutenticacion {
         &self,
         entrada: &RegistrarUsuarioEntrada,
     ) -> Result<UsuarioRegistradoDto, ErrorAutenticacion>;
+}
+
+pub trait ServicioInicioSesion {
+    fn iniciar_sesion(
+        &self,
+        entrada: &IniciarSesionEntrada,
+    ) -> Result<SesionDto, ErrorAutenticacion>;
+}
+
+pub trait AlmacenSesiones {
+    fn guardar_sesion(
+        &self,
+        sesion: &SesionDto,
+    ) -> Result<(), ErrorSesion>;
 }
