@@ -21,5 +21,13 @@ class PersistenciaRegistro(Protocol):
         Args:
             usuario (Usuario): Usuario a persistir
             credenciales (Credenciales): Credenciales a persistir
+
+        Raises:
+            UsuarioYaExistente: Si el nombre de usuario o correo ya existen
+                El atributo 'campo' identifica:
+                - "nombre_usuario"
+                - "correo"
+            
+            ErrorInfraestructura: Fallos gestionados por la capa de infraestructura.
         """
         ...
