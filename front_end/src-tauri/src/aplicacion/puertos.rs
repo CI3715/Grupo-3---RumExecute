@@ -61,4 +61,15 @@ pub trait AlmacenSesiones {
         &self,
         sesion: &SesionDto,
     ) -> Result<(), ErrorSesion>;
+
+    fn obtener_sesion(
+        &self,
+    ) -> Result<Option<SesionDto>, ErrorSesion>;
+}
+
+pub trait ServicioPerfilPropio {
+    fn obtener_perfil_propio(
+        &self,
+        token: &str,
+    ) -> Result<UsuarioRegistradoDto, ErrorAutenticacion>;
 }
