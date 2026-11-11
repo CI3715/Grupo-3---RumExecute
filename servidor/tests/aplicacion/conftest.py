@@ -1,4 +1,6 @@
+import pytest
 from unittest.mock import Mock
+from aplicacion.registrar_usuario import RegistrarUsuario
 
 
 
@@ -19,5 +21,30 @@ def persistencia_registro():
 @pytest.fixture
 def servicio_hash():
     servicio = Mock()
-    servicio.generar_hash.return_value = "hash de prueba"
+    servicio.generar_hash.return_value = "hash_de_prueba"
     return servicio
+
+
+
+@pytest.fixture
+def caso_uso(
+    repositorio_usuarios,
+    persistencia_registro,
+    servicio_hash
+):
+    return RegistrarUsuario(
+        repositorio_usuarios=repositorio_usuarios,
+        persistencia_registro=persistencia_registro,
+        servicio_hash=servicio_hash
+    )
+
+
+
+@pytest.fixture
+def datos_validos():
+    return {
+        "nombre_usuario": "eduardo",
+        "nombre_visible": "Eduardo",
+        "correo": "eduardo@example.com",
+        "contrasena": "contrasena123"
+    }
