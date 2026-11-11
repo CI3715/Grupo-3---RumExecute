@@ -12,7 +12,7 @@ class BuscarUsuario:
         self,
         repositorio_usuarios: RepositorioUsuarios
     ):
-        self.repositorios_usuarios = repositorio_usuarios
+        self.repositorio_usuarios = repositorio_usuarios
     
     def ejecutar(
         self,
