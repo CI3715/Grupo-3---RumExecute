@@ -7,7 +7,7 @@ from aplicacion.puertos.servicio_hash_contrasenas import ServicioHashContrasenas
 
 from dominio.usuario import Usuario
 from dominio.credenciales import Credenciales
-from dominio.errores import ErrorDominio
+from aplicacion.errores import (UsuarioYaExistente, ContrasenaInvalida)
 
 
 class RegistrarUsuario:
@@ -51,8 +51,9 @@ class RegistrarUsuario:
             Usuario: El usuario creado, sin contraseña ni hash
             
         Raises:
-            ErrorDominio: Si se encuentran errores de validación o si 
-                el nombre de usuario o correo ya existen
+            ErrorDominio: Si se encuentran errores de validación en el dominio
+            UsuarioYaExistente: Si el nombre de usuario o correo ya existen
+            ContrasenaInvalida: Si la longitud de la contraseña es menor a 10 caracteres
         """
 
         correo = correo.strip().lower()
@@ -86,10 +87,7 @@ class RegistrarUsuario:
 
     def _validar_contrasena(self, contrasena: str) -> None:
         if len(contrasena) < 10:
-            raise ErrorDominio(
-                "contrasena",
-                "La contraseña debe tener al menos 10 caracteres."
-            )
+            raise ContrasenaInvalida()
 
     def _verificar_unicidad(
             self,
@@ -104,7 +102,7 @@ class RegistrarUsuario:
             correo (str): Correo a verificar
             
         Raises:
-            ErrorDominio: Si el nombre de usuario o correo ya existen
+            UsuarioYaExistente: Si el nombre de usuario o correo ya existen
         """
         # Verificar si el nombre de usuario ya existe
         usuario_existente = (
@@ -113,10 +111,7 @@ class RegistrarUsuario:
         )
 
         if usuario_existente is not None:
-            raise ErrorDominio(
-                "nombre_usuario",
-                "El nombre de usuario ya está en uso."
-            )
+            raise UsuarioYaExistente("nombre_usuario")
             
         # Verificar si el correo ya existe
         correo_existente = (
@@ -125,10 +120,7 @@ class RegistrarUsuario:
         )
 
         if correo_existente is not None:
-            raise ErrorDominio(
-                "correo",
-                "El correo electrónico ya está en uso."
-            )
+            raise UsuarioYaExistente("correo")
 
     def _crear_usuario(
             self,
