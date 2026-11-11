@@ -24,9 +24,23 @@ class UsuarioYaExistente(ErrorAplicacion):
 
 
 class ContrasenaInvalida(ErrorAplicacion):
-
+    """
+    La contraseña de registro tiene menos de 10 caracteres
+    """
     def __init__(self):
         super().__init__(
             "contrasena",
             "La contraseña debe tener al menos 10 caracteres."
+        )
+
+
+
+class TokenInvalido(ErrorAplicacion):
+    """
+    El token de sesión es inválido o expiró
+    """
+    def __init__(self):
+        super().__init__(
+            "token",
+            "El token de sesión es inválido o ha expirado."
         )
