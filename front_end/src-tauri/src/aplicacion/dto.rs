@@ -168,3 +168,37 @@ pub struct MonedaBaseProyeccion {
     pub codigo: String,
     pub decimales: u32,
 }
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistrarUsuarioEntrada {
+    pub nombre_usuario: String,
+    pub nombre_visible: String,
+    pub correo: String,
+    pub contrasena: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsuarioRegistradoDto {
+    pub id: String,
+    pub nombre_usuario: String,
+    pub nombre_visible: String,
+    pub correo: String,
+    pub fecha_alta: String,
+}
+
+#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IniciarSesionEntrada {
+    pub correo: String,
+    pub contrasena: String,
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SesionDto {
+    pub usuario: UsuarioRegistradoDto,
+    pub token: String,
+    pub fecha_expiracion: String,
+}
