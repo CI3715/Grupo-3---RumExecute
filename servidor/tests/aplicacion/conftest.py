@@ -7,6 +7,7 @@ from aplicacion.registrar_usuario import RegistrarUsuario
 from aplicacion.iniciar_sesion import IniciarSesion
 from aplicacion.puertos.servicio_tokens import TokenSesion
 from aplicacion.obtener_perfil_propio import ObtenerPerfilPropio
+from aplicacion.buscar_usuario import BuscarUsuario
 
 from dominio.usuario import Usuario
 from dominio.credenciales import Credenciales
@@ -135,4 +136,11 @@ def caso_uso_obtener_perfil_propio(
     return ObtenerPerfilPropio(
         repositorio_usuarios=repositorio_usuarios,
         servicio_tokens=servicio_tokens
+    )
+
+
+@pytest.fixture
+def caso_uso_buscar_usuario(repositorio_usuarios):
+    return BuscarUsuario(
+        repositorio_usuarios=repositorio_usuarios
     )
