@@ -28,6 +28,9 @@ class Usuario:
 
         if self.fecha_alta.tzinfo is None:
             raise ErrorDominio("fecha_alta", "La fecha de alta debe incluir zona horaria (UTC).")
+                # Normalizar a UTC-0
+        if self.fecha.tzinfo != timezone.utc:
+            object.__setattr__(self, "fecha", self.fecha.astimezone(timezone.utc))
         
         if not PATRON_NOMBRE_USUARIO.fullmatch(self.nombre_usuario):
             raise ErrorDominio(
