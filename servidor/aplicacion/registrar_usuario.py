@@ -26,10 +26,16 @@ class RegistrarUsuario:
         Args:
             repositorio_usuarios (RepositorioUsuarios): Implementación del 
                 repositorio de usuarios para almacenar los datos
+            persistencia_registro (PersistenciaRegistro): Operación atómica de
+                registro de usuarios y credenciales
+            servicio_hash (ServicioHashContrasenas): Servicio para generar el
+                hash de la contraseña
         """
         self.repositorio_usuarios = repositorio_usuarios
         self.persistencia_registro = persistencia_registro
         self.servicio_hash = servicio_hash
+
+
 
     def ejecutar(
             self,
@@ -60,14 +66,17 @@ class RegistrarUsuario:
 
         self._validar_contrasena(contrasena)
         
-        # Verificar unicidad del nombre de usuario y correo
-        self._verificar_unicidad(nombre_usuario, correo)
-        
         # Crear el usuario
         usuario = self._crear_usuario(
             nombre_usuario,
             nombre_visible,
             correo
+        )
+
+        # Verificar unicidad del nombre de usuario y correo
+        self._verificar_unicidad(
+            usuario.nombre_usuario,
+            usuario.correo
         )
 
         hash_contrasena = self.servicio_hash.generar_hash(contrasena)
@@ -85,9 +94,13 @@ class RegistrarUsuario:
         
         return usuario
 
+
+
     def _validar_contrasena(self, contrasena: str) -> None:
         if len(contrasena) < 10:
             raise ContrasenaInvalida()
+
+
 
     def _verificar_unicidad(
             self,
@@ -121,6 +134,8 @@ class RegistrarUsuario:
 
         if correo_existente is not None:
             raise UsuarioYaExistente("correo")
+
+
 
     def _crear_usuario(
             self,
