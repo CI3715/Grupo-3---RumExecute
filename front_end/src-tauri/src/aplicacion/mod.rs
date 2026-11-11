@@ -6,6 +6,7 @@ pub mod crear_cuenta;
 pub mod crear_moneda;
 pub mod dto;
 pub mod eliminar_tasa;
+pub mod iniciar_sesion;
 pub mod listar_categorias;
 pub mod listar_cuentas;
 pub mod listar_historial_tasas;
