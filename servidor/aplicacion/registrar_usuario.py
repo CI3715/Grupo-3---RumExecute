@@ -1,20 +1,25 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 from aplicacion.puertos.repositorio_usuarios import RepositorioUsuarios
+from aplicacion.puertos.repositorio_credenciales import RepositorioCredenciales
+from aplicacion.puertos.servicio_hash_contrasenas import ServicioHashContrasenas
+
 from dominio.usuario import Usuario
+from dominio.credenciales import Credenciales
 from dominio.errores import ErrorDominio
 
 
 class RegistrarUsuario:
     """
     Caso de uso para registrar un nuevo usuario.
-    
-    Este caso de uso maneja la lógica de negocio para crear un nuevo 
-    usuario, validando que el nombre de usuario y correo sean únicos.
     """
 
-    def __init__(self, repositorio_usuarios: RepositorioUsuarios):
+    def __init__(
+            self,
+            repositorio_usuarios: RepositorioUsuarios,
+            repositorio_credenciales: RepositorioCredenciales,
+            servicio_hash: ServicioHashContrasenas):
         """
         Inicializa el caso de uso RegistrarUsuario.
         
@@ -23,8 +28,16 @@ class RegistrarUsuario:
                 repositorio de usuarios para almacenar los datos
         """
         self.repositorio_usuarios = repositorio_usuarios
+        self.repositorio_credenciales = repositorio_credenciales
+        self.servicio_hash = servicio_hash
 
-    def ejecutar(self, nombre_usuario: str, nombre_visible: str, correo: str) -> Usuario:
+    def ejecutar(
+            self,
+            nombre_usuario: str,
+            nombre_visible: str,
+            correo: str,
+            contrasena: str
+        ) -> Usuario:
         """
         Ejecuta el caso de uso para registrar un nuevo usuario.
         
@@ -32,7 +45,8 @@ class RegistrarUsuario:
             nombre_usuario (str): Nombre de usuario que el usuario desea usar
             nombre_visible (str): Nombre visible del usuario
             correo (str): Correo electrónico del usuario
-            
+            contrasena (str): Contraseña del usuario
+
         Returns:
             Usuario: El usuario creado, sin contraseña ni hash
             
@@ -40,19 +54,46 @@ class RegistrarUsuario:
             ErrorDominio: Si se encuentran errores de validación o si 
                 el nombre de usuario o correo ya existen
         """
+
+        correo = correo.strip().lower()
+
+        self._validar_contrasena(contrasena)
         
         # Verificar unicidad del nombre de usuario y correo
         self._verificar_unicidad(nombre_usuario, correo)
         
         # Crear el usuario
-        usuario = self._crear_usuario(nombre_usuario, nombre_visible, correo)
+        usuario = self._crear_usuario(
+            nombre_usuario,
+            nombre_visible,
+            correo
+        )
+
+        hash_contrasena = self.servicio_hash.generar_hash(contrasena)
+
+        credenciales = Credenciales(
+            usuario_id=usuario.id,
+            hash_contrasena=hash_contrasena
+        )
         
         # Guardar en el repositorio
         self.repositorio_usuarios.guardar_usuario(usuario)
+        self.repositorio_credenciales.guardar_credenciales(credenciales)
         
         return usuario
 
-    def _verificar_unicidad(self, nombre_usuario: str, correo: str) -> None:
+    def _validar_contrasena(self, contrasena: str) -> None:
+        if len(contrasena) < 10:
+            raise ErrorDominio(
+                "contrasena",
+                "La contraseña debe tener al menos 10 caracteres."
+            )
+
+    def _verificar_unicidad(
+            self,
+            nombre_usuario: str,
+            correo: str
+        ) -> None:
         """
         Verifica que el nombre de usuario y correo sean únicos.
         
@@ -64,16 +105,34 @@ class RegistrarUsuario:
             ErrorDominio: Si el nombre de usuario o correo ya existen
         """
         # Verificar si el nombre de usuario ya existe
-        usuario_existente = self.repositorio_usuarios.obtener_usuario_por_nombre_usuario(nombre_usuario)
-        if usuario_existente:
-            raise ErrorDominio("nombre_usuario", "El nombre de usuario ya está en uso.")
+        usuario_existente = (
+            self.repositorio_usuarios.
+            obtener_usuario_por_nombre_usuario(nombre_usuario)
+        )
+
+        if usuario_existente is not None:
+            raise ErrorDominio(
+                "nombre_usuario",
+                "El nombre de usuario ya está en uso."
+            )
             
         # Verificar si el correo ya existe
-        correo_existente = self.repositorio_usuarios.obtener_usuario_por_correo(correo)
-        if correo_existente:
-            raise ErrorDominio("correo", "El correo electrónico ya está en uso.")
+        correo_existente = (
+            self.repositorio_usuarios.
+            obtener_usuario_por_correo(correo)
+        )
 
-    def _crear_usuario(self, nombre_usuario: str, nombre_visible: str, correo: str) -> Usuario:
+        if correo_existente is not None:
+            raise ErrorDominio(
+                "correo",
+                "El correo electrónico ya está en uso."
+            )
+
+    def _crear_usuario(
+            self,
+            nombre_usuario: str,
+            nombre_visible: str,
+            correo: str) -> Usuario:
         """
         Crea una nueva instancia de Usuario.
         
@@ -89,7 +148,7 @@ class RegistrarUsuario:
         usuario_id = str(uuid.uuid4())
         
         # Crear la fecha de alta
-        fecha_alta = datetime.utcnow()
+        fecha_alta = datetime.now(timezone.utc)
         
         # Creamos el usuario, lo cual invocará la validación del __post_init__
         return Usuario(
