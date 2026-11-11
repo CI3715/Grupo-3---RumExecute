@@ -187,3 +187,18 @@ pub struct UsuarioRegistradoDto {
     pub correo: String,
     pub fecha_alta: String,
 }
+
+#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IniciarSesionEntrada {
+    pub correo: String,
+    pub contrasena: String,
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SesionDto {
+    pub usuario: UsuarioRegistradoDto,
+    pub token: String,
+    pub fecha_expiracion: String,
+}
