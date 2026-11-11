@@ -12,6 +12,7 @@ pub mod listar_cuentas;
 pub mod listar_historial_tasas;
 pub mod listar_monedas;
 pub mod obtener_detalle_cuenta;
+pub mod obtener_perfil_propio;
 pub mod proyeccion_monedas;
 pub mod puertos;
 pub mod registrar_movimiento;

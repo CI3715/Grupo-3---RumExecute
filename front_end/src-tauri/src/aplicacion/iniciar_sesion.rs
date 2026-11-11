@@ -94,6 +94,12 @@ mod tests {
 
             self.resultado.clone()
         }
+
+        fn obtener_sesion(
+            &self,
+        ) -> Result<Option<SesionDto>, ErrorSesion> {
+            Ok(self.sesion_guardada.borrow().clone())
+        }
     }
 
     // -----------------------------------------
