@@ -1,6 +1,14 @@
 import pytest
 from unittest.mock import Mock
+
+from datetime import datetime, timezone, timedelta
+
 from aplicacion.registrar_usuario import RegistrarUsuario
+from aplicacion.iniciar_sesion import IniciarSesion
+from aplicacion.puertos.servicio_tokens import TokenSesion
+
+from dominio.usuario import Usuario
+from dominio.credenciales import Credenciales
 
 
 
@@ -48,3 +56,64 @@ def datos_validos():
         "correo": "eduardo@example.com",
         "contrasena": "contrasena123"
     }
+
+
+
+@pytest.fixture
+def usuario_existente():
+    return Usuario(
+        id="usuario-123",
+        nombre_usuario="eduardo",
+        nombre_visible="Eduardo",
+        correo="eduardo@example.com",
+        fecha_alta=datetime.now(timezone.utc)
+    )
+
+
+@pytest.fixture
+def credenciales_existentes():
+    return Credenciales(
+        usuario_id="usuario-123",
+        hash_contrasena="hash_de_prueba"
+    )
+
+
+@pytest.fixture
+def servicio_tokens():
+    servicio = Mock()
+
+    servicio.generar_token.return_value = TokenSesion(
+        valor="token_de_prueba",
+        fecha_expiracion=datetime.now(timezone.utc)
+        + timedelta(minutes=60)
+    )
+
+    return servicio
+
+
+@pytest.fixture
+def caso_uso_iniciar_sesion(
+    repositorio_usuarios,
+    servicio_hash,
+    servicio_tokens,
+    usuario_existente,
+    credenciales_existentes
+):
+    repositorio_credenciales = Mock()
+
+    repositorio_usuarios.obtener_usuario_por_correo.return_value = (
+        usuario_existente
+    )
+
+    repositorio_credenciales.obtener_por_usuario_id.return_value = (
+        credenciales_existentes
+    )
+
+    servicio_hash.verificar_contrasena.return_value = True
+
+    return IniciarSesion(
+        repositorio_usuarios=repositorio_usuarios,
+        repositorio_credenciales=repositorio_credenciales,
+        servicio_hash=servicio_hash,
+        servicio_tokens=servicio_tokens
+    )

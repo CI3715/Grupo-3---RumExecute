@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class TOkenSesion:
+class TokenSesion:
     valor: str
     fecha_expiracion: datetime
 

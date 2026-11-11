@@ -55,6 +55,11 @@ class IniciarSesion:
             .obtener_usuario_por_correo(correo)
         )
 
+        """
+        Pendiente de modificar: por el orden en que se verifican correo y contraseña,
+        se podría dar información sobre si el correo existe o no, lo cual es un
+        riesgo de seguridad. (Pero eso es un problema para el Daniel del futuro jaja)
+        """
         if usuario is None:
             raise CredencialesInvalidas()
 

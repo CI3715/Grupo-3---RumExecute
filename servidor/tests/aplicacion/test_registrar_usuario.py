@@ -209,6 +209,7 @@ def test_se_genera_hash(
 def test_contrasena_no_se_guarda_en_texto_plano(
     caso_uso,
     persistencia_registro,
+    servicio_hash,
     datos_validos
 ):
     usuario = caso_uso.ejecutar(**datos_validos)
