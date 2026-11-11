@@ -1,4 +1,21 @@
 use crate::dominio::evento::EventoLibro; // Importa el tipo EventoLibro del módulo dominio
+use crate::aplicacion::dto::{
+    RegistrarUsuarioEntrada,
+    UsuarioRegistradoDto,
+};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ErrorAutenticacion {
+    Validacion {
+        campo: String,
+        mensaje: String,
+    },
+    UsuarioYaExistente {
+        campo: String,
+    },
+    ServicioNoDisponible,
+    ErrorTecnico(String),
+}
 
 #[derive(Debug)]
 pub struct ErrorRepositorio(pub String);
@@ -16,4 +33,11 @@ pub trait Reloj {
 
 pub trait GeneradorId {
     fn nuevo_id(&mut self) -> String; // Genera un id unico
+}
+
+pub trait ServicioAutenticacion {
+    fn registrar_usuario(
+        &self,
+        entrada: &RegistrarUsuarioEntrada,
+    ) -> Result<UsuarioRegistradoDto, ErrorAutenticacion>;
 }
