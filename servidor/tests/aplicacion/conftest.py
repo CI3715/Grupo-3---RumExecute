@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 from aplicacion.registrar_usuario import RegistrarUsuario
 from aplicacion.iniciar_sesion import IniciarSesion
 from aplicacion.puertos.servicio_tokens import TokenSesion
+from aplicacion.obtener_perfil_propio import ObtenerPerfilPropio
 
 from dominio.usuario import Usuario
 from dominio.credenciales import Credenciales
@@ -115,5 +116,23 @@ def caso_uso_iniciar_sesion(
         repositorio_usuarios=repositorio_usuarios,
         repositorio_credenciales=repositorio_credenciales,
         servicio_hash=servicio_hash,
+        servicio_tokens=servicio_tokens
+    )
+
+
+@pytest.fixture
+def caso_uso_obtener_perfil_propio(
+    repositorio_usuarios,
+    servicio_tokens,
+    usuario_existente
+):
+    servicio_tokens.verificar_token.return_value = usuario_existente.id
+
+    repositorio_usuarios.obtener_usuario_por_id.return_value = (
+        usuario_existente
+    )
+
+    return ObtenerPerfilPropio(
+        repositorio_usuarios=repositorio_usuarios,
         servicio_tokens=servicio_tokens
     )
