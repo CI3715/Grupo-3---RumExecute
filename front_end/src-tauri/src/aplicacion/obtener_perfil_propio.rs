@@ -73,6 +73,12 @@ mod tests {
         ) -> Result<Option<SesionDto>, ErrorSesion> {
             self.resultado.clone()
         }
+
+        fn eliminar_sesion(
+            &self,
+        ) -> Result<(), ErrorSesion> {
+            Ok(())
+        }
     }
 
     struct ServicioFalso {

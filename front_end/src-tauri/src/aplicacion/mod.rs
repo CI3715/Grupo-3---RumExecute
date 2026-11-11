@@ -1,4 +1,5 @@
 pub mod cambiar_moneda_base;
+pub mod cerrar_sesion;
 pub mod consultar_patrimonio;
 pub mod corregir_movimiento;
 pub mod crear_categoria;

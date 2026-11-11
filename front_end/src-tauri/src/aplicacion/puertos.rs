@@ -65,6 +65,10 @@ pub trait AlmacenSesiones {
     fn obtener_sesion(
         &self,
     ) -> Result<Option<SesionDto>, ErrorSesion>;
+
+    fn eliminar_sesion(
+        &self,
+    ) -> Result<(), ErrorSesion>;
 }
 
 pub trait ServicioPerfilPropio {

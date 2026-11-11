@@ -100,6 +100,12 @@ mod tests {
         ) -> Result<Option<SesionDto>, ErrorSesion> {
             Ok(self.sesion_guardada.borrow().clone())
         }
+
+        fn eliminar_sesion(
+            &self,
+        ) -> Result<(), ErrorSesion> {
+            Ok(())
+        }
     }
 
     // -----------------------------------------
