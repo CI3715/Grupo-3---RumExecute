@@ -29,9 +29,6 @@ def repartir_residuo(
     # Asegura que cada cuota tenga su nombre correspondiente
     if set(cuotas_exactas.keys()) != set(nombres.keys()):
         raise ErrorDominio("participantes", "Los participantes y los nombres de usuario no coinciden.")
-    # Asegura que cada cuota tenga su nombre correspondiente
-    if set(cuotas_exactas.keys()) != set(nombres.keys()):
-        raise ErrorDominio("participantes", "Los participantes y los nombres de usuario no coinciden.")
     # Si el monto total es 0 no tiene sentido hacer una cuenta compartida
     if total <= Decimal("0"):
         raise ErrorDominio("monto", "El monto debe ser mayor que cero.")
