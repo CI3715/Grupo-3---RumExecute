@@ -300,3 +300,36 @@ pub fn listar_categorias(
         ErrorListarCategorias::Repositorio(error) => error.0,
     })
 }
+
+// --- Comandos de Autenticación y Sesión ---
+
+#[tauri::command]
+pub async fn registrar_usuario(
+    entrada: crate::infraestructura::cliente_auth::EntradaRegistro,
+) -> Result<crate::infraestructura::cliente_auth::DatosUsuario, String> {
+    crate::infraestructura::cliente_auth::peticion_registro(entrada).await
+}
+
+#[tauri::command]
+pub async fn iniciar_sesion(
+    entrada: crate::infraestructura::cliente_auth::EntradaLogin,
+) -> Result<crate::infraestructura::cliente_auth::RespuestaSesion, String> {
+    crate::infraestructura::cliente_auth::peticion_login(entrada).await
+}
+
+#[tauri::command]
+pub async fn obtener_perfil_propio() -> Result<crate::infraestructura::cliente_auth::DatosUsuario, String> {
+    let token = crate::infraestructura::cliente_auth::obtener_token_keyring()?
+        .ok_or_else(|| "No hay una sesión activa guardada.".to_string())?;
+    crate::infraestructura::cliente_auth::peticion_perfil_propio(&token).await
+}
+
+#[tauri::command]
+pub fn cerrar_sesion() -> Result<(), String> {
+    crate::infraestructura::cliente_auth::borrar_token_keyring()
+}
+
+#[tauri::command]
+pub fn obtener_token_sesion() -> Result<Option<String>, String> {
+    crate::infraestructura::cliente_auth::obtener_token_keyring()
+}

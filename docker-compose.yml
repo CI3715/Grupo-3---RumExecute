@@ -1,0 +1,18 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cuentas_claras_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password123}
+      POSTGRES_DB: ${DB_NAME:-cuentas_claras}
+    ports:
+      - "5432:5432"
+    volumes:
+      # Volumen persistente: la información no se pierde al reiniciar el contenedor
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
+
