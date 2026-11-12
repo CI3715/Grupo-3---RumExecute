@@ -69,6 +69,12 @@ pub struct ServicioSocialFalso {
 
     pub respuesta_invitar_miembro_grupo:
         Result<InvitacionGrupoDto, ErrorServicioSocial>,
+    
+    pub llamadas_responder_invitacion_grupo:
+        RefCell<Vec<(String, String, ResponderInvitacionGrupoEntrada)>>,
+
+    pub respuesta_responder_invitacion_grupo:
+        Result<RespuestaInvitacionGrupoDto, ErrorServicioSocial>,
 }
 
 impl Default for ServicioSocialFalso {
@@ -158,6 +164,16 @@ impl Default for ServicioSocialFalso {
                 invitador_id: "usuario-1".into(),
                 estado: "PENDIENTE".into(),
             }),
+
+            llamadas_responder_invitacion_grupo: RefCell::new(Vec::new()),
+
+            respuesta_responder_invitacion_grupo: Ok(
+                RespuestaInvitacionGrupoDto {
+                    id: "invitacion-1".into(),
+                    grupo_id: "grupo-1".into(),
+                    estado: "ACEPTADA".into(),
+                }
+            ),
         }
     }
 }
@@ -269,10 +285,20 @@ impl ServicioSocial for ServicioSocialFalso {
     }
 
     fn responder_invitacion_grupo(
-        &self, _: &str, _: &str,
-        _: &ResponderInvitacionGrupoEntrada,
+        &self,
+        token: &str,
+        grupo_id: &str,
+        entrada: &ResponderInvitacionGrupoEntrada,
     ) -> Result<RespuestaInvitacionGrupoDto, ErrorServicioSocial> {
-        unimplemented!()
+        self.llamadas_responder_invitacion_grupo
+            .borrow_mut()
+            .push((
+                token.to_string(),
+                grupo_id.to_string(),
+                entrada.clone(),
+            ));
+
+        self.respuesta_responder_invitacion_grupo.clone()
     }
 
     fn registrar_gasto_compartido(
