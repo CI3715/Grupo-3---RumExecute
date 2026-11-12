@@ -33,6 +33,12 @@ pub struct ServicioSocialFalso {
 
     pub respuesta_enviar_invitacion:
         Result<InvitacionAmistadDto, ErrorServicioSocial>,
+
+    pub llamadas_responder_amistad:
+        RefCell<Vec<(String, String, ResponderInvitacionAmistadEntrada)>>,
+
+    pub respuesta_responder_amistad:
+        Result<RespuestaAmistadDto, ErrorServicioSocial>,
 }
 
 impl Default for ServicioSocialFalso {
@@ -53,6 +59,13 @@ impl Default for ServicioSocialFalso {
                 nombre_usuario_receptor: "beto".into(),
                 estado: "PENDIENTE".into(),
             }),
+
+            llamadas_responder_amistad: RefCell::new(Vec::new()),
+
+            respuesta_responder_amistad: Ok(RespuestaAmistadDto {
+                id: "amistad-1".into(),
+                estado: "ACTIVA".into(),
+            }),
         }
     }
 }
@@ -72,24 +85,32 @@ impl ServicioSocial for ServicioSocialFalso {
     }
 
     fn enviar_invitacion_amistad(
-    &self,
-    token: &str,
-    entrada: &EnviarInvitacionAmistadEntrada,
-) -> Result<InvitacionAmistadDto, ErrorServicioSocial> {
+        &self,
+        token: &str,
+        entrada: &EnviarInvitacionAmistadEntrada,
+    ) -> Result<InvitacionAmistadDto, ErrorServicioSocial> {
 
-    self.llamadas_enviar_invitacion.borrow_mut().push((
-        token.to_string(),
-        entrada.clone(),
-    ));
+        self.llamadas_enviar_invitacion.borrow_mut().push((
+            token.to_string(),
+            entrada.clone(),
+        ));
 
-    self.respuesta_enviar_invitacion.clone()
-}
+        self.respuesta_enviar_invitacion.clone()
+    }
 
     fn responder_invitacion_amistad(
-        &self, _: &str, _: &str,
-        _: &ResponderInvitacionAmistadEntrada,
+        &self,
+        token: &str,
+        amistad_id: &str,
+        entrada: &ResponderInvitacionAmistadEntrada,
     ) -> Result<RespuestaAmistadDto, ErrorServicioSocial> {
-        unimplemented!()
+        self.llamadas_responder_amistad.borrow_mut().push((
+            token.to_string(),
+            amistad_id.to_string(),
+            entrada.clone(),
+        ));
+
+        self.respuesta_responder_amistad.clone()
     }
 
     fn listar_amistades(
