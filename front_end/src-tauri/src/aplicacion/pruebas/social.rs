@@ -22,17 +22,36 @@ use crate::aplicacion::puertos::servicio_social::{
 
 // Servicio falso para los tests sociales.
 pub struct ServicioSocialFalso {
-    pub llamadas_buscar: RefCell<Vec<(String, String)>>,
-    pub respuesta_buscar: Result<UsuarioPublicoDto, ErrorServicioSocial>,
+    pub llamadas_buscar:
+        RefCell<Vec<(String, String)>>,
+
+    pub respuesta_buscar:
+        Result<UsuarioPublicoDto, ErrorServicioSocial>,
+
+    pub llamadas_enviar_invitacion:
+        RefCell<Vec<(String, EnviarInvitacionAmistadEntrada)>>,
+
+    pub respuesta_enviar_invitacion:
+        Result<InvitacionAmistadDto, ErrorServicioSocial>,
 }
 
 impl Default for ServicioSocialFalso {
     fn default() -> Self {
         Self {
             llamadas_buscar: RefCell::new(Vec::new()),
+
             respuesta_buscar: Ok(UsuarioPublicoDto {
                 nombre_usuario: "beto".into(),
                 nombre_visible: "Beto".into(),
+            }),
+
+            llamadas_enviar_invitacion: RefCell::new(Vec::new()),
+
+            respuesta_enviar_invitacion: Ok(InvitacionAmistadDto {
+                id: "amistad-1".into(),
+                nombre_usuario_solicitante: "ana".into(),
+                nombre_usuario_receptor: "beto".into(),
+                estado: "PENDIENTE".into(),
             }),
         }
     }
@@ -53,10 +72,18 @@ impl ServicioSocial for ServicioSocialFalso {
     }
 
     fn enviar_invitacion_amistad(
-        &self, _: &str, _: &EnviarInvitacionAmistadEntrada,
-    ) -> Result<InvitacionAmistadDto, ErrorServicioSocial> {
-        unimplemented!()
-    }
+    &self,
+    token: &str,
+    entrada: &EnviarInvitacionAmistadEntrada,
+) -> Result<InvitacionAmistadDto, ErrorServicioSocial> {
+
+    self.llamadas_enviar_invitacion.borrow_mut().push((
+        token.to_string(),
+        entrada.clone(),
+    ));
+
+    self.respuesta_enviar_invitacion.clone()
+}
 
     fn responder_invitacion_amistad(
         &self, _: &str, _: &str,
