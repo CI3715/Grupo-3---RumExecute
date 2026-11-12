@@ -51,6 +51,12 @@ pub struct ServicioSocialFalso {
 
     pub respuesta_eliminar_amistad:
         Result<(), ErrorServicioSocial>,
+    
+    pub llamadas_crear_grupo:
+        RefCell<Vec<(String, CrearGrupoEntrada)>>,
+
+    pub respuesta_crear_grupo:
+        Result<GrupoCreadoDto, ErrorServicioSocial>,
 }
 
 impl Default for ServicioSocialFalso {
@@ -102,6 +108,16 @@ impl Default for ServicioSocialFalso {
             llamadas_eliminar_amistad: RefCell::new(Vec::new()),
 
             respuesta_eliminar_amistad: Ok(()),
+
+            llamadas_crear_grupo: RefCell::new(Vec::new()),
+
+            respuesta_crear_grupo: Ok(GrupoCreadoDto {
+                id: "grupo-1".into(),
+                nombre_grupo: "Viaje".into(),
+                moneda: "USD".into(),
+                administrador_id: "usuario-1".into(),
+                descripcion: "Vacaciones".into(),
+            }),
         }
     }
 }
@@ -174,9 +190,16 @@ impl ServicioSocial for ServicioSocialFalso {
     }
 
     fn crear_grupo(
-        &self, _: &str, _: &CrearGrupoEntrada,
+        &self,
+        token: &str,
+        entrada: &CrearGrupoEntrada,
     ) -> Result<GrupoCreadoDto, ErrorServicioSocial> {
-        unimplemented!()
+        self.llamadas_crear_grupo.borrow_mut().push((
+            token.to_string(),
+            entrada.clone(),
+        ));
+
+        self.respuesta_crear_grupo.clone()
     }
 
     fn listar_mis_grupos(
