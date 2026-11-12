@@ -2,8 +2,8 @@
 Módulo de Infraestructura: Seguridad y Hashing de Contraseñas (RNF-05).
 Utiliza Argon2id con sal única generada automáticamente y derivación lenta.
 """
-from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError, VerificationError, InvalidHashError
+from argon2 import PasswordHasher  # type: ignore
+from argon2.exceptions import VerifyMismatchError, VerificationError, InvalidHashError  # type: ignore
 
 # Instancia configurada de Argon2id (los parámetros por defecto de argon2-cffi
 # cumplen con las recomendaciones de OWASP para Argon2id con sal criptográfica única)
