@@ -10,7 +10,7 @@ class GrupoCompartido:
     moneda: str
     id_miembros: tuple[str, ...]
     id_administrador: str
-    descripción: str = ""
+    descripcion: str = ""
     actividad: str = ""
 
     def __post_init__ (self):
