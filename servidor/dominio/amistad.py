@@ -12,28 +12,29 @@ class EstadoAmistad(Enum):
 
 @dataclass(frozen=True)
 class Amistad:
-    nombre_usuario_solicitante: str
-    nombre_usuario_receptor: str
+    id: str
+    id_solicitante: str
+    id_receptor: str
     estado: EstadoAmistad = EstadoAmistad.PENDIENTE
 
 # Verifica si hay una solicitud ya sea a->b o b->a
 
 def _es_entre(amistad: Amistad, a: str, b: str) -> bool:
-    return {amistad.nombre_usuario_solicitante, amistad.nombre_usuario_receptor} == {a, b}
+    return {amistad.id_solicitante, amistad.id_receptor} == {a, b}
 
 # Verifica si la solicitud de amistad es válida
 def validar_solicitud_amistad(
-    nom_us_solicitante: str,
-    nom_us_receptor: str,
+    id_sol: str,
+    id_recept: str,
     amistades_existentes: list[Amistad],
 ) -> None:
-    if nom_us_solicitante == nom_us_receptor:
+    if id_sol == id_recept:
         raise ErrorDominio(
             "receptor", "No se puede enviar una solicitud de amistad hacia uno mismo."
         )
 
     for existente in amistades_existentes:
-        if not _es_entre(existente, nom_us_solicitante, nom_us_receptor):
+        if not _es_entre(existente, id_sol, id_recept):
             continue
         if existente.estado == EstadoAmistad.PENDIENTE:
             raise ErrorConflicto(
@@ -47,9 +48,9 @@ def validar_solicitud_amistad(
 
 
 def responder_solicitud(
-    amistad: Amistad, nom_us_que_responde: str, aceptar: bool
+    amistad: Amistad, id_us_responde: str, aceptar: bool
 ) -> Amistad:
-    if nom_us_que_responde != amistad.nombre_usuario_receptor:
+    if id_us_responde != amistad.id_receptor:
         raise ErrorPermiso(
             "usuario", "Solo el destinatario puede responder la invitación."
         )
@@ -57,7 +58,8 @@ def responder_solicitud(
         raise ErrorConflicto("amistad", "La invitación ya fue respondida.")
     nuevo_estado = EstadoAmistad.ACTIVA if aceptar else EstadoAmistad.RECHAZADA
     return Amistad(
-        amistad.nombre_usuario_solicitante,
-        amistad.nombre_usuario_receptor,
+        amistad.id,
+        amistad.id_solicitante,
+        amistad.id_receptor,
         nuevo_estado,
     )

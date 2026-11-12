@@ -5,10 +5,11 @@ from decimal import Decimal
 
 @dataclass(frozen=True)
 class GrupoCompartido:
+    id: str
     nombre_grupo: str
     moneda: str
-    miembros: tuple[str, ...]
-    administrador: str
+    id_miembros: tuple[str, ...]
+    id_administrador: str
     descripción: str = ""
     actividad: str = ""
 
@@ -18,18 +19,18 @@ class GrupoCompartido:
             raise ErrorDominio ("nombre_grupo", "El grupo debe poseer un nombre válido.")
         if len(self.moneda) != 3 or not self.moneda.isalpha() or not self.moneda.isupper() or not self.moneda.isascii():
             raise ErrorDominio ("moneda", "El codigo ISO de la moneda debe tener 3 letras en mayúsculas.")
-        if not self.miembros:
+        if not self.id_miembros:
             raise ErrorDominio ("miembros", "Debe existir la lista de miembros.")
-        if len(set(self.miembros)) != len(self.miembros):
+        if len(set(self.id_miembros)) != len(self.id_miembros):
             raise ErrorDominio("miembros", "Existen miembros duplicados.")
-        if self.administrador not in self.miembros:
+        if self.id_administrador not in self.id_miembros:
             raise ErrorDominio("administrador", "El administrador debe ser miembro del grupo.")
 
-def es_miembro(grupo: GrupoCompartido, nombre_usuario: str) -> bool:
-    return nombre_usuario in grupo.miembros
+def es_miembro(grupo: GrupoCompartido, usuario_id: str) -> bool:
+    return usuario_id in grupo.id_miembros
 
-def validar_es_admin(grupo: GrupoCompartido, nombre_usuario: str) -> None:
-    if nombre_usuario != grupo.administrador:
+def validar_es_admin(grupo: GrupoCompartido, usuario_id: str) -> None:
+    if usuario_id != grupo.id_administrador:
         raise ErrorPermiso("usuario", "Solo el administrador puede realizar esta acción")
 
 
