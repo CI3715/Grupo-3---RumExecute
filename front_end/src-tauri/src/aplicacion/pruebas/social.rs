@@ -40,10 +40,17 @@ pub struct ServicioSocialFalso {
     pub respuesta_responder_amistad:
         Result<RespuestaAmistadDto, ErrorServicioSocial>,
 
-    pub llamadas_listar_amistades: RefCell<Vec<String>>,
+    pub llamadas_listar_amistades:
+        RefCell<Vec<String>>,
 
     pub respuesta_listar_amistades:
         Result<ListadoAmistadesDto, ErrorServicioSocial>,
+
+    pub llamadas_eliminar_amistad:
+        RefCell<Vec<(String, String)>>,
+
+    pub respuesta_eliminar_amistad:
+        Result<(), ErrorServicioSocial>,
 }
 
 impl Default for ServicioSocialFalso {
@@ -91,6 +98,10 @@ impl Default for ServicioSocialFalso {
                     nombre_visible: "Daniel".into(),
                 }],
             }),
+
+            llamadas_eliminar_amistad: RefCell::new(Vec::new()),
+
+            respuesta_eliminar_amistad: Ok(()),
         }
     }
 }
@@ -150,9 +161,16 @@ impl ServicioSocial for ServicioSocialFalso {
     }
 
     fn eliminar_amistad(
-        &self, _: &str, _: &str,
+        &self,
+        token: &str,
+        amistad_id: &str,
     ) -> Result<(), ErrorServicioSocial> {
-        unimplemented!()
+        self.llamadas_eliminar_amistad.borrow_mut().push((
+            token.to_string(),
+            amistad_id.to_string(),
+        ));
+
+        self.respuesta_eliminar_amistad.clone()
     }
 
     fn crear_grupo(
