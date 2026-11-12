@@ -81,6 +81,12 @@ pub struct ServicioSocialFalso {
 
     pub respuesta_registrar_gasto:
         Result<GastoCompartidoDto, ErrorServicioSocial>,
+    
+    pub llamadas_obtener_detalle_grupo:
+        RefCell<Vec<(String, String)>>,
+
+    pub respuesta_obtener_detalle_grupo:
+        Result<DetalleGrupoDto, ErrorServicioSocial>,
 }
 
 impl Default for ServicioSocialFalso {
@@ -202,6 +208,58 @@ impl Default for ServicioSocialFalso {
                         nombre_usuario: "beto".into(),
                         monto: "15.00".into(),
                         lleva_residuo: false,
+                    },
+                ],
+            }),
+
+            llamadas_obtener_detalle_grupo: RefCell::new(Vec::new()),
+
+            respuesta_obtener_detalle_grupo: Ok(DetalleGrupoDto {
+                id: "grupo-1".into(),
+                nombre_grupo: "Viaje".into(),
+                moneda: "USD".into(),
+                descripcion: "Vacaciones".into(),
+                administrador_id: "usuario-1".into(),
+
+                miembros: vec![
+                    MiembroGrupoDto {
+                        usuario_id: "usuario-1".into(),
+                        nombre_usuario: "ana".into(),
+                        nombre_visible: "Ana".into(),
+                        es_administrador: true,
+                        balance: "15.00".into(),
+                    },
+                    MiembroGrupoDto {
+                        usuario_id: "usuario-2".into(),
+                        nombre_usuario: "beto".into(),
+                        nombre_visible: "Beto".into(),
+                        es_administrador: false,
+                        balance: "-15.00".into(),
+                    },
+                ],
+
+                gastos: vec![
+                    GastoCompartidoDto {
+                        id: "gasto-1".into(),
+                        grupo_id: "grupo-1".into(),
+                        concepto: "Cena".into(),
+                        pagador_id: "usuario-1".into(),
+                        monto: "30.00".into(),
+                        fecha: "2026-11-12T12:00:00Z".into(),
+                        cuotas: vec![
+                            CuotaCompartidaDto {
+                                usuario_id: "usuario-1".into(),
+                                nombre_usuario: "ana".into(),
+                                monto: "15.00".into(),
+                                lleva_residuo: false,
+                            },
+                            CuotaCompartidaDto {
+                                usuario_id: "usuario-2".into(),
+                                nombre_usuario: "beto".into(),
+                                monto: "15.00".into(),
+                                lleva_residuo: false,
+                            },
+                        ],
                     },
                 ],
             }),
@@ -348,9 +406,16 @@ impl ServicioSocial for ServicioSocialFalso {
     }
 
     fn obtener_detalle_grupo(
-        &self, _: &str, _: &str,
+        &self,
+        token: &str,
+        grupo_id: &str,
     ) -> Result<DetalleGrupoDto, ErrorServicioSocial> {
-        unimplemented!()
+        self.llamadas_obtener_detalle_grupo.borrow_mut().push((
+            token.to_string(),
+            grupo_id.to_string(),
+        ));
+
+        self.respuesta_obtener_detalle_grupo.clone()
     }
 }
 
