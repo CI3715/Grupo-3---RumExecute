@@ -73,4 +73,7 @@ class UsuarioNoEncontrado(ErrorAplicacion):
 
 class AmistadNoEncontrada(ErrorAplicacion):
     def __init__(self):
-        super().__init__("La invitación de amistad no existe.")
+        super().__init__(
+            "amistad",
+            "La invitación de amistad no existe."
+        )
