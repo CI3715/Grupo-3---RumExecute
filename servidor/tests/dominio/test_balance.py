@@ -12,13 +12,13 @@ MIEMBROS = ("ana", "beto", "carla")
 def gasto_iguales(pagador="ana", total="100.00", participantes=MIEMBROS, concepto="Cena"):
     nombres = {p: p for p in participantes}
     cuotas = tuple(dividir_partes_iguales(D(total), nombres))
-    return Gasto(concepto, pagador, D(total), cuotas, AHORA)
+    return Gasto("gasto-1", "grupo-1", concepto, pagador, D(total), cuotas, AHORA)
 
 def gasto_porcentajes():
     pct = {"ana": D("50"), "beto": D("25"), "carla": D("25")}
     nombres = {p: p for p in pct.keys()}
     cuotas = tuple(dividir_por_porcentajes(D("60.00"), pct, nombres))
-    return Gasto("Taxi", "beto", D("60.00"), cuotas, AHORA)
+    return Gasto("gasto-2", "grupo-1", "Taxi", "beto", D("60.00"), cuotas, AHORA)
 
 def test_ejemplo_oficial_de_balances():
     b = calcular_balances(MIEMBROS, [gasto_iguales(), gasto_porcentajes()])
@@ -60,23 +60,23 @@ def test_gasto_cuotas_que_no_suman_el_monto():
     nombres = {m: m for m in MIEMBROS}
     cuotas = tuple(dividir_partes_iguales(D("100.00"), nombres))[:1]
     with pytest.raises(ErrorDominio) as exc:
-        Gasto("X", "ana", D("100.00"), cuotas, AHORA)
+        Gasto("gasto-1", "grupo-1", "X", "ana", D("100.00"), cuotas, AHORA)
     assert exc.value.campo == "cuotas"
 
 def test_gasto_sin_cuotas():
     with pytest.raises(ErrorDominio) as exc:
-        Gasto("X", "ana", D("10.00"), (), AHORA)
+        Gasto("gasto-1", "grupo-1", "X", "ana", D("10.00"), (), AHORA)
     assert exc.value.campo == "cuotas"
 
 def test_gasto_fecha_sin_zona_horaria():
     cuotas = tuple(dividir_partes_iguales(D("10.00"), {"ana": "ana"}))
     with pytest.raises(ErrorDominio) as exc:
-        Gasto("X", "ana", D("10.00"), cuotas, datetime.now())
+        Gasto("gasto-1", "grupo-1", "X", "ana", D("10.00"), cuotas, datetime.now())
     assert exc.value.campo == "fecha"
 
 @pytest.mark.parametrize("monto", ["0", "-1", "10.005"])
 def test_gasto_monto_invalido(monto):
     cuotas = tuple(dividir_partes_iguales(D("10.00"), {"ana": "ana"}))
     with pytest.raises(ErrorDominio) as exc:
-        Gasto("X", "ana", D(monto), cuotas, AHORA)
+        Gasto("gasto-1", "grupo-1", "X", "ana", D(monto), cuotas, AHORA)
     assert exc.value.campo == "monto"

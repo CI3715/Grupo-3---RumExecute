@@ -8,8 +8,10 @@ from dominio.errores import ErrorDominio
 #Clase de Gasto, con dataclass frozen para que sea inmutable
 @dataclass(frozen=True)
 class Gasto:
+    id: str
+    grupo_id: str
     concepto: str
-    pagador: str
+    pagador_id: str
     monto: Decimal
     cuotas: tuple[CuotaDivision, ...]
     fecha: datetime
@@ -17,6 +19,21 @@ class Gasto:
     def __post_init__(self):
         object.__setattr__(self, "concepto", self.concepto.strip())
 
+        if not self.id:
+            raise ErrorDominio(
+                "id",
+                "El identificador del gasto es obligatorio."
+            )
+        if not self.grupo_id:
+            raise ErrorDominio(
+                "grupo_id",
+                "El identificador del grupo es obligatorio."
+            )
+        if not self.pagador_id:
+            raise ErrorDominio(
+                "pagador_id",
+                "El identificador del pagador es obligatorio."
+            )
         if not self.concepto:
             raise ErrorDominio("concepto", "El concepto es obligatorio.")
         if self.fecha.tzinfo is None:
@@ -55,15 +72,15 @@ def calcular_balances(
 ) -> dict[str, Decimal]:
     balances = {m: Decimal("0") for m in miembros}
     for gasto in gastos:
-        if gasto.pagador not in balances:
+        if gasto.pagador_id not in balances:
             raise ErrorDominio("pagador", "El pagador debe ser miembro del grupo.")
-        balances[gasto.pagador] += gasto.monto # Se le suma lo que los gastos que ha pagado
+        balances[gasto.pagador_id] += gasto.monto # Se le suma lo que los gastos que ha pagado
         for cuota in gasto.cuotas:
-            if cuota.nombre_usuario not in balances:
+            if cuota.usuario_id not in balances:
                 raise ErrorDominio(
                     "participantes", "Todos los participantes deben ser miembros del grupo."
                 )
-            balances[cuota.nombre_usuario] -= cuota.monto # Se le suma las cuotas que tiene pendientes
+            balances[cuota.usuario_id] -= cuota.monto # Se le suma las cuotas que tiene pendientes
     # Al terminar el ciclo, cuando ya todos los balances individuales están calculados, se verifica que su suma de cero
     validar_balances_suma_cero(balances)
     return balances
