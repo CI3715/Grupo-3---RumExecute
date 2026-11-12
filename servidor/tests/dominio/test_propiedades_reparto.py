@@ -60,6 +60,13 @@ def test_los_balances_siempre_suman_cero(gastos):
     for total, pagador, participantes in gastos:
         nombres_part = {miembros[i]: miembros[i] for i in participantes}
         cuotas = tuple(dividir_partes_iguales(total, nombres_part))
-        lista.append(Gasto("Gasto", miembros[pagador], total, cuotas, AHORA))
+        lista.append(Gasto(
+            id=f"gasto-{len(lista) + 1}",
+            grupo_id="grupo-1",
+            concepto="Gasto",
+            pagador_id=miembros[pagador],
+            monto=total,
+            cuotas=cuotas,
+            fecha=AHORA))
     balances = calcular_balances(miembros, lista)
     assert sum(balances.values(), D("0")) == D("0")
