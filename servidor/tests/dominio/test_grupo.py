@@ -67,24 +67,30 @@ def test_no_se_invita_a_quien_ya_es_miembro():
         validar_invitacion_grupo(grupo(("ana", "beto")), "ana", "beto", AMIGOS, [])
 
 def test_invitacion_pendiente_duplicada():
-    pend = [InvitacionGrupo("Viaje", "beto", "ana")]
+    pend = [InvitacionGrupo("inv-1", "1", "beto", "ana")]
     with pytest.raises(ErrorConflicto):
         validar_invitacion_grupo(grupo(("ana",)), "ana", "beto", AMIGOS, pend)
 
 def test_invitacion_rechazada_no_bloquea_reinvitar():
-    rech = [InvitacionGrupo("Viaje", "beto", "ana", EstadoInvitacionGrupo.RECHAZADA)]
+    rech = [
+        InvitacionGrupo("inv-1", "1", "beto", "ana", EstadoInvitacionGrupo.RECHAZADA)
+    ]
     validar_invitacion_grupo(grupo(("ana",)), "ana", "beto", AMIGOS, rech)
 
 def test_el_invitado_acepta_o_rechaza():
-    inv = InvitacionGrupo("Viaje", "beto", "ana")
+    inv = InvitacionGrupo("inv-1", "1", "beto", "ana")
     assert responder_invitacion_grupo(inv, "beto", True).estado == EstadoInvitacionGrupo.ACEPTADA
     assert responder_invitacion_grupo(inv, "beto", False).estado == EstadoInvitacionGrupo.RECHAZADA
 
 def test_solo_el_invitado_responde():
     with pytest.raises(ErrorPermiso):
-        responder_invitacion_grupo(InvitacionGrupo("Viaje", "beto", "ana"), "ana", True)
+        responder_invitacion_grupo(
+            InvitacionGrupo("inv-1", "1", "beto", "ana"), "ana", True
+        )
 
 def test_invitacion_no_se_responde_dos_veces():
-    inv = InvitacionGrupo("Viaje", "beto", "ana", EstadoInvitacionGrupo.ACEPTADA)
+    inv = InvitacionGrupo(
+        "inv-1", "1", "beto", "ana", EstadoInvitacionGrupo.ACEPTADA
+    )
     with pytest.raises(ErrorConflicto):
         responder_invitacion_grupo(inv, "beto", True)
