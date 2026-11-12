@@ -1,9 +1,20 @@
 from datetime import datetime, timezone
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from infraestructura.db import engine, Base
+import infraestructura.modelos_bd  # Carga los modelos para que Base los conozca
 from api.rutas_auth import router as router_auth
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Crea automáticamente las tablas en PostgreSQL si no existen al arrancar
+    Base.metadata.create_all(bind=engine)
+    yield
+
 
 # 1. Definición del Esquema Pydantic (Modelo de Respuesta)
 class PingResponse(BaseModel):
@@ -18,6 +29,7 @@ app = FastAPI(
     title="Cuentas Claras API",
     description="Servidor Backend para la aplicación de finanzas personales Cuentas Claras",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # 3. Configuración del Middleware CORS
