@@ -39,6 +39,11 @@ pub struct ServicioSocialFalso {
 
     pub respuesta_responder_amistad:
         Result<RespuestaAmistadDto, ErrorServicioSocial>,
+
+    pub llamadas_listar_amistades: RefCell<Vec<String>>,
+
+    pub respuesta_listar_amistades:
+        Result<ListadoAmistadesDto, ErrorServicioSocial>,
 }
 
 impl Default for ServicioSocialFalso {
@@ -65,6 +70,26 @@ impl Default for ServicioSocialFalso {
             respuesta_responder_amistad: Ok(RespuestaAmistadDto {
                 id: "amistad-1".into(),
                 estado: "ACTIVA".into(),
+            }),
+
+            llamadas_listar_amistades: RefCell::new(Vec::new()),
+
+            respuesta_listar_amistades: Ok(ListadoAmistadesDto {
+                amigos: vec![AmigoDto {
+                    amistad_id: "amistad-1".into(),
+                    nombre_usuario: "beto".into(),
+                    nombre_visible: "Beto".into(),
+                }],
+                invitaciones_recibidas: vec![InvitacionAmistadResumenDto {
+                    amistad_id: "amistad-2".into(),
+                    nombre_usuario: "carla".into(),
+                    nombre_visible: "Carla".into(),
+                }],
+                invitaciones_enviadas: vec![InvitacionAmistadResumenDto {
+                    amistad_id: "amistad-3".into(),
+                    nombre_usuario: "daniel".into(),
+                    nombre_visible: "Daniel".into(),
+                }],
             }),
         }
     }
@@ -114,9 +139,14 @@ impl ServicioSocial for ServicioSocialFalso {
     }
 
     fn listar_amistades(
-        &self, _: &str,
+        &self,
+        token: &str,
     ) -> Result<ListadoAmistadesDto, ErrorServicioSocial> {
-        unimplemented!()
+        self.llamadas_listar_amistades
+            .borrow_mut()
+            .push(token.to_string());
+
+        self.respuesta_listar_amistades.clone()
     }
 
     fn eliminar_amistad(
