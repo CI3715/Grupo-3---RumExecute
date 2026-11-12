@@ -57,6 +57,12 @@ pub struct ServicioSocialFalso {
 
     pub respuesta_crear_grupo:
         Result<GrupoCreadoDto, ErrorServicioSocial>,
+    
+    pub llamadas_listar_mis_grupos:
+        RefCell<Vec<String>>,
+
+    pub respuesta_listar_mis_grupos:
+        Result<ListadoGruposDto, ErrorServicioSocial>,
 }
 
 impl Default for ServicioSocialFalso {
@@ -117,6 +123,24 @@ impl Default for ServicioSocialFalso {
                 moneda: "USD".into(),
                 administrador_id: "usuario-1".into(),
                 descripcion: "Vacaciones".into(),
+            }),
+
+            llamadas_listar_mis_grupos: RefCell::new(Vec::new()),
+
+            respuesta_listar_mis_grupos: Ok(ListadoGruposDto {
+                grupos: vec![GrupoResumenDto {
+                    id: "grupo-1".into(),
+                    nombre_grupo: "Viaje".into(),
+                    moneda: "USD".into(),
+                    descripcion: "Vacaciones".into(),
+                    administrador_id: "usuario-1".into(),
+                }],
+                invitaciones_recibidas: vec![InvitacionGrupoResumenDto {
+                    id: "invitacion-1".into(),
+                    grupo_id: "grupo-2".into(),
+                    invitador_id: "usuario-2".into(),
+                    estado: "PENDIENTE".into(),
+                }],
             }),
         }
     }
@@ -203,9 +227,14 @@ impl ServicioSocial for ServicioSocialFalso {
     }
 
     fn listar_mis_grupos(
-        &self, _: &str,
+        &self,
+        token: &str,
     ) -> Result<ListadoGruposDto, ErrorServicioSocial> {
-        unimplemented!()
+        self.llamadas_listar_mis_grupos
+            .borrow_mut()
+            .push(token.to_string());
+
+        self.respuesta_listar_mis_grupos.clone()
     }
 
     fn invitar_miembro_grupo(
