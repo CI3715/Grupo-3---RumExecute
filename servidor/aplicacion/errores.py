@@ -77,3 +77,12 @@ class AmistadNoEncontrada(ErrorAplicacion):
             "amistad",
             "La invitación de amistad no existe."
         )
+
+
+
+class GrupoNoEncontrado(ErrorAplicacion):
+    def __init__(self):
+        super().__init__(
+            "grupo",
+            "El grupo no existe."
+        )
