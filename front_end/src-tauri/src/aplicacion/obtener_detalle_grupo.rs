@@ -64,11 +64,18 @@ impl<'a> ObtenerDetalleGrupo<'a> {
 mod tests {
     use super::*;
 
+    use std::str::FromStr;
+    use rust_decimal::Decimal;
+
     use crate::aplicacion::pruebas::social::{
         AlmacenFalso,
         ServicioSocialFalso,
         sesion_prueba,
     };
+
+    fn decimal(valor: &str) -> Decimal {
+        Decimal::from_str(valor).unwrap()
+    }
 
     fn almacen_con_sesion() -> AlmacenFalso {
         AlmacenFalso {
@@ -110,6 +117,7 @@ mod tests {
         let beto = &resultado.miembros[1];
         assert_eq!(beto.usuario_id, "usuario-2");
         assert_eq!(beto.nombre_usuario, "beto");
+        assert_eq!(beto.nombre_visible, "Beto");
         assert!(!beto.es_administrador);
     }
 
@@ -121,8 +129,15 @@ mod tests {
         let caso = ObtenerDetalleGrupo::new(&servicio, &almacen);
         let resultado = caso.ejecutar("grupo-1").unwrap();
 
-        assert_eq!(resultado.miembros[0].balance, "15.00");
-        assert_eq!(resultado.miembros[1].balance, "-15.00");
+        assert_eq!(
+            resultado.miembros[0].balance,
+            decimal("15.00")
+        );
+
+        assert_eq!(
+            resultado.miembros[1].balance,
+            decimal("-15.00")
+        );
     }
 
     #[test]
@@ -141,14 +156,30 @@ mod tests {
         assert_eq!(gasto.grupo_id, "grupo-1");
         assert_eq!(gasto.concepto, "Cena");
         assert_eq!(gasto.pagador_id, "usuario-1");
-        assert_eq!(gasto.monto, "30.00");
+        assert_eq!(gasto.monto, decimal("30.00"));
         assert_eq!(gasto.fecha, "2026-11-12T12:00:00Z");
 
         assert_eq!(gasto.cuotas.len(), 2);
-        assert_eq!(gasto.cuotas[0].usuario_id, "usuario-1");
-        assert_eq!(gasto.cuotas[0].monto, "15.00");
-        assert_eq!(gasto.cuotas[1].usuario_id, "usuario-2");
-        assert_eq!(gasto.cuotas[1].monto, "15.00");
+
+        assert_eq!(
+            gasto.cuotas[0].usuario_id,
+            "usuario-1"
+        );
+
+        assert_eq!(
+            gasto.cuotas[0].monto,
+            decimal("15.00")
+        );
+
+        assert_eq!(
+            gasto.cuotas[1].usuario_id,
+            "usuario-2"
+        );
+
+        assert_eq!(
+            gasto.cuotas[1].monto,
+            decimal("15.00")
+        );
 
         assert!(!gasto.cuotas[0].lleva_residuo);
         assert!(!gasto.cuotas[1].lleva_residuo);
@@ -184,7 +215,7 @@ mod tests {
         detalle.gastos.clear();
 
         for miembro in &mut detalle.miembros {
-            miembro.balance = "0.00".into();
+            miembro.balance = Decimal::ZERO;
         }
 
         servicio.respuesta_obtener_detalle_grupo = Ok(detalle);
@@ -196,12 +227,18 @@ mod tests {
 
         assert!(resultado.gastos.is_empty());
         assert_eq!(resultado.miembros.len(), 2);
-        assert!(resultado.miembros.iter().all(|m| m.balance == "0.00"));
+
+        assert!(
+            resultado.miembros.iter().all(
+                |miembro| miembro.balance == Decimal::ZERO
+            )
+        );
     }
 
     #[test]
     fn requiere_sesion() {
         let servicio = ServicioSocialFalso::default();
+
         let almacen = AlmacenFalso {
             sesion: None,
         };
@@ -322,7 +359,9 @@ mod tests {
         let almacen = almacen_con_sesion();
         let caso = ObtenerDetalleGrupo::new(&servicio, &almacen);
 
-        assert_eq!(caso.ejecutar("grupo-1"), Err(error));
+        assert_eq!(
+            caso.ejecutar("grupo-1"),
+            Err(error)
+        );
     }
 }
-

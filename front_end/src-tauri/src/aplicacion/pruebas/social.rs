@@ -1,5 +1,7 @@
 
+use rust_decimal::Decimal;
 use std::cell::RefCell;
+use std::str::FromStr;
 
 use crate::aplicacion::dto::{
     SesionDto,
@@ -194,19 +196,19 @@ impl Default for ServicioSocialFalso {
                 grupo_id: "grupo-1".into(),
                 concepto: "Cena".into(),
                 pagador_id: "usuario-1".into(),
-                monto: "30.00".into(),
+                monto: decimal("30.00"),
                 fecha: "2026-11-12T12:00:00Z".into(),
                 cuotas: vec![
                     CuotaCompartidaDto {
                         usuario_id: "usuario-1".into(),
                         nombre_usuario: "ana".into(),
-                        monto: "15.00".into(),
+                        monto: decimal("15.00"),
                         lleva_residuo: false,
                     },
                     CuotaCompartidaDto {
                         usuario_id: "usuario-2".into(),
                         nombre_usuario: "beto".into(),
-                        monto: "15.00".into(),
+                        monto: decimal("15.00"),
                         lleva_residuo: false,
                     },
                 ],
@@ -227,14 +229,14 @@ impl Default for ServicioSocialFalso {
                         nombre_usuario: "ana".into(),
                         nombre_visible: "Ana".into(),
                         es_administrador: true,
-                        balance: "15.00".into(),
+                        balance: decimal("15.00"),
                     },
                     MiembroGrupoDto {
                         usuario_id: "usuario-2".into(),
                         nombre_usuario: "beto".into(),
                         nombre_visible: "Beto".into(),
                         es_administrador: false,
-                        balance: "-15.00".into(),
+                        balance: decimal("-15.00"),
                     },
                 ],
 
@@ -244,19 +246,19 @@ impl Default for ServicioSocialFalso {
                         grupo_id: "grupo-1".into(),
                         concepto: "Cena".into(),
                         pagador_id: "usuario-1".into(),
-                        monto: "30.00".into(),
+                        monto: decimal("30.00"),
                         fecha: "2026-11-12T12:00:00Z".into(),
                         cuotas: vec![
                             CuotaCompartidaDto {
                                 usuario_id: "usuario-1".into(),
                                 nombre_usuario: "ana".into(),
-                                monto: "15.00".into(),
+                                monto: decimal("15.00"),
                                 lleva_residuo: false,
                             },
                             CuotaCompartidaDto {
                                 usuario_id: "usuario-2".into(),
                                 nombre_usuario: "beto".into(),
-                                monto: "15.00".into(),
+                                monto: decimal("15.00"),
                                 lleva_residuo: false,
                             },
                         ],
@@ -446,6 +448,9 @@ impl AlmacenSesiones for AlmacenFalso {
     }
 }
 
+fn decimal(valor: &str) -> Decimal {
+    Decimal::from_str(valor).unwrap()
+}
 
 // Sesión predeterminada para los tests.
 pub fn sesion_prueba() -> SesionDto {

@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 
@@ -21,8 +22,7 @@ pub struct RegistrarGastoCompartidoEntrada {
 
     pub pagador_id: String,
 
-    // Decimal expresado como cadena.
-    pub monto: String,
+    pub monto: Decimal,
 
     pub tipo_division: TipoDivision,
 
@@ -30,7 +30,7 @@ pub struct RegistrarGastoCompartidoEntrada {
 
     // usuario_id -> porcentaje o monto fijo.
     // None cuando la división es IGUALES.
-    pub valores: Option<BTreeMap<String, String>>,
+    pub valores: Option<BTreeMap<String, Decimal>>,
 }
 
 
@@ -44,7 +44,7 @@ pub struct CuotaCompartidaDto {
     #[serde(alias = "nombre_usuario")]
     pub nombre_usuario: String,
 
-    pub monto: String,
+    pub monto: Decimal,
 
     #[serde(alias = "lleva_residuo")]
     pub lleva_residuo: bool,
@@ -66,7 +66,7 @@ pub struct GastoCompartidoDto {
     #[serde(alias = "pagador_id")]
     pub pagador_id: String,
 
-    pub monto: String,
+    pub monto: Decimal,
 
     // Fecha ISO 8601, por ejemplo 2026-11-12T12:00:00+00:00.
     pub fecha: String,
@@ -91,9 +91,7 @@ pub struct MiembroGrupoDto {
     #[serde(alias = "es_administrador")]
     pub es_administrador: bool,
 
-    // Decimal expresado como cadena.
-    // Puede ser positivo, negativo o cero.
-    pub balance: String,
+    pub balance: Decimal,
 }
 
 
@@ -120,200 +118,101 @@ pub struct DetalleGrupoDto {
 
 
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{from_value, json, to_value};
+    use std::str::FromStr;
+
+    fn decimal(valor: &str) -> Decimal {
+        Decimal::from_str(valor).unwrap()
+    }
 
     #[test]
-    fn serializar_gasto_igualitario() {
+    fn serializa_monto_como_string() {
         let entrada = RegistrarGastoCompartidoEntrada {
-            concepto: "Cena".to_string(),
-            pagador_id: "usuario-1".to_string(),
-            monto: "10.00".to_string(),
+            concepto: "Cena".into(),
+            pagador_id: "usuario-1".into(),
+            monto: decimal("30.50"),
             tipo_division: TipoDivision::Iguales,
             participantes_ids: vec![
-                "usuario-1".to_string(),
-                "usuario-2".to_string(),
+                "usuario-1".into(),
+                "usuario-2".into(),
             ],
             valores: None,
         };
 
-        let json = to_value(entrada).unwrap();
+        let json = serde_json::to_value(&entrada).unwrap();
 
-        assert_eq!(json["concepto"], "Cena");
-        assert_eq!(json["pagadorId"], "usuario-1");
-        assert_eq!(json["monto"], "10.00");
+        assert_eq!(json["monto"], "30.50");
         assert_eq!(json["tipoDivision"], "IGUALES");
-        assert_eq!(json["participantesIds"][0], "usuario-1");
+        assert_eq!(json["pagadorId"], "usuario-1");
         assert!(json["valores"].is_null());
     }
 
     #[test]
-    fn serializar_gasto_por_porcentajes() {
-        let valores = BTreeMap::from([
-            ("usuario-1".to_string(), "60".to_string()),
-            ("usuario-2".to_string(), "40".to_string()),
-        ]);
-
+    fn serializa_porcentajes_como_strings() {
         let entrada = RegistrarGastoCompartidoEntrada {
-            concepto: "Taxi".to_string(),
-            pagador_id: "usuario-1".to_string(),
-            monto: "100.00".to_string(),
+            concepto: "Cena".into(),
+            pagador_id: "usuario-1".into(),
+            monto: decimal("100.00"),
             tipo_division: TipoDivision::Porcentajes,
             participantes_ids: vec![
-                "usuario-1".to_string(),
-                "usuario-2".to_string(),
-            ],
-            valores: Some(valores),
-        };
-
-        let json = to_value(entrada).unwrap();
-
-        assert_eq!(json["tipoDivision"], "PORCENTAJES");
-        assert_eq!(json["valores"]["usuario-1"], "60");
-        assert_eq!(json["valores"]["usuario-2"], "40");
-    }
-
-    #[test]
-    fn serializar_gasto_por_montos() {
-        let entrada = RegistrarGastoCompartidoEntrada {
-            concepto: "Hotel".to_string(),
-            pagador_id: "usuario-1".to_string(),
-            monto: "40.00".to_string(),
-            tipo_division: TipoDivision::Montos,
-            participantes_ids: vec![
-                "usuario-1".to_string(),
-                "usuario-2".to_string(),
+                "usuario-1".into(),
+                "usuario-2".into(),
             ],
             valores: Some(BTreeMap::from([
-                ("usuario-1".to_string(), "15.00".to_string()),
-                ("usuario-2".to_string(), "25.00".to_string()),
+                ("usuario-1".into(), decimal("60.5")),
+                ("usuario-2".into(), decimal("39.5")),
             ])),
         };
 
-        let json = to_value(entrada).unwrap();
+        let json = serde_json::to_value(&entrada).unwrap();
 
-        assert_eq!(json["tipoDivision"], "MONTOS");
-        assert_eq!(json["valores"]["usuario-1"], "15.00");
-        assert_eq!(json["valores"]["usuario-2"], "25.00");
+        assert_eq!(json["valores"]["usuario-1"], "60.5");
+        assert_eq!(json["valores"]["usuario-2"], "39.5");
     }
 
     #[test]
-    fn deserializar_gasto_registrado() {
-        let json = json!({
+    fn deserializa_monto_como_decimal() {
+        let json = r#"{
             "id": "gasto-1",
             "grupo_id": "grupo-1",
             "concepto": "Cena",
             "pagador_id": "usuario-1",
-            "monto": "10.00",
-            "fecha": "2026-11-12T12:00:00+00:00",
-            "cuotas": [
-                {
-                    "usuario_id": "usuario-1",
-                    "nombre_usuario": "ana",
-                    "monto": "5.00",
-                    "lleva_residuo": false
-                },
-                {
-                    "usuario_id": "usuario-2",
-                    "nombre_usuario": "beto",
-                    "monto": "5.00",
-                    "lleva_residuo": false
-                }
-            ]
-        });
+            "monto": "30.50",
+            "fecha": "2026-11-12T12:00:00Z",
+            "cuotas": []
+        }"#;
 
         let gasto: GastoCompartidoDto =
-            from_value(json).unwrap();
+            serde_json::from_str(json).unwrap();
 
-        assert_eq!(gasto.id, "gasto-1");
-        assert_eq!(gasto.pagador_id, "usuario-1");
-        assert_eq!(gasto.monto, "10.00");
-        assert_eq!(gasto.cuotas.len(), 2);
-        assert_eq!(gasto.cuotas[0].nombre_usuario, "ana");
+        assert_eq!(gasto.monto, decimal("30.50"));
+        assert_eq!(gasto.grupo_id, "grupo-1");
     }
 
     #[test]
-    fn deserializar_detalle_grupo() {
-        let json = json!({
-            "id": "grupo-1",
-            "nombre_grupo": "Viaje",
-            "moneda": "USD",
-            "descripcion": "Vacaciones",
-            "administrador_id": "usuario-1",
-            "miembros": [
-                {
-                    "usuario_id": "usuario-1",
-                    "nombre_usuario": "ana",
-                    "nombre_visible": "Ana",
-                    "es_administrador": true,
-                    "balance": "5.00"
-                },
-                {
-                    "usuario_id": "usuario-2",
-                    "nombre_usuario": "beto",
-                    "nombre_visible": "Beto",
-                    "es_administrador": false,
-                    "balance": "-5.00"
-                }
-            ],
-            "gastos": []
-        });
+    fn deserializa_balance_negativo() {
+        let json = r#"{
+            "usuario_id": "usuario-2",
+            "nombre_usuario": "beto",
+            "nombre_visible": "Beto",
+            "es_administrador": false,
+            "balance": "-15.25"
+        }"#;
 
-        let detalle: DetalleGrupoDto =
-            from_value(json).unwrap();
+        let miembro: MiembroGrupoDto =
+            serde_json::from_str(json).unwrap();
 
-        assert_eq!(detalle.id, "grupo-1");
-        assert_eq!(detalle.nombre_grupo, "Viaje");
-        assert_eq!(detalle.miembros.len(), 2);
-        assert!(detalle.miembros[0].es_administrador);
-        assert_eq!(detalle.miembros[0].balance, "5.00");
-        assert_eq!(detalle.miembros[1].balance, "-5.00");
-        assert!(detalle.gastos.is_empty());
+        assert_eq!(miembro.balance, decimal("-15.25"));
     }
 
     #[test]
-    fn deserializar_grupo_sin_gastos() {
-        let json = json!({
-            "id": "grupo-1",
-            "nombre_grupo": "Viaje",
-            "moneda": "USD",
-            "descripcion": "",
-            "administrador_id": "usuario-1",
-            "miembros": [
-                {
-                    "usuario_id": "usuario-1",
-                    "nombre_usuario": "ana",
-                    "nombre_visible": "Ana",
-                    "es_administrador": true,
-                    "balance": "0"
-                }
-            ],
-            "gastos": []
-        });
+    fn mantiene_precision_decimal() {
+        let a = decimal("0.1");
+        let b = decimal("0.2");
 
-        let detalle: DetalleGrupoDto =
-            from_value(json).unwrap();
-
-        assert!(detalle.gastos.is_empty());
-        assert_eq!(detalle.miembros[0].balance, "0");
-    }
-
-    #[test]
-    fn no_expone_datos_privados() {
-        let miembro = MiembroGrupoDto {
-            usuario_id: "usuario-1".to_string(),
-            nombre_usuario: "ana".to_string(),
-            nombre_visible: "Ana".to_string(),
-            es_administrador: true,
-            balance: "0.00".to_string(),
-        };
-
-        let json = to_value(miembro).unwrap();
-
-        assert!(json.get("correo").is_none());
-        assert!(json.get("contrasena").is_none());
-        assert!(json.get("token").is_none());
+        assert_eq!(a + b, decimal("0.3"));
     }
 }

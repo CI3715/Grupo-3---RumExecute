@@ -1,3 +1,6 @@
+use std::collections::HashSet;
+use rust_decimal::Decimal;
+
 use crate::aplicacion::dto::gastos::{
     GastoCompartidoDto,
     RegistrarGastoCompartidoEntrada,
@@ -70,9 +73,8 @@ impl<'a> RegistrarGastoCompartido<'a> {
             });
         }
 
-        // Validar monto como texto decimal positivo.
-        // No usamos f32 ni f64 para evitar pérdida de precisión.
-        if !monto_valido(&entrada.monto) {
+        // Validar monto positivo con hasta dos decimales.
+        if entrada.monto <= Decimal::ZERO || entrada.monto.scale() > 2 {
             return Err(ErrorServicioSocial::Validacion {
                 campo: "monto".into(),
                 mensaje: "El monto debe ser un decimal positivo con hasta dos decimales.".into(),
@@ -90,10 +92,11 @@ impl<'a> RegistrarGastoCompartido<'a> {
         }
 
         // Evitar participantes repetidos.
-        let participantes_unicos: std::collections::HashSet<&str> =
-            entrada.participantes_ids.iter()
-                .map(String::as_str)
-                .collect();
+        let participantes_unicos: HashSet<&str> = entrada
+            .participantes_ids
+            .iter()
+            .map(String::as_str)
+            .collect();
 
         if participantes_unicos.len() != entrada.participantes_ids.len() {
             return Err(ErrorServicioSocial::Validacion {
@@ -124,36 +127,6 @@ impl<'a> RegistrarGastoCompartido<'a> {
     }
 }
 
-// Validación textual de dinero sin convertirlo a float.
-// Acepta, por ejemplo: "10", "10.5", "10.50".
-fn monto_valido(monto: &str) -> bool {
-    let partes: Vec<&str> = monto.split('.').collect();
-
-    if partes.is_empty() || partes.len() > 2 {
-        return false;
-    }
-
-    let entero = partes[0];
-
-    if entero.is_empty() || !entero.bytes().all(|b| b.is_ascii_digit()) {
-        return false;
-    }
-
-    if partes.len() == 2 {
-        let decimales = partes[1];
-
-        if decimales.is_empty()
-            || decimales.len() > 2
-            || !decimales.bytes().all(|b| b.is_ascii_digit())
-        {
-            return false;
-        }
-    }
-
-    // Debe tener al menos un dígito distinto de cero.
-    monto.bytes().any(|b| b.is_ascii_digit() && b != b'0')
-}
-
 
 
 
@@ -162,12 +135,17 @@ mod tests {
     use super::*;
 
     use std::collections::BTreeMap;
+    use std::str::FromStr;
 
     use crate::aplicacion::pruebas::social::{
         AlmacenFalso,
         ServicioSocialFalso,
         sesion_prueba,
     };
+
+    fn decimal(valor: &str) -> Decimal {
+        Decimal::from_str(valor).unwrap()
+    }
 
     fn almacen_con_sesion() -> AlmacenFalso {
         AlmacenFalso {
@@ -179,7 +157,7 @@ mod tests {
         RegistrarGastoCompartidoEntrada {
             concepto: "Cena".into(),
             pagador_id: "usuario-1".into(),
-            monto: "30.00".into(),
+            monto: decimal("30.00"),
             tipo_division: TipoDivision::Iguales,
             participantes_ids: vec![
                 "usuario-1".into(),
@@ -206,10 +184,10 @@ mod tests {
         assert_eq!(resultado.grupo_id, "grupo-1");
         assert_eq!(resultado.concepto, "Cena");
         assert_eq!(resultado.pagador_id, "usuario-1");
-        assert_eq!(resultado.monto, "30.00");
+        assert_eq!(resultado.monto, decimal("30.00"));
         assert_eq!(resultado.cuotas.len(), 2);
-        assert_eq!(resultado.cuotas[0].monto, "15.00");
-        assert_eq!(resultado.cuotas[1].monto, "15.00");
+        assert_eq!(resultado.cuotas[0].monto, decimal("15.00"));
+        assert_eq!(resultado.cuotas[1].monto, decimal("15.00"));
     }
 
     #[test]
@@ -233,7 +211,7 @@ mod tests {
 
         assert_eq!(entrada.concepto, "Cena");
         assert_eq!(entrada.pagador_id, "usuario-1");
-        assert_eq!(entrada.monto, "30.00");
+        assert_eq!(entrada.monto, decimal("30.00"));
         assert_eq!(entrada.tipo_division, TipoDivision::Iguales);
         assert_eq!(entrada.participantes_ids.len(), 2);
         assert!(entrada.valores.is_none());
@@ -251,8 +229,8 @@ mod tests {
         let mut entrada = entrada_iguales();
         entrada.tipo_division = TipoDivision::Porcentajes;
         entrada.valores = Some(BTreeMap::from([
-            ("usuario-1".into(), "60".into()),
-            ("usuario-2".into(), "40".into()),
+            ("usuario-1".into(), decimal("60")),
+            ("usuario-2".into(), decimal("40")),
         ]));
 
         caso.ejecutar("grupo-1", entrada).unwrap();
@@ -260,14 +238,19 @@ mod tests {
         let llamadas = servicio.llamadas_registrar_gasto.borrow();
         let enviado = &llamadas[0].2;
 
-        assert_eq!(enviado.tipo_division, TipoDivision::Porcentajes);
+        assert_eq!(
+            enviado.tipo_division,
+            TipoDivision::Porcentajes
+        );
+
         assert_eq!(
             enviado.valores.as_ref().unwrap()["usuario-1"],
-            "60"
+            decimal("60")
         );
+
         assert_eq!(
             enviado.valores.as_ref().unwrap()["usuario-2"],
-            "40"
+            decimal("40")
         );
     }
 
@@ -283,8 +266,8 @@ mod tests {
         let mut entrada = entrada_iguales();
         entrada.tipo_division = TipoDivision::Montos;
         entrada.valores = Some(BTreeMap::from([
-            ("usuario-1".into(), "10.00".into()),
-            ("usuario-2".into(), "20.00".into()),
+            ("usuario-1".into(), decimal("10.00")),
+            ("usuario-2".into(), decimal("20.00")),
         ]));
 
         caso.ejecutar("grupo-1", entrada).unwrap();
@@ -295,16 +278,19 @@ mod tests {
             llamadas[0].2.tipo_division,
             TipoDivision::Montos
         );
+
         assert_eq!(
             llamadas[0].2.valores.as_ref().unwrap()["usuario-2"],
-            "20.00"
+            decimal("20.00")
         );
     }
 
     #[test]
     fn requiere_sesion() {
         let servicio = ServicioSocialFalso::default();
-        let almacen = AlmacenFalso { sesion: None };
+        let almacen = AlmacenFalso {
+            sesion: None,
+        };
 
         let caso = RegistrarGastoCompartido::new(
             &servicio, &almacen
@@ -388,7 +374,7 @@ mod tests {
     }
 
     #[test]
-    fn rechaza_montos_invalidos() {
+    fn rechaza_montos_no_positivos() {
         let servicio = ServicioSocialFalso::default();
         let almacen = almacen_con_sesion();
 
@@ -397,11 +383,42 @@ mod tests {
         );
 
         for monto in [
-            "", "0", "0.00", "-5.00",
-            "abc", "10.999", "1,50", "10.",
+            decimal("0"),
+            decimal("0.00"),
+            decimal("-5.00"),
         ] {
             let mut entrada = entrada_iguales();
-            entrada.monto = monto.into();
+            entrada.monto = monto;
+
+            assert!(matches!(
+                caso.ejecutar("grupo-1", entrada),
+                Err(ErrorServicioSocial::Validacion {
+                    campo, ..
+                }) if campo == "monto"
+            ));
+        }
+
+        assert!(
+            servicio.llamadas_registrar_gasto.borrow().is_empty()
+        );
+    }
+
+    #[test]
+    fn rechaza_montos_con_mas_de_dos_decimales() {
+        let servicio = ServicioSocialFalso::default();
+        let almacen = almacen_con_sesion();
+
+        let caso = RegistrarGastoCompartido::new(
+            &servicio, &almacen
+        );
+
+        for monto in [
+            decimal("10.999"),
+            decimal("1.2345"),
+            decimal("10.000"),
+        ] {
+            let mut entrada = entrada_iguales();
+            entrada.monto = monto;
 
             assert!(matches!(
                 caso.ejecutar("grupo-1", entrada),
@@ -418,8 +435,14 @@ mod tests {
 
     #[test]
     fn acepta_montos_decimales_validos() {
-        for monto in ["1", "0.01", "10.5", "100.00"] {
-            assert!(monto_valido(monto));
+        for monto in [
+            decimal("1"),
+            decimal("0.01"),
+            decimal("10.5"),
+            decimal("100.00"),
+        ] {
+            assert!(monto > Decimal::ZERO);
+            assert!(monto.scale() <= 2);
         }
     }
 
@@ -503,6 +526,7 @@ mod tests {
     #[test]
     fn propaga_error_de_permiso() {
         let mut servicio = ServicioSocialFalso::default();
+
         servicio.respuesta_registrar_gasto =
             Err(ErrorServicioSocial::SinPermiso);
 
@@ -542,6 +566,7 @@ mod tests {
     #[test]
     fn propaga_error_de_conexion() {
         let mut servicio = ServicioSocialFalso::default();
+
         servicio.respuesta_registrar_gasto =
             Err(ErrorServicioSocial::ServicioNoDisponible);
 
@@ -559,6 +584,7 @@ mod tests {
     #[test]
     fn propaga_sesion_expirada() {
         let mut servicio = ServicioSocialFalso::default();
+
         servicio.respuesta_registrar_gasto =
             Err(ErrorServicioSocial::SesionExpirada);
 
