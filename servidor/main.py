@@ -3,6 +3,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from api.rutas_auth import router as router_auth
+
 # 1. Definición del Esquema Pydantic (Modelo de Respuesta)
 class PingResponse(BaseModel):
     estado: str = Field(..., examples=["ok"])
@@ -26,6 +28,9 @@ app.add_middleware(
     allow_methods=["*"],  # Permite todos los métodos HTTP
     allow_headers=["*"],  # Permite todas las cabeceras HTTP
 )
+
+# 4. Inclusión de Routers
+app.include_router(router_auth)
 
 
 # 4. Definición del Endpoint GET /ping
