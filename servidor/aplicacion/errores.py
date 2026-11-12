@@ -56,3 +56,33 @@ class CredencialesInvalidas(ErrorAplicacion):
             "credenciales",
             "Correo o contraseña incorrectos."
         )
+
+
+
+class UsuarioNoEncontrado(ErrorAplicacion):
+    """
+    No existe un usuario con el nombre de usuario proporcionado
+    """
+    def __init__(self):
+        super().__init__(
+            "nombre_usuario",
+            "Usuario no encontrado."
+        )
+
+
+
+class AmistadNoEncontrada(ErrorAplicacion):
+    def __init__(self):
+        super().__init__(
+            "amistad",
+            "La invitación de amistad no existe."
+        )
+
+
+
+class GrupoNoEncontrado(ErrorAplicacion):
+    def __init__(self):
+        super().__init__(
+            "grupo",
+            "El grupo no existe."
+        )

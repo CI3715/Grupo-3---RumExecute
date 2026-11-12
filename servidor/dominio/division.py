@@ -9,6 +9,7 @@ class CuotaDivision:
     Clase que tiene las cuotas de cada usuario 
     en una cuenta compartida
     """
+    usuario_id: str
     nombre_usuario: str
     monto: Decimal
     lleva_residuo: bool
@@ -16,11 +17,18 @@ class CuotaDivision:
 
 
 def repartir_residuo(
-        total: Decimal, cuotas_exactas: dict[str, Decimal]
+        total: Decimal, cuotas_exactas: dict[str, Decimal], 
+        nombres: dict[str, str],  # usuario_id -> nombre_usuario (OBLIGATORIO)
 ) -> list[CuotaDivision]:
     # Si no hay participantes, error
     if not cuotas_exactas:
         raise ErrorDominio("participantes", "Debe de haber al menos un participante")
+    # Evita indeterminismo si dos IDs distintos comparten el mismo nombre de usuario
+    if len(set(nombres.values())) != len(nombres.values()):
+        raise ErrorDominio("participantes", "Hay nombres de usuario repetidos entre los participantes.")
+    # Asegura que cada cuota tenga su nombre correspondiente
+    if set(cuotas_exactas.keys()) != set(nombres.keys()):
+        raise ErrorDominio("participantes", "Los participantes y los nombres de usuario no coinciden.")
     # Si el monto total es 0 no tiene sentido hacer una cuenta compartida
     if total <= Decimal("0"):
         raise ErrorDominio("monto", "El monto debe ser mayor que cero.")
@@ -44,31 +52,40 @@ def repartir_residuo(
             "cuotas",
             "Las cuotas no cuadran con el monto total"
         )
+
+    ordenados = sorted(
+        truncadas.keys(),
+        key=lambda uid: nombres[uid]  # <-- Obligatoriamente el nombre
+    )
+
     cuotas = []
-    for indice, nombre in enumerate(sorted(truncadas)):
+    for indice, uid in enumerate(ordenados):
         lleva_residuo = indice < centimos_restantes #True si aun quedan, False si ya se acabaron
-        monto = truncadas[nombre] + (centimo if lleva_residuo else Decimal("0"))
-        cuotas.append(CuotaDivision(nombre, monto, lleva_residuo))
+        monto = truncadas[uid] + (centimo if lleva_residuo else Decimal("0"))
+        cuotas.append(CuotaDivision(usuario_id=uid, nombre_usuario=nombres[uid], monto=monto, lleva_residuo=lleva_residuo))
     return cuotas
 
 
 def dividir_partes_iguales(
-    total: Decimal, participantes: list[str]
+    total: Decimal, 
+    nombres: dict[str, str]  # usuario_id -> nombre_usuario
 ) -> list[CuotaDivision]:
-    if not participantes:
+    if not nombres:
         raise ErrorDominio("participantes", "Debe de haber al menos un participante.")
-    if len(set(participantes)) != len(participantes):
-        raise ErrorDominio("participantes", "Hay participantes repetidos.")
     """
     Como aquí es en partes iguales, lo cual no siempre da porcentajes exactos,
     no nos interesan los porcentajes en general, solo los montos
     """
-    cuota = total / len(participantes)
-    return repartir_residuo(total, {nombre: cuota for nombre in participantes})
+    cuota = total / len(nombres)
+    # cuotas_exactas tiene {uid: cuota}
+    cuotas_exactas = {uid: cuota for uid in nombres.keys()}
+    return repartir_residuo(total, cuotas_exactas, nombres)
 
 
 def dividir_por_porcentajes(
-    total: Decimal, porcentajes: dict[str, Decimal]
+    total: Decimal, 
+    porcentajes: dict[str, Decimal], # usuario_id -> porcentaje
+    nombres: dict[str, str], # usuario_id -> nombre_usuario
 ) -> list[CuotaDivision]:
     if not porcentajes:
         raise ErrorDominio("participantes", "Debe de haber al menos un participante con su porcentaje")
@@ -93,11 +110,13 @@ def dividir_por_porcentajes(
             f"Los porcentajes suman {suma}, es decir, sobran {suma - Decimal("100")}", 
         )
     # A cada nombre se le asigna su monto referente al porcentaje de su cuota
-    cuotas = {nombre: total * p /Decimal("100") for nombre, p in porcentajes.items()}
-    return repartir_residuo(total, cuotas)
+    cuotas = {uid: total * p / Decimal("100") for uid, p in porcentajes.items()}
+    return repartir_residuo(total, cuotas, nombres)
 
 def dividir_por_montos(
-        total: Decimal, montos: dict[str, Decimal]
+        total: Decimal, 
+        montos: dict[str, Decimal], # usuario_id -> monto
+        nombres: dict[str, str], # usuario_id -> nombre_usuario
 ) -> list[CuotaDivision]:
     if not montos:
         raise ErrorDominio("participantes", "Debe de haber al menos un participante con su monto")
@@ -119,4 +138,4 @@ def dividir_por_montos(
             "montos",
             f"Los montos suman {suma}, es decir, sobran {suma - total}"
         )
-    return repartir_residuo(total, montos)
+    return repartir_residuo(total, montos, nombres)

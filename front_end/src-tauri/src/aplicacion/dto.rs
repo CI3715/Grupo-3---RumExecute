@@ -202,3 +202,8 @@ pub struct SesionDto {
     pub token: String,
     pub fecha_expiracion: String,
 }
+
+pub mod usuario_publico;
+pub mod amistades;
+pub mod grupos;
+pub mod gastos;

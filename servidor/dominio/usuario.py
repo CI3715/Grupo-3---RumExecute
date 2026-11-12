@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 from dominio.errores import ErrorDominio
 # Caractéres requeridos para el nombre de usuario
@@ -28,6 +28,9 @@ class Usuario:
 
         if self.fecha_alta.tzinfo is None:
             raise ErrorDominio("fecha_alta", "La fecha de alta debe incluir zona horaria (UTC).")
+                # Normalizar a UTC-0
+        if self.fecha_alta.tzinfo != timezone.utc:
+            object.__setattr__(self, "fecha_alta", self.fecha_alta.astimezone(timezone.utc))
         
         if not PATRON_NOMBRE_USUARIO.fullmatch(self.nombre_usuario):
             raise ErrorDominio(
