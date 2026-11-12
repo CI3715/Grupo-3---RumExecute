@@ -152,7 +152,7 @@ def repositorio_amistades():
     repo = Mock()
 
     repo.listar_entre_usuarios.return_value = []
-    repo.guardar_invitacion.return_value = "invitacion-123"
+    repo.guardar_invitacion.return_value = None
 
     return repo
 

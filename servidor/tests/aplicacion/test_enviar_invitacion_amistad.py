@@ -1,3 +1,4 @@
+
 import pytest
 
 from dataclasses import replace
@@ -34,6 +35,10 @@ def usuarios_preparados(
     return usuario_existente, receptor
 
 
+# --------------------------------------------------
+# CASO EXITOSO
+# --------------------------------------------------
+
 def test_envia_invitacion_exitosamente(
     caso_uso_enviar_invitacion,
     usuarios_preparados,
@@ -45,7 +50,11 @@ def test_envia_invitacion_exitosamente(
     )
 
     assert isinstance(resultado, InvitacionAmistadRespuesta)
-    assert resultado.id == "invitacion-123"
+
+    # El ID se genera dinámicamente mediante uuid4
+    assert isinstance(resultado.id, str)
+    assert resultado.id
+
     assert resultado.nombre_usuario_solicitante == "eduardo"
     assert resultado.nombre_usuario_receptor == "beto"
     assert resultado.estado == "PENDIENTE"
@@ -58,7 +67,7 @@ def test_guarda_invitacion_pendiente(
     usuarios_preparados,
     repositorio_amistades,
 ):
-    caso_uso_enviar_invitacion.ejecutar(
+    resultado = caso_uso_enviar_invitacion.ejecutar(
         "usuario-123",
         "beto",
     )
@@ -69,8 +78,10 @@ def test_guarda_invitacion_pendiente(
     )
 
     assert isinstance(invitacion, Amistad)
-    assert invitacion.nombre_usuario_solicitante == "eduardo"
-    assert invitacion.nombre_usuario_receptor == "beto"
+
+    assert invitacion.id == resultado.id
+    assert invitacion.id_solicitante == "usuario-123"
+    assert invitacion.id_receptor == "usuario-456"
     assert invitacion.estado == EstadoAmistad.PENDIENTE
 
 
@@ -89,6 +100,41 @@ def test_obtiene_solicitante_desde_identidad_autenticada(
     )
 
 
+def test_busca_receptor_por_nombre_usuario_exacto(
+    caso_uso_enviar_invitacion,
+    usuarios_preparados,
+    repositorio_usuarios,
+):
+    caso_uso_enviar_invitacion.ejecutar(
+        "usuario-123",
+        "beto",
+    )
+
+    repositorio_usuarios.obtener_usuario_por_nombre_usuario.assert_called_once_with(
+        "beto"
+    )
+
+
+def test_consulta_amistades_utilizando_ids(
+    caso_uso_enviar_invitacion,
+    usuarios_preparados,
+    repositorio_amistades,
+):
+    caso_uso_enviar_invitacion.ejecutar(
+        "usuario-123",
+        "beto",
+    )
+
+    repositorio_amistades.listar_entre_usuarios.assert_called_once_with(
+        "usuario-123",
+        "usuario-456",
+    )
+
+
+# --------------------------------------------------
+# VALIDACIONES DEL DOMINIO
+# --------------------------------------------------
+
 def test_no_permite_autoinvitacion(
     caso_uso_enviar_invitacion,
     repositorio_usuarios,
@@ -99,11 +145,13 @@ def test_no_permite_autoinvitacion(
         usuario_existente
     )
 
-    with pytest.raises(ErrorDominio):
+    with pytest.raises(ErrorDominio) as exc_info:
         caso_uso_enviar_invitacion.ejecutar(
             "usuario-123",
             "eduardo",
         )
+
+    assert exc_info.value.campo == "receptor"
 
     repositorio_amistades.guardar_invitacion.assert_not_called()
 
@@ -123,8 +171,9 @@ def test_rechaza_invitacion_si_existe_relacion_incompatible(
 ):
     repositorio_amistades.listar_entre_usuarios.return_value = [
         Amistad(
-            nombre_usuario_solicitante="eduardo",
-            nombre_usuario_receptor="beto",
+            id="amistad-existente-123",
+            id_solicitante="usuario-123",
+            id_receptor="usuario-456",
             estado=estado,
         )
     ]
@@ -145,8 +194,9 @@ def test_rechaza_invitacion_pendiente_en_sentido_inverso(
 ):
     repositorio_amistades.listar_entre_usuarios.return_value = [
         Amistad(
-            nombre_usuario_solicitante="beto",
-            nombre_usuario_receptor="eduardo",
+            id="amistad-existente-123",
+            id_solicitante="usuario-456",
+            id_receptor="usuario-123",
             estado=EstadoAmistad.PENDIENTE,
         )
     ]
@@ -167,8 +217,9 @@ def test_permite_reinvitar_tras_rechazo(
 ):
     repositorio_amistades.listar_entre_usuarios.return_value = [
         Amistad(
-            nombre_usuario_solicitante="eduardo",
-            nombre_usuario_receptor="beto",
+            id="amistad-anterior-123",
+            id_solicitante="usuario-123",
+            id_receptor="usuario-456",
             estado=EstadoAmistad.RECHAZADA,
         )
     ]
@@ -179,8 +230,21 @@ def test_permite_reinvitar_tras_rechazo(
     )
 
     assert resultado.estado == "PENDIENTE"
+
+    invitacion_nueva = (
+        repositorio_amistades
+        .guardar_invitacion.call_args.args[0]
+    )
+
+    assert invitacion_nueva.id != "amistad-anterior-123"
+    assert invitacion_nueva.estado == EstadoAmistad.PENDIENTE
+
     repositorio_amistades.guardar_invitacion.assert_called_once()
 
+
+# --------------------------------------------------
+# USUARIOS INEXISTENTES
+# --------------------------------------------------
 
 def test_rechaza_destinatario_inexistente(
     caso_uso_enviar_invitacion,
@@ -196,6 +260,7 @@ def test_rechaza_destinatario_inexistente(
         )
 
     repositorio_amistades.guardar_invitacion.assert_not_called()
+    repositorio_amistades.listar_entre_usuarios.assert_not_called()
 
 
 def test_rechaza_solicitante_inexistente(
@@ -211,8 +276,15 @@ def test_rechaza_solicitante_inexistente(
             "beto",
         )
 
-    repositorio_amistades.guardar_invitacion.assert_not_called()
+    repositorio_usuarios.obtener_usuario_por_nombre_usuario.assert_not_called()
 
+    repositorio_amistades.guardar_invitacion.assert_not_called()
+    repositorio_amistades.listar_entre_usuarios.assert_not_called()
+
+
+# --------------------------------------------------
+# CONFLICTOS DURANTE PERSISTENCIA
+# --------------------------------------------------
 
 def test_propaga_conflicto_detectado_al_guardar(
     caso_uso_enviar_invitacion,
@@ -232,6 +304,12 @@ def test_propaga_conflicto_detectado_al_guardar(
             "beto",
         )
 
+    repositorio_amistades.guardar_invitacion.assert_called_once()
+
+
+# --------------------------------------------------
+# SEGURIDAD
+# --------------------------------------------------
 
 def test_no_devuelve_datos_privados(
     caso_uso_enviar_invitacion,

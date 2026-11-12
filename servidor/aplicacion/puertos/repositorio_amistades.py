@@ -17,8 +17,8 @@ class RepositorioAmistades(Protocol):
     def guardar_invitacion(
         self,
         amistad: Amistad
-    ) -> str:
-        """Guarda una invitación y devuelve su ID.
+    ) -> None:
+        """Guarda una invitación.
 
         Debe impedir atómicamente invitaciones pendientes
         duplicadas y amistades activas duplicadas.

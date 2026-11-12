@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from aplicacion.puertos.repositorio_usuarios import (
     RepositorioUsuarios,
 )
@@ -54,39 +56,32 @@ class EnviarInvitacionAmistad:
         # 3. Consultar las relaciones existentes
         amistades_existentes = (
             self.repositorio_amistades.listar_entre_usuarios(
-                solicitante.nombre_usuario,
-                receptor.nombre_usuario,
+                solicitante.id,
+                receptor.id,
             )
         )
 
         # 4. Validar las reglas del dominio
         validar_solicitud_amistad(
-            solicitante.nombre_usuario,
-            receptor.nombre_usuario,
+            solicitante.id,
+            receptor.id,
             amistades_existentes,
         )
 
         # 5. Crear invitación pendiente
         invitacion = Amistad(
-            nombre_usuario_solicitante=solicitante.nombre_usuario,
-            nombre_usuario_receptor=receptor.nombre_usuario,
+            id=str(uuid4()),
+            id_solicitante=solicitante.id,
+            id_receptor=receptor.id,
         )
 
         # 6. Persistir y obtener el identificador
-        invitacion_id = (
-            self.repositorio_amistades.guardar_invitacion(
-                invitacion
-            )
-        )
+        self.repositorio_amistades.guardar_invitacion(invitacion)
 
         # 7. Devolver información pública
         return InvitacionAmistadRespuesta(
-            id=invitacion_id,
-            nombre_usuario_solicitante=(
-                invitacion.nombre_usuario_solicitante
-            ),
-            nombre_usuario_receptor=(
-                invitacion.nombre_usuario_receptor
-            ),
+            id=invitacion.id,
+            nombre_usuario_solicitante=solicitante.nombre_usuario,
+            nombre_usuario_receptor=receptor.nombre_usuario,
             estado=invitacion.estado.name,
         )
