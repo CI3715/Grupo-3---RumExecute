@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field
 from infraestructura.db import engine, Base
 import infraestructura.modelos_bd  # Carga los modelos para que Base los conozca
 from api.rutas_auth import router as router_auth
+from api.rutas_amistades import router as router_amistades
+from api.rutas_grupos import router as router_grupos
 
 
 @asynccontextmanager
@@ -43,6 +45,8 @@ app.add_middleware(
 
 # 4. Inclusión de Routers
 app.include_router(router_auth)
+app.include_router(router_amistades)
+app.include_router(router_grupos)
 
 
 # 4. Definición del Endpoint GET /ping
