@@ -78,3 +78,5 @@ pub trait ServicioPerfilPropio {
         token: &str,
     ) -> Result<UsuarioRegistradoDto, ErrorAutenticacion>;
 }
+
+pub mod servicio_social;

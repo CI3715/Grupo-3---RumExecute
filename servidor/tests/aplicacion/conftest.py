@@ -7,6 +7,8 @@ from aplicacion.registrar_usuario import RegistrarUsuario
 from aplicacion.iniciar_sesion import IniciarSesion
 from aplicacion.puertos.servicio_tokens import TokenSesion
 from aplicacion.obtener_perfil_propio import ObtenerPerfilPropio
+from aplicacion.buscar_usuario import BuscarUsuario
+from aplicacion.enviar_invitacion_amistad import EnviarInvitacionAmistad
 
 from dominio.usuario import Usuario
 from dominio.credenciales import Credenciales
@@ -135,4 +137,37 @@ def caso_uso_obtener_perfil_propio(
     return ObtenerPerfilPropio(
         repositorio_usuarios=repositorio_usuarios,
         servicio_tokens=servicio_tokens
+    )
+
+
+@pytest.fixture
+def caso_uso_buscar_usuario(repositorio_usuarios):
+    return BuscarUsuario(
+        repositorio_usuarios=repositorio_usuarios
+    )
+
+
+@pytest.fixture
+def repositorio_amistades():
+    repo = Mock()
+
+    repo.listar_entre_usuarios.return_value = []
+    repo.guardar_invitacion.return_value = None
+
+    return repo
+
+
+@pytest.fixture
+def caso_uso_enviar_invitacion(
+    repositorio_usuarios,
+    repositorio_amistades,
+    usuario_existente,
+):
+    repositorio_usuarios.obtener_usuario_por_id.return_value = (
+        usuario_existente
+    )
+
+    return EnviarInvitacionAmistad(
+        repositorio_usuarios=repositorio_usuarios,
+        repositorio_amistades=repositorio_amistades,
     )
