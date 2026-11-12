@@ -75,6 +75,12 @@ pub struct ServicioSocialFalso {
 
     pub respuesta_responder_invitacion_grupo:
         Result<RespuestaInvitacionGrupoDto, ErrorServicioSocial>,
+    
+    pub llamadas_registrar_gasto:
+        RefCell<Vec<(String, String, RegistrarGastoCompartidoEntrada)>>,
+
+    pub respuesta_registrar_gasto:
+        Result<GastoCompartidoDto, ErrorServicioSocial>,
 }
 
 impl Default for ServicioSocialFalso {
@@ -174,6 +180,31 @@ impl Default for ServicioSocialFalso {
                     estado: "ACEPTADA".into(),
                 }
             ),
+
+            llamadas_registrar_gasto: RefCell::new(Vec::new()),
+
+            respuesta_registrar_gasto: Ok(GastoCompartidoDto {
+                id: "gasto-1".into(),
+                grupo_id: "grupo-1".into(),
+                concepto: "Cena".into(),
+                pagador_id: "usuario-1".into(),
+                monto: "30.00".into(),
+                fecha: "2026-11-12T12:00:00Z".into(),
+                cuotas: vec![
+                    CuotaCompartidaDto {
+                        usuario_id: "usuario-1".into(),
+                        nombre_usuario: "ana".into(),
+                        monto: "15.00".into(),
+                        lleva_residuo: false,
+                    },
+                    CuotaCompartidaDto {
+                        usuario_id: "usuario-2".into(),
+                        nombre_usuario: "beto".into(),
+                        monto: "15.00".into(),
+                        lleva_residuo: false,
+                    },
+                ],
+            }),
         }
     }
 }
@@ -302,10 +333,18 @@ impl ServicioSocial for ServicioSocialFalso {
     }
 
     fn registrar_gasto_compartido(
-        &self, _: &str, _: &str,
-        _: &RegistrarGastoCompartidoEntrada,
+        &self,
+        token: &str,
+        grupo_id: &str,
+        entrada: &RegistrarGastoCompartidoEntrada,
     ) -> Result<GastoCompartidoDto, ErrorServicioSocial> {
-        unimplemented!()
+        self.llamadas_registrar_gasto.borrow_mut().push((
+            token.to_string(),
+            grupo_id.to_string(),
+            entrada.clone(),
+        ));
+
+        self.respuesta_registrar_gasto.clone()
     }
 
     fn obtener_detalle_grupo(
