@@ -1,5 +1,5 @@
 from dataclasses import FrozenInstanceError
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 import pytest
 
@@ -60,3 +60,24 @@ def test_fecha_alta_exige_zona_horaria():
 def test_usuario_es_inmutable():
     with pytest.raises(FrozenInstanceError):
         crear().correo = "otro@x.com"
+
+
+def test_fecha_alta_se_normaliza_a_utc():
+    fecha = datetime(
+        2026, 11, 12, 10, 0,
+        tzinfo=timezone(timedelta(hours=-4))
+    )
+
+    usuario = Usuario(
+        id="usuario-1",
+        nombre_usuario="ana",
+        nombre_visible="Ana",
+        correo="ana@example.com",
+        fecha_alta=fecha,
+    )
+
+    assert usuario.fecha_alta == datetime(
+        2026, 11, 12, 14, 0,
+        tzinfo=timezone.utc
+    )
+    assert usuario.fecha_alta.tzinfo == timezone.utc
