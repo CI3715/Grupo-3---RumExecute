@@ -21,7 +21,7 @@ class InvitacionGrupo:
 
 def _son_amigos(a: str, b: str, amistades: list[Amistad]) -> bool:
     return any(
-        {x.nombre_usuario_solicitante, x.nombre_usuario_receptor} == {a, b}
+        {x.id_solicitante, x.id_receptor} == {a, b}
         and x.estado == EstadoAmistad.ACTIVA
         for x in amistades
     )
@@ -37,7 +37,7 @@ def validar_invitacion_grupo(
     validar_es_admin(grupo, invitador)
     if not _son_amigos(invitador, invitado, amistades):
         raise ErrorPermiso("invitado", "Solo puedes invitar a tus amigos.")
-    if invitado in grupo.miembros:
+    if invitado in grupo.id_miembros:
         raise ErrorConflicto("invitado", "El usuario ya es miembro del grupo.")
     for inv in invitaciones:
         if (
