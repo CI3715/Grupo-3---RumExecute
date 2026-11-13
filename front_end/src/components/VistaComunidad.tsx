@@ -40,7 +40,7 @@ const rowStyle: React.CSSProperties = {
   border: "1px solid var(--border-subtle)",
 };
 export default function VistaComunidad({ usuario, monedas, onSolicitarLogin }: VistaComunidadProps) {
-  const [subVista, setSubVista] = useState<"grupos" | "amigos" | "detalle_grupo">("grupos");
+  const [subVista, setSubVista] = useState<"grupos" | "amigos" | "solicitudes" | "detalle_grupo">("grupos");
   const [aviso, setAviso] = useState<{ tipo: "exito" | "error"; texto: string } | null>(null);
   const [amistades, setAmistades] = useState<ListadoAmistades>({ amigos: [], invitaciones_recibidas: [], invitaciones_enviadas: [] });
   const [busquedaUsername, setBusquedaUsername] = useState("");
@@ -49,10 +49,12 @@ export default function VistaComunidad({ usuario, monedas, onSolicitarLogin }: V
   const [listadoGrupos, setListadoGrupos] = useState<ListadoGrupos>({ grupos: [], invitaciones_recibidas: [] });
   const [mostrarFormGrupo, setMostrarFormGrupo] = useState(false);
   const [formGrupo, setFormGrupo] = useState({ nombre: "", moneda: "USD", descripcion: "", guardando: false });
+  const [busquedaAmigosGrupo, setBusquedaAmigosGrupo] = useState("");
+  const [amigosSeleccionadosGrupo, setAmigosSeleccionadosGrupo] = useState<string[]>([]);
   const [grupoActivo, setGrupoActivo] = useState<DetalleGrupo | null>(null);
   const [tabGrupo, setTabGrupo] = useState<"gastos" | "balances" | "miembros">("gastos");
   const [mostrarFormGasto, setMostrarFormGasto] = useState(false);
-  const [usernameInvitarGrupo, setUsernameInvitarGrupo] = useState("");
+  const [busquedaAmigosMiembros, setBusquedaAmigosMiembros] = useState("");
   const [conceptoGasto, setConceptoGasto] = useState("");
   const [montoGasto, setMontoGasto] = useState("");
   const [pagadorId, setPagadorId] = useState("");
@@ -167,8 +169,20 @@ export default function VistaComunidad({ usuario, monedas, onSolicitarLogin }: V
               <button type="button" onClick={() => setSubVista("amigos")} className={subVista === "amigos" ? "btn btn-primary" : "btn btn-secondary"}>
                 Amigos ({amistades.amigos.length})
               </button>
+              <button type="button" onClick={() => setSubVista("solicitudes")} className={subVista === "solicitudes" ? "btn btn-primary" : "btn btn-secondary"}>
+                Solicitudes ({amistades.invitaciones_recibidas.length + amistades.invitaciones_enviadas.length + listadoGrupos.invitaciones_recibidas.length})
+              </button>
               {subVista === "grupos" && (
-                <button type="button" onClick={() => setMostrarFormGrupo(!mostrarFormGrupo)} className="btn btn-secondary" style={{ fontWeight: 700, color: "var(--emerald-primary)", borderColor: "var(--emerald-primary)" }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMostrarFormGrupo(!mostrarFormGrupo);
+                    setBusquedaAmigosGrupo("");
+                    setAmigosSeleccionadosGrupo([]);
+                  }}
+                  className="btn btn-secondary"
+                  style={{ fontWeight: 700, color: "var(--emerald-primary)", borderColor: "var(--emerald-primary)" }}
+                >
                   {mostrarFormGrupo ? "Cancelar" : "+ Crear Grupo"}
                 </button>
               )}
@@ -182,11 +196,75 @@ export default function VistaComunidad({ usuario, monedas, onSolicitarLogin }: V
           <button type="button" onClick={() => setAviso(null)} style={{ background: "none", border: "none", fontWeight: 700, cursor: "pointer", color: "inherit" }}>✕</button>
         </div>
       )}
+      {/* VISTA SOLICITUDES */}
+      {subVista === "solicitudes" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+          <div style={cardStyle}>
+            <h3 style={{ fontSize: "15px", fontWeight: 800, marginBottom: "10px" }}>
+              Solicitudes de Amistad Recibidas ({amistades.invitaciones_recibidas.length})
+            </h3>
+            {amistades.invitaciones_recibidas.length === 0 ? (
+              <p style={{ fontSize: "13px", color: "var(--text-secondary)" }}>No tienes solicitudes de amistad recibidas pendientes.</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {amistades.invitaciones_recibidas.map((inv) => (
+                  <div key={inv.amistad_id} style={rowStyle}>
+                    <span><strong>{inv.nombre_visible}</strong> (@{inv.nombre_usuario})</span>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <button type="button" className="btn btn-secondary" onClick={() => ejecutarAccion(async () => { await responderInvitacionAmistad(inv.amistad_id, false); await cargarDatos(); }, "Solicitud rechazada.")}>Rechazar</button>
+                      <button type="button" className="btn btn-primary" onClick={() => ejecutarAccion(async () => { await responderInvitacionAmistad(inv.amistad_id, true); await cargarDatos(); }, "Solicitud aceptada.")}>Aceptar</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div style={cardStyle}>
+            <h3 style={{ fontSize: "15px", fontWeight: 800, marginBottom: "10px" }}>
+              Solicitudes de Amistad Enviadas ({amistades.invitaciones_enviadas.length})
+            </h3>
+            {amistades.invitaciones_enviadas.length === 0 ? (
+              <p style={{ fontSize: "13px", color: "var(--text-secondary)" }}>No tienes solicitudes de amistad enviadas pendientes.</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {amistades.invitaciones_enviadas.map((env) => (
+                  <div key={env.amistad_id} style={rowStyle}>
+                    <span><strong>{env.nombre_visible}</strong> (@{env.nombre_usuario})</span>
+                    <span style={{ fontSize: "12px", fontWeight: 700, padding: "4px 10px", borderRadius: "12px", backgroundColor: "#FEF3C7", color: "#92400E" }}>
+                      Pendiente de respuesta
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div style={cardStyle}>
+            <h3 style={{ fontSize: "15px", fontWeight: 800, marginBottom: "10px" }}>
+              Invitaciones a Grupos Recibidas ({listadoGrupos.invitaciones_recibidas.length})
+            </h3>
+            {listadoGrupos.invitaciones_recibidas.length === 0 ? (
+              <p style={{ fontSize: "13px", color: "var(--text-secondary)" }}>No tienes invitaciones a grupos pendientes.</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {listadoGrupos.invitaciones_recibidas.map((inv) => (
+                  <div key={inv.id} style={rowStyle}>
+                    <span>Invitación al grupo #{inv.grupo_id.slice(0, 8)}</span>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <button type="button" className="btn btn-secondary" onClick={() => ejecutarAccion(async () => { await responderInvitacionGrupo(inv.grupo_id, false); await cargarDatos(); }, "Invitación rechazada.")}>Rechazar</button>
+                      <button type="button" className="btn btn-primary" onClick={() => ejecutarAccion(async () => { await responderInvitacionGrupo(inv.grupo_id, true); await cargarDatos(); }, "Te uniste al grupo.")}>Aceptar</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {/* VISTA AMIGOS */}
       {subVista === "amigos" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
           <div style={cardStyle}>
-            <h3 style={{ fontSize: "15px", fontWeight: 800, marginBottom: "8px" }}>Buscar Usuario por @nombre_usuario Exacto</h3>
+            <h3 style={{ fontSize: "15px", fontWeight: 800, marginBottom: "8px" }}>Enviar Solicitud de Amistad (Búsqueda Exacta por @usuario)</h3>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -195,7 +273,7 @@ export default function VistaComunidad({ usuario, monedas, onSolicitarLogin }: V
               }}
               style={{ display: "flex", gap: "10px" }}
             >
-              <input type="text" value={busquedaUsername} onChange={(e) => setBusquedaUsername(e.target.value.toLowerCase().replace(/\s/g, ""))} placeholder="Ej. beto" className="form-input" style={{ flex: 1 }} />
+              <input type="text" value={busquedaUsername} onChange={(e) => setBusquedaUsername(e.target.value.toLowerCase().replace(/\s/g, ""))} placeholder="Escribe el @nombre_usuario exacto (ej. beto)" className="form-input" style={{ flex: 1 }} />
               <button type="submit" className="btn btn-primary">Buscar</button>
             </form>
             {usuarioEncontrado && (
@@ -209,22 +287,51 @@ export default function VistaComunidad({ usuario, monedas, onSolicitarLogin }: V
               </div>
             )}
           </div>
-          {amistades.invitaciones_recibidas.length > 0 && (
-            <div style={cardStyle}>
-              <h3 style={{ fontSize: "14px", fontWeight: 800, marginBottom: "10px" }}>Solicitudes Recibidas ({amistades.invitaciones_recibidas.length})</h3>
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          {/* Tarjeta dedicada de Solicitudes de Amistad siempre visible en la pestaña de Amigos */}
+          <div style={cardStyle}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+              <h3 style={{ fontSize: "15px", fontWeight: 800 }}>
+                Solicitudes de Amistad ({amistades.invitaciones_recibidas.length + amistades.invitaciones_enviadas.length})
+              </h3>
+              <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                {amistades.invitaciones_recibidas.length} recibida(s) • {amistades.invitaciones_enviadas.length} enviada(s)
+              </span>
+            </div>
+            {amistades.invitaciones_recibidas.length === 0 && amistades.invitaciones_enviadas.length === 0 ? (
+              <p style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
+                No tienes solicitudes de amistad pendientes en este momento.
+              </p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                 {amistades.invitaciones_recibidas.map((inv) => (
-                  <div key={inv.amistad_id} style={rowStyle}>
-                    <span><strong>{inv.nombre_visible}</strong> (@{inv.nombre_usuario})</span>
+                  <div key={inv.amistad_id} style={{ ...rowStyle, backgroundColor: "#F8FAFC" }}>
+                    <div>
+                      <strong>{inv.nombre_visible}</strong>{" "}
+                      <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>@{inv.nombre_usuario}</span>
+                      <span style={{ marginLeft: "8px", fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "10px", backgroundColor: "#DBEAFE", color: "#1E40AF" }}>
+                        Recibida
+                      </span>
+                    </div>
                     <div style={{ display: "flex", gap: "8px" }}>
                       <button type="button" className="btn btn-secondary" onClick={() => ejecutarAccion(async () => { await responderInvitacionAmistad(inv.amistad_id, false); await cargarDatos(); }, "Solicitud rechazada.")}>Rechazar</button>
                       <button type="button" className="btn btn-primary" onClick={() => ejecutarAccion(async () => { await responderInvitacionAmistad(inv.amistad_id, true); await cargarDatos(); }, "Solicitud aceptada.")}>Aceptar</button>
                     </div>
                   </div>
                 ))}
+                {amistades.invitaciones_enviadas.map((env) => (
+                  <div key={env.amistad_id} style={rowStyle}>
+                    <div>
+                      <strong>{env.nombre_visible}</strong>{" "}
+                      <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>@{env.nombre_usuario}</span>
+                    </div>
+                    <span style={{ fontSize: "11.5px", fontWeight: 700, padding: "4px 10px", borderRadius: "12px", backgroundColor: "#FEF3C7", color: "#92400E" }}>
+                      Enviada (Pendiente)
+                    </span>
+                  </div>
+                ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
           {amigoPorEliminar && (
             <div style={{ ...rowStyle, backgroundColor: "#FEF2F2", borderColor: "#FCA5A5", color: "#991B1B" }}>
               <span>¿Eliminar a <strong>{amigoPorEliminar.nombre_visible} (@{amigoPorEliminar.nombre_usuario})</strong> de tus amigos?</span>
@@ -240,12 +347,14 @@ export default function VistaComunidad({ usuario, monedas, onSolicitarLogin }: V
               <p style={{ fontSize: "13px", color: "var(--text-secondary)" }}>Aún no tienes amigos agregados.</p>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                {amistades.amigos.map((a) => (
-                  <div key={a.amistad_id} style={rowStyle}>
-                    <span><strong>{a.nombre_visible}</strong> (@{a.nombre_usuario})</span>
-                    <button type="button" onClick={() => setAmigoPorEliminar(a)} style={{ fontSize: "12px", fontWeight: 700, color: "#DC2626", backgroundColor: "#FEE2E2", padding: "5px 10px", borderRadius: "6px" }}>Eliminar</button>
-                  </div>
-                ))}
+                {[...amistades.amigos]
+                  .sort((a, b) => a.nombre_usuario.toLowerCase().localeCompare(b.nombre_usuario.toLowerCase()))
+                  .map((a) => (
+                    <div key={a.amistad_id} style={rowStyle}>
+                      <span><strong>{a.nombre_visible}</strong> (@{a.nombre_usuario})</span>
+                      <button type="button" onClick={() => setAmigoPorEliminar(a)} style={{ fontSize: "12px", fontWeight: 700, color: "#DC2626", backgroundColor: "#FEE2E2", padding: "5px 10px", borderRadius: "6px" }}>Eliminar</button>
+                    </div>
+                  ))}
               </div>
             )}
           </div>
@@ -259,14 +368,25 @@ export default function VistaComunidad({ usuario, monedas, onSolicitarLogin }: V
               onSubmit={(e) => {
                 e.preventDefault();
                 ejecutarAccion(async () => {
-                  const creado = await crearGrupo({ nombre: formGrupo.nombre.trim(), moneda: formGrupo.moneda, descripcion: formGrupo.descripcion.trim() });
+                  const creado = await crearGrupo({
+                    nombre: formGrupo.nombre.trim(),
+                    moneda: formGrupo.moneda,
+                    descripcion: formGrupo.descripcion.trim(),
+                  });
+                  for (const username of amigosSeleccionadosGrupo) {
+                    try {
+                      await invitarMiembroGrupo(creado.id, username);
+                    } catch {}
+                  }
                   setFormGrupo({ nombre: "", moneda: "USD", descripcion: "", guardando: false });
+                  setBusquedaAmigosGrupo("");
+                  setAmigosSeleccionadosGrupo([]);
                   setMostrarFormGrupo(false);
                   await cargarDatos();
                   await abrirGrupo(creado.id);
-                });
+                }, amigosSeleccionadosGrupo.length > 0 ? `Grupo creado e invitaciones enviadas a ${amigosSeleccionadosGrupo.length} amigo(s).` : "Grupo creado exitosamente.");
               }}
-              style={{ ...cardStyle, border: "2px solid var(--emerald-primary)", display: "flex", flexDirection: "column", gap: "12px" }}
+              style={{ ...cardStyle, border: "2px solid var(--emerald-primary)", display: "flex", flexDirection: "column", gap: "14px" }}
             >
               <h3 style={{ fontSize: "16px", fontWeight: 800 }}>Crear Nuevo Grupo</h3>
               <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "12px" }}>
@@ -276,6 +396,77 @@ export default function VistaComunidad({ usuario, monedas, onSolicitarLogin }: V
                 </select>
               </div>
               <input type="text" value={formGrupo.descripcion} onChange={(e) => setFormGrupo({ ...formGrupo, descripcion: e.target.value })} placeholder="Descripción opcional" className="form-input" />
+              {/* Selector de amigos con barra de búsqueda parcial */}
+              <div style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: "12px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <label style={{ fontSize: "13.5px", fontWeight: 700, color: "var(--text-primary)" }}>
+                    Invitar amigos al grupo ({amigosSeleccionadosGrupo.length} seleccionado{amigosSeleccionadosGrupo.length === 1 ? "" : "s"})
+                  </label>
+                  <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                    Búsqueda parcial entre tus amigos
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  value={busquedaAmigosGrupo}
+                  onChange={(e) => setBusquedaAmigosGrupo(e.target.value)}
+                  placeholder="🔍 Buscar en tu lista de amigos por nombre o @usuario..."
+                  className="form-input"
+                />
+                {amistades.amigos.length === 0 ? (
+                  <p style={{ fontSize: "12.5px", color: "var(--text-secondary)" }}>
+                    Aún no tienes amigos agregados en tu lista para invitar. Puedes crear el grupo e invitarlos más adelante.
+                  </p>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "200px", overflowY: "auto", paddingRight: "4px" }}>
+                    {[...amistades.amigos]
+                      .filter((a) => {
+                        const q = busquedaAmigosGrupo.trim().toLowerCase().replace(/^@/, "");
+                        if (!q) return true;
+                        return (
+                          a.nombre_usuario.toLowerCase().includes(q) ||
+                          a.nombre_visible.toLowerCase().includes(q)
+                        );
+                      })
+                      .sort((a, b) => a.nombre_usuario.toLowerCase().localeCompare(b.nombre_usuario.toLowerCase()))
+                      .map((a) => {
+                        const seleccionado = amigosSeleccionadosGrupo.includes(a.nombre_usuario);
+                        return (
+                          <label
+                            key={a.amistad_id}
+                            style={{
+                              ...rowStyle,
+                              cursor: "pointer",
+                              backgroundColor: seleccionado ? "#ECFDF5" : "var(--surface-card)",
+                              borderColor: seleccionado ? "var(--emerald-primary)" : "var(--border-subtle)",
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                              <input
+                                type="checkbox"
+                                checked={seleccionado}
+                                onChange={(e) =>
+                                  setAmigosSeleccionadosGrupo((prev) =>
+                                    e.target.checked
+                                      ? [...prev, a.nombre_usuario]
+                                      : prev.filter((u) => u !== a.nombre_usuario)
+                                  )
+                                }
+                              />
+                              <div>
+                                <strong style={{ fontSize: "13.5px" }}>{a.nombre_visible}</strong>{" "}
+                                <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>@{a.nombre_usuario}</span>
+                              </div>
+                            </div>
+                            <span style={{ fontSize: "11.5px", fontWeight: 700, color: seleccionado ? "var(--emerald-primary)" : "var(--text-secondary)" }}>
+                              {seleccionado ? "Se enviará invitación" : "Clic para seleccionar"}
+                            </span>
+                          </label>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
               <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
                 <button type="button" onClick={() => setMostrarFormGrupo(false)} className="btn btn-secondary">Cancelar</button>
                 <button type="submit" className="btn btn-primary">Guardar Grupo</button>
@@ -545,19 +736,81 @@ export default function VistaComunidad({ usuario, monedas, onSolicitarLogin }: V
             </div>
           )}
           {tabGrupo === "miembros" && (
-            <div style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: "12px" }}>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <input type="text" value={usernameInvitarGrupo} onChange={(e) => setUsernameInvitarGrupo(e.target.value.toLowerCase().replace(/\s/g, ""))} placeholder="Invitar amigo por @usuario" className="form-input" style={{ flex: 1 }} />
-                <button type="button" className="btn btn-primary" onClick={() => ejecutarAccion(async () => { await invitarMiembroGrupo(grupoActivo.id, usernameInvitarGrupo); setUsernameInvitarGrupo(""); setGrupoActivo(await obtenerDetalleGrupo(grupoActivo.id)); }, "Invitación enviada.")}>Invitar</button>
-              </div>
-              {[...grupoActivo.miembros]
-                .sort((a, b) => a.nombre_usuario.toLowerCase().localeCompare(b.nombre_usuario.toLowerCase()))
-                .map((m) => (
-                  <div key={m.usuario_id} style={rowStyle}>
-                    <span><strong>{m.nombre_visible}</strong> (@{m.nombre_usuario})</span>
-                    <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{m.es_administrador ? "Administrador" : "Miembro"}</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <div style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: "12px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h3 style={{ fontSize: "15px", fontWeight: 800 }}>Invitar Amigos al Grupo</h3>
+                  <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Búsqueda parcial entre tus amigos</span>
+                </div>
+                <input
+                  type="text"
+                  value={busquedaAmigosMiembros}
+                  onChange={(e) => setBusquedaAmigosMiembros(e.target.value)}
+                  placeholder="🔍 Buscar en tu lista de amigos por nombre o @usuario..."
+                  className="form-input"
+                />
+                {amistades.amigos.length === 0 ? (
+                  <p style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
+                    Aún no tienes amigos en tu lista. Agrégalos primero en la pestaña Amigos.
+                  </p>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "220px", overflowY: "auto" }}>
+                    {[...amistades.amigos]
+                      .filter((a) => {
+                        const q = busquedaAmigosMiembros.trim().toLowerCase().replace(/^@/, "");
+                        if (!q) return true;
+                        return (
+                          a.nombre_usuario.toLowerCase().includes(q) ||
+                          a.nombre_visible.toLowerCase().includes(q)
+                        );
+                      })
+                      .sort((a, b) => a.nombre_usuario.toLowerCase().localeCompare(b.nombre_usuario.toLowerCase()))
+                      .map((a) => {
+                        const yaEsMiembro = grupoActivo.miembros.some(
+                          (m) => m.nombre_usuario.toLowerCase() === a.nombre_usuario.toLowerCase()
+                        );
+                        return (
+                          <div key={a.amistad_id} style={rowStyle}>
+                            <div>
+                              <strong>{a.nombre_visible}</strong>{" "}
+                              <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>@{a.nombre_usuario}</span>
+                            </div>
+                            {yaEsMiembro ? (
+                              <span style={{ fontSize: "12px", fontWeight: 700, color: "#059669", backgroundColor: "#ECFDF5", padding: "4px 10px", borderRadius: "10px" }}>
+                                Ya en el grupo
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                style={{ fontSize: "12.5px", padding: "6px 12px" }}
+                                onClick={() =>
+                                  ejecutarAccion(async () => {
+                                    await invitarMiembroGrupo(grupoActivo.id, a.nombre_usuario);
+                                    setGrupoActivo(await obtenerDetalleGrupo(grupoActivo.id));
+                                  }, `Invitación enviada a @${a.nombre_usuario}.`)
+                                }
+                              >
+                                Invitar al grupo
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
                   </div>
-                ))}
+                )}
+              </div>
+              <div style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: "10px" }}>
+                <h3 style={{ fontSize: "15px", fontWeight: 800 }}>Miembros Actuales ({grupoActivo.miembros.length})</h3>
+                {[...grupoActivo.miembros]
+                  .sort((a, b) => a.nombre_usuario.toLowerCase().localeCompare(b.nombre_usuario.toLowerCase()))
+                  .map((m) => (
+                    <div key={m.usuario_id} style={rowStyle}>
+                      <span><strong>{m.nombre_visible}</strong> (@{m.nombre_usuario})</span>
+                      <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{m.es_administrador ? "Administrador" : "Miembro"}</span>
+                    </div>
+                  ))}
+              </div>
             </div>
           )}
         </div>
