@@ -2,48 +2,17 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: cuentas_claras_db
-    restart: unless-stopped
+    restart: always
     environment:
-      POSTGRES_USER: ${DB_USER:?Define DB_USER en .env}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD en .env}
-      POSTGRES_DB: ${DB_NAME:?Define DB_NAME en .env}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password123}
+      POSTGRES_DB: ${DB_NAME:-cuentas_claras}
     ports:
-      - "127.0.0.1:${DB_PORT:-5433}:5432"
+      - "${DB_PORT:-5433}:5432"
     volumes:
+      # Volumen persistente: la información no se pierde al reiniciar el contenedor
       - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  api:
-    build:
-      context: .
-      dockerfile: servidor/Dockerfile
-    container_name: cuentas_claras_api
-    restart: unless-stopped
-    environment:
-      DB_HOST: postgres
-      DB_INTERNAL_PORT: 5432
-      DB_USER: ${DB_USER:?Define DB_USER en .env}
-      DB_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD en .env}
-      DB_NAME: ${DB_NAME:?Define DB_NAME en .env}
-      JWT_SECRET: ${JWT_SECRET:?Define JWT_SECRET en .env}
-    ports:
-      - "127.0.0.1:8000:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ping')"
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
 volumes:
   postgres_data:
+
