@@ -346,7 +346,7 @@ export default function VistaComunidad({ usuario, monedas, onSolicitarLogin }: V
             {amistades.amigos.length === 0 ? (
               <p style={{ fontSize: "13px", color: "var(--text-secondary)" }}>Aún no tienes amigos agregados.</p>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "260px", overflowY: "auto", paddingRight: "4px" }}>
                 {[...amistades.amigos]
                   .sort((a, b) => a.nombre_usuario.toLowerCase().localeCompare(b.nombre_usuario.toLowerCase()))
                   .map((a) => (
@@ -410,7 +410,7 @@ export default function VistaComunidad({ usuario, monedas, onSolicitarLogin }: V
                   type="text"
                   value={busquedaAmigosGrupo}
                   onChange={(e) => setBusquedaAmigosGrupo(e.target.value)}
-                  placeholder="🔍 Buscar en tu lista de amigos por nombre o @usuario..."
+                  placeholder="Buscar en tu lista de amigos por nombre o @usuario..."
                   className="form-input"
                 />
                 {amistades.amigos.length === 0 ? (
@@ -527,7 +527,7 @@ export default function VistaComunidad({ usuario, monedas, onSolicitarLogin }: V
                   </button>
                 ))}
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "220px", overflowY: "auto", paddingRight: "4px" }}>
                 {grupoActivo.miembros.map((m) => {
                   const inc = participantesIds.includes(m.usuario_id);
                   return (
@@ -746,7 +746,7 @@ export default function VistaComunidad({ usuario, monedas, onSolicitarLogin }: V
                   type="text"
                   value={busquedaAmigosMiembros}
                   onChange={(e) => setBusquedaAmigosMiembros(e.target.value)}
-                  placeholder="🔍 Buscar en tu lista de amigos por nombre o @usuario..."
+                  placeholder="Buscar en tu lista de amigos por nombre o @usuario..."
                   className="form-input"
                 />
                 {amistades.amigos.length === 0 ? (
@@ -802,14 +802,16 @@ export default function VistaComunidad({ usuario, monedas, onSolicitarLogin }: V
               </div>
               <div style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: "10px" }}>
                 <h3 style={{ fontSize: "15px", fontWeight: 800 }}>Miembros Actuales ({grupoActivo.miembros.length})</h3>
-                {[...grupoActivo.miembros]
-                  .sort((a, b) => a.nombre_usuario.toLowerCase().localeCompare(b.nombre_usuario.toLowerCase()))
-                  .map((m) => (
-                    <div key={m.usuario_id} style={rowStyle}>
-                      <span><strong>{m.nombre_visible}</strong> (@{m.nombre_usuario})</span>
-                      <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{m.es_administrador ? "Administrador" : "Miembro"}</span>
-                    </div>
-                  ))}
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "240px", overflowY: "auto", paddingRight: "4px" }}>
+                  {[...grupoActivo.miembros]
+                    .sort((a, b) => a.nombre_usuario.toLowerCase().localeCompare(b.nombre_usuario.toLowerCase()))
+                    .map((m) => (
+                      <div key={m.usuario_id} style={rowStyle}>
+                        <span><strong>{m.nombre_visible}</strong> (@{m.nombre_usuario})</span>
+                        <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{m.es_administrador ? "Administrador" : "Miembro"}</span>
+                      </div>
+                    ))}
+                </div>
               </div>
             </div>
           )}
