@@ -1,7 +1,6 @@
 """
 Modelos ORM de SQLAlchemy para PostgreSQL.
-Uso de tipo nativo UUID para identificadores y llaves foráneas.
-Campos correo y nombre_usuario con restricciones de unicidad estricta.
+Uso de String(36) para compatibilidad total con UUID v4 en Python y Postgres.
 Restricción INV-16: Cero tablas o campos financieros personales en el servidor.
 """
 from datetime import datetime, timezone
@@ -17,18 +16,15 @@ from sqlalchemy import (  # type: ignore
     UniqueConstraint,
     Index
 )
-from sqlalchemy.dialects.postgresql import UUID  # type: ignore
 from .db import Base
 
 
 class Usuario(Base):
     __tablename__ = "usuarios"
 
-    # UUID nativo en PostgreSQL, compatible con str en Python
-    id = Column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
     nombre_usuario = Column(String(30), unique=True, nullable=False, index=True)
     nombre_visible = Column(String(100), nullable=False)
-    # Correo único a nivel de motor de BD (RF-SOC-01)
     correo = Column(String(255), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
     creado_en = Column(
@@ -41,9 +37,9 @@ class Usuario(Base):
 class Amistad(Base):
     __tablename__ = "amistades"
 
-    id = Column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4()))
-    usuario_origen_id = Column(UUID(as_uuid=False), ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False)
-    usuario_destino_id = Column(UUID(as_uuid=False), ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    usuario_origen_id = Column(String(36), ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False)
+    usuario_destino_id = Column(String(36), ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False)
     estado = Column(String(20), nullable=False)  # PENDIENTE, ACTIVA, RECHAZADA
     creado_en = Column(
         DateTime(timezone=True),
@@ -66,12 +62,12 @@ class Amistad(Base):
 class Grupo(Base):
     __tablename__ = "grupos"
 
-    id = Column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4()))
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     nombre = Column(String(100), nullable=False)
     descripcion = Column(Text, nullable=True)
-    moneda = Column(String(3), nullable=False)  # Código ISO de 3 letras (USD, EUR)
+    moneda = Column(String(3), nullable=False)  # ISO 3 letras: USD, EUR
     actividad_fecha = Column(String(100), nullable=True)
-    creador_id = Column(UUID(as_uuid=False), ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False)
+    creador_id = Column(String(36), ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False)
     creado_en = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -82,9 +78,9 @@ class Grupo(Base):
 class MiembroGrupo(Base):
     __tablename__ = "miembros_grupo"
 
-    id = Column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4()))
-    grupo_id = Column(UUID(as_uuid=False), ForeignKey("grupos.id", ondelete="CASCADE"), nullable=False)
-    usuario_id = Column(UUID(as_uuid=False), ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    grupo_id = Column(String(36), ForeignKey("grupos.id", ondelete="CASCADE"), nullable=False)
+    usuario_id = Column(String(36), ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False)
     rol = Column(String(20), nullable=False, default="MIEMBRO")  # ADMIN, MIEMBRO
     estado = Column(String(20), nullable=False, default="PENDIENTE")  # PENDIENTE, ACEPTADO
     creado_en = Column(
@@ -102,9 +98,9 @@ class MiembroGrupo(Base):
 class GastoGrupo(Base):
     __tablename__ = "gastos_grupo"
 
-    id = Column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4()))
-    grupo_id = Column(UUID(as_uuid=False), ForeignKey("grupos.id", ondelete="CASCADE"), nullable=False, index=True)
-    pagador_id = Column(UUID(as_uuid=False), ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    grupo_id = Column(String(36), ForeignKey("grupos.id", ondelete="CASCADE"), nullable=False, index=True)
+    pagador_id = Column(String(36), ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False, index=True)
     concepto = Column(String(255), nullable=False)
     monto = Column(Numeric(12, 2), nullable=False)  # Decimal exacto (RNF-08)
     fecha = Column(DateTime(timezone=True), nullable=False)
@@ -119,9 +115,9 @@ class GastoGrupo(Base):
 class ParteGasto(Base):
     __tablename__ = "partes_gasto"
 
-    id = Column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4()))
-    gasto_id = Column(UUID(as_uuid=False), ForeignKey("gastos_grupo.id", ondelete="CASCADE"), nullable=False)
-    usuario_id = Column(UUID(as_uuid=False), ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    gasto_id = Column(String(36), ForeignKey("gastos_grupo.id", ondelete="CASCADE"), nullable=False)
+    usuario_id = Column(String(36), ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False)
     monto_cuota = Column(Numeric(12, 2), nullable=False)
     porcentaje_indicado = Column(Numeric(5, 2), nullable=True)
     monto_fijo_indicado = Column(Numeric(12, 2), nullable=True)

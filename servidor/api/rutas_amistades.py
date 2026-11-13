@@ -133,14 +133,19 @@ def invitar_amistad(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Usuario no encontrado.",
         )
-    except ErrorDominio as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"campo": e.campo, "mensaje": e.mensaje},
-        )
     except ErrorConflicto as e:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
+            detail={"campo": e.campo, "mensaje": e.mensaje},
+        )
+    except ErrorPermiso as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"campo": e.campo, "mensaje": e.mensaje},
+        )
+    except ErrorDominio as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail={"campo": e.campo, "mensaje": e.mensaje},
         )
 

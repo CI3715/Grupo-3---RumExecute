@@ -3,6 +3,7 @@ Implementación del Repositorio de Usuarios y Credenciales en PostgreSQL con SQL
 Cumple con RepositorioUsuarios, RepositorioCredenciales y PersistenciaRegistro.
 """
 from typing import Optional
+from datetime import timezone
 from sqlalchemy.orm import Session  # type: ignore
 from sqlalchemy.exc import IntegrityError  # type: ignore
 from sqlalchemy import func  # type: ignore
@@ -22,12 +23,15 @@ class RepositorioUsuariosPostgres(RepositorioUsuarios, RepositorioCredenciales, 
         self.db = db
 
     def _mapear_a_dominio(self, modelo: Usuario) -> UsuarioDominio:
+        fecha_alta = modelo.creado_en
+        if fecha_alta is not None and fecha_alta.tzinfo is None:
+            fecha_alta = fecha_alta.replace(tzinfo=timezone.utc)
         return UsuarioDominio(
             id=modelo.id,
             nombre_usuario=modelo.nombre_usuario,
             nombre_visible=modelo.nombre_visible,
             correo=modelo.correo,
-            fecha_alta=modelo.creado_en
+            fecha_alta=fecha_alta
         )
 
     def obtener_usuario_por_nombre_usuario(self, nombre_usuario: str) -> Optional[UsuarioDominio]:
