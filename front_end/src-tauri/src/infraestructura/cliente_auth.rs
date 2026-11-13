@@ -1,6 +1,6 @@
-"""
-Cliente HTTP y Almacén Seguro en Keyring (Entrega 5 - Rust/Tauri).
-"""
+
+//! Cliente HTTP y Almacén Seguro en Keyring (Entrega 5 - Rust/Tauri).
+
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
 use std::env;
