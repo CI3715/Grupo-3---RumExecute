@@ -1,29 +1,18 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { useState, useEffect, useCallback } from "react";
 import Navbar from "../components/Navbar";
-import SubtotalesGrid, { SubtotalMoneda } from "../components/SubtotalesGrid";
-import ListaCuentas, { CuentaItem } from "../components/ListaCuentas";
-import ModalNuevaCuenta, { EntradaCuentaForm, ErrorValidacion } from "../components/ModalNuevaCuenta";
+import SubtotalesGrid from "../components/SubtotalesGrid";
+import ListaCuentas from "../components/ListaCuentas";
+import ModalNuevaCuenta from "../components/ModalNuevaCuenta";
 import ModalDiagnostico from "../components/ModalDiagnostico";
-import DetalleCuenta, { DetalleCuentaData } from "../components/DetalleCuenta";
+import DetalleCuenta from "../components/DetalleCuenta";
+import VistaPatrimonio from "../components/VistaPatrimonio";
+import VistaTasas from "../components/VistaTasas";
+import VistaComunidad from "../components/VistaComunidad";
+import ModalAuth from "../components/ModalAuth";
 
-export interface EntradaNuevaCategoriaForm {
-  nombre: string;
-  tipo: "gasto" | "ingreso";
-}
-import { EntradaMovimientoForm } from "../components/ModalNuevoMovimiento";
-import { EntradaCorreccionForm, MovimientoItem } from "../components/ModalCorregirMovimiento";
-import {
-  CATEGORIAS_GASTO,
-  CATEGORIAS_INGRESO,
-  formatearMonto,
-  formatearMontoConSigno,
-  calcularTotalesCuenta,
-} from "../utils/formato";
-
-// Importaciones de Entrega 4 (The Exchange Flow & Patrimonio)
+import { useCuentas } from "../hooks/useCuentas";
 import {
   MonedaItem,
   TasaCambioItem,
@@ -42,42 +31,48 @@ import {
   consultarPatrimonio,
   crearMonedaPropia,
 } from "../services/tasasService";
-import VistaPatrimonio from "../components/VistaPatrimonio";
-import VistaTasas from "../components/VistaTasas";
-
-interface CuentaRust {
-  id: string;
-  nombre: string;
-  tipo: string;
-  moneda: string;
-  saldo_inicial: { cantidad: string | number; moneda: string };
-}
-
-interface ResumenCuentasRust {
-  cuentas: CuentaRust[];
-  subtotales_por_moneda: Array<{ cantidad: string | number; moneda: string }>;
-}
-
-const enTauri = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+import {
+  DatosUsuario,
+  obtenerPerfil,
+  obtenerUsuarioCacheado,
+  cerrarSesion,
+  verificarEstadoServidor,
+} from "../services/authService";
 
 export default function HomePage() {
-  // Navegación de pestañas (Entrega 4)
-  const [tabActivo, setTabActivo] = useState<"cuentas" | "patrimonio" | "tasas">("cuentas");
+  const [tabActivo, setTabActivo] = useState<"cuentas" | "patrimonio" | "tasas" | "comunidad">("cuentas");
 
-  // Vistas internas de Cuentas
-  const [vista, setVista] = useState<"cuentas" | "detalle">("cuentas");
-  const [cuentaSeleccionadaId, setCuentaSeleccionadaId] = useState<string | null>(null);
+  // Estado de Sesión y Autenticación (Entrega 5)
+  const [usuario, setUsuario] = useState<DatosUsuario | null>(null);
+  const [servidorOffline, setServidorOffline] = useState(false);
+  const [avisoSesion, setAvisoSesion] = useState<string | null>(null);
+  const [modalAuth, setModalAuth] = useState(false);
+  const [modoAuth, setModoAuth] = useState<"login" | "registro">("login");
 
-  // Estado de Cuentas y Movimientos
-  const [cuentas, setCuentas] = useState<CuentaItem[]>([]);
-  const [subtotales, setSubtotales] = useState<SubtotalMoneda[]>([]);
-  const [saldosIniciales, setSaldosIniciales] = useState<Record<string, number>>({});
-  const [movimientosPorCuenta, setMovimientosPorCuenta] = useState<Record<string, MovimientoItem[]>>({});
+  // Hook desacoplado de cuentas, movimientos y categorías locales aislado por usuario
+  const {
+    cuentas,
+    subtotales,
+    saldosIniciales,
+    movimientosPorCuenta,
+    categoriasGasto,
+    categoriasIngreso,
+    errorValidacion,
+    setErrorValidacion,
+    vista,
+    setVista,
+    cuentaActivaDetalle,
+    abrirDetalleCuenta,
+    setCuentaSeleccionadaId,
+    cargarCuentasTauri,
+    cargarCategoriasTauri,
+    handleCrearCuenta,
+    handleCrearCategoria,
+    handleRegistrarMovimiento,
+    handleCorregirMovimiento,
+  } = useCuentas(usuario?.id);
 
-  const [categoriasGasto, setCategoriasGasto] = useState<string[]>(CATEGORIAS_GASTO);
-  const [categoriasIngreso, setCategoriasIngreso] = useState<string[]>(CATEGORIAS_INGRESO);
-
-  // Estado de Tasas, Monedas y Patrimonio (Entrega 4)
+  // Estado de Tasas y Patrimonio Consolidado (Entrega 4)
   const [fechaConsultaPatrimonio, setFechaConsultaPatrimonio] = useState<string>(obtenerFechaHoyISO());
   const [monedaBaseActual, setMonedaBaseActual] = useState<string>("USD");
   const [monedasDisponibles, setMonedasDisponibles] = useState<MonedaItem[]>([]);
@@ -85,139 +80,16 @@ export default function HomePage() {
   const [patrimonioData, setPatrimonioData] = useState<ResumenPatrimonioData | null>(null);
   const [filtroParHistorial, setFiltroParHistorial] = useState<{ origen?: string; destino?: string } | null>(null);
 
-  // Modales
+  // Modales adicionales
   const [modalNuevaCuenta, setModalNuevaCuenta] = useState(false);
   const [modalDiagnostico, setModalDiagnostico] = useState(false);
-  const [errorValidacion, setErrorValidacion] = useState<ErrorValidacion | null>(null);
 
-  // ==========================================
-  // CARGA DE DATOS DE CUENTAS (TAURI / LOCAL)
-  // ==========================================
-  const cargarCuentasTauri = async () => {
-    if (!enTauri()) return;
-    try {
-      const res = await invoke<ResumenCuentasRust>("listar_cuentas");
-      if (!res?.cuentas) return;
-
-      const mapaSaldos: Record<string, number> = {};
-      const mapaMovs: Record<string, MovimientoItem[]> = {};
-
-      const detalles = await Promise.all(
-        res.cuentas.map(async (c) => {
-          try {
-            const d = await invoke<any>("obtener_detalle_cuenta", { idCuenta: c.id })
-              .catch(() => invoke<any>("obtener_detalle_cuenta", { id_cuenta: c.id }));
-            return { id: c.id, detalle: d };
-          } catch {
-            return { id: c.id, detalle: null };
-          }
-        })
-      );
-
-      const nuevasCuentas: CuentaItem[] = res.cuentas.map((c) => {
-        const saldoIniNum = Number(c.saldo_inicial?.cantidad ?? 0);
-        mapaSaldos[c.id] = saldoIniNum;
-
-        const info = detalles.find((d) => d.id === c.id)?.detalle;
-        let saldoActualNum = saldoIniNum;
-
-        if (info?.saldo_actual) {
-          saldoActualNum = Number(info.saldo_actual.cantidad ?? saldoIniNum);
-        }
-
-        if (info && Array.isArray(info.movimientos)) {
-          const movs: MovimientoItem[] = info.movimientos.map((m: any) => {
-            const montoNum = Number(m.monto?.cantidad ?? m.monto ?? 0);
-            const tipoNorm = (typeof m.tipo === "string" ? m.tipo : m.tipo?.tipo || "gasto").toLowerCase();
-            const catTexto = typeof m.categoria === "object" && m.categoria !== null
-              ? (m.categoria.nombre || m.categoria.id || "Varios")
-              : (typeof m.categoria === "string" ? m.categoria : "Varios");
-
-            return {
-              id: m.id,
-              id_cuenta: m.id_cuenta || c.id,
-              tipo: tipoNorm as "gasto" | "ingreso" | "ajuste",
-              monto_num: montoNum,
-              monto_formateado: formatearMontoConSigno(montoNum, c.moneda, tipoNorm),
-              fecha: m.fecha || new Date().toISOString().split("T")[0],
-              categoria: catTexto,
-              nota: m.descripcion || m.nota || "",
-              estado: (tipoNorm === "ajuste" ? "ajuste" : "vigente") as "vigente" | "corregido" | "ajuste",
-              id_movimiento_referenciado: m.id_movimiento_referenciado,
-            };
-          });
-          mapaMovs[c.id] = movs;
-        }
-
-        return {
-          id: c.id,
-          nombre: c.nombre,
-          tipo: c.tipo,
-          moneda: c.moneda,
-          saldo_formateado: formatearMonto(saldoActualNum, c.moneda),
-        };
-      });
-
-      const monedas = Array.from(new Set(nuevasCuentas.map((c) => c.moneda)));
-      const nuevosSubtotales: SubtotalMoneda[] = monedas.map((codMoneda) => {
-        const cuentasMoneda = nuevasCuentas.filter((c) => c.moneda === codMoneda);
-        const total = cuentasMoneda.reduce((acum, c) => {
-          const saldo = detalles.find((d) => d.id === c.id)?.detalle?.saldo_actual?.cantidad;
-          return acum + Number(saldo ?? mapaSaldos[c.id] ?? 0);
-        }, 0);
-
-        return {
-          moneda: codMoneda,
-          subtotal_formateado: formatearMonto(total, codMoneda),
-          cantidad_cuentas: cuentasMoneda.length,
-        };
-      });
-
-      setSaldosIniciales((prev) => ({ ...mapaSaldos, ...prev }));
-      setMovimientosPorCuenta((prev) => ({ ...prev, ...mapaMovs }));
-      setCuentas(nuevasCuentas);
-      setSubtotales(nuevosSubtotales);
-    } catch (e) {
-      console.error("Error al cargar cuentas de Tauri:", e);
-    }
-  };
-
-  const cargarCategoriasTauri = async () => {
-    if (!enTauri()) return;
-    try {
-      const res = await invoke<any>("listar_categorias");
-      if (res) {
-        if (Array.isArray(res)) {
-          const gastos = res
-            .filter((c: any) => c.tipo?.toLowerCase?.() === "gasto" || c.tipo === "gasto")
-            .map((c: any) => (typeof c === "string" ? c : c.nombre));
-          const ingresos = res
-            .filter((c: any) => c.tipo?.toLowerCase?.() === "ingreso" || c.tipo === "ingreso")
-            .map((c: any) => (typeof c === "string" ? c : c.nombre));
-          if (gastos.length > 0) setCategoriasGasto(gastos);
-          if (ingresos.length > 0) setCategoriasIngreso(ingresos);
-        } else if (typeof res === "object") {
-          if (Array.isArray(res.gastos) && res.gastos.length > 0) {
-            setCategoriasGasto(res.gastos.map((c: any) => (typeof c === "string" ? c : c.nombre)));
-          }
-          if (Array.isArray(res.ingresos) && res.ingresos.length > 0) {
-            setCategoriasIngreso(res.ingresos.map((c: any) => (typeof c === "string" ? c : c.nombre)));
-          }
-        }
-      }
-    } catch (e) {
-      console.error("Error al cargar categorías de Tauri:", e);
-    }
-  };
-
-  // ==========================================
-  // CARGA DE TASAS, MONEDAS Y PATRIMONIO
-  // ==========================================
+  // Carga inicial de catálogo de monedas y tasas
   const cargarMonedasYBase = useCallback(async () => {
     try {
-      const mons = await listarMonedas();
-      setMonedasDisponibles(mons);
+      const lista = await listarMonedas();
       const base = await obtenerMonedaBase();
+      setMonedasDisponibles(lista);
       setMonedaBaseActual(base);
     } catch (e) {
       console.error("Error al cargar monedas:", e);
@@ -238,13 +110,15 @@ export default function HomePage() {
       const cuentasSimples = cuentas.map((c) => {
         const saldoIni = saldosIniciales[c.id] ?? 0;
         const movs = movimientosPorCuenta[c.id] || [];
-        const { saldoActual } = calcularTotalesCuenta(saldoIni, movs);
+        const totalIngresos = movs.filter((m) => m.tipo === "ingreso").reduce((s, m) => s + m.monto_num, 0);
+        const totalGastos = movs.filter((m) => m.tipo === "gasto").reduce((s, m) => s + m.monto_num, 0);
+        const totalAjustes = movs.filter((m) => m.tipo === "ajuste").reduce((s, m) => s + m.monto_num, 0);
         return {
           id: c.id,
           nombre: c.nombre,
           tipo: c.tipo,
           moneda: c.moneda,
-          saldo: saldoActual,
+          saldo: saldoIni + totalIngresos - totalGastos + totalAjustes,
         };
       });
 
@@ -255,12 +129,40 @@ export default function HomePage() {
     }
   }, [cuentas, saldosIniciales, movimientosPorCuenta, fechaConsultaPatrimonio]);
 
+  // Carga inicial y recarga por cambio de usuario
   useEffect(() => {
     cargarCuentasTauri();
     cargarCategoriasTauri();
     cargarMonedasYBase();
     cargarTasas();
-  }, [cargarMonedasYBase, cargarTasas]);
+  }, [usuario?.id, cargarCuentasTauri, cargarCategoriasTauri, cargarMonedasYBase, cargarTasas]);
+
+  // Verificación de conectividad y restauración inmediata de sesión al iniciar
+  useEffect(() => {
+    let cancelado = false;
+    const cacheado = obtenerUsuarioCacheado();
+    if (cacheado) {
+      setUsuario(cacheado);
+    }
+
+    async function inicializar() {
+      const activo = await verificarEstadoServidor();
+      if (cancelado) return;
+      setServidorOffline(!activo);
+
+      try {
+        const perfil = await obtenerPerfil();
+        if (!cancelado) setUsuario(perfil);
+      } catch (err: any) {
+        if (!cancelado && err?.message?.includes("venció")) {
+          setUsuario(null);
+          setAvisoSesion("Tu sesión venció, inicia sesión de nuevo.");
+        }
+      }
+    }
+    inicializar();
+    return () => { cancelado = true; };
+  }, []);
 
   useEffect(() => {
     if (tabActivo === "patrimonio") {
@@ -268,16 +170,14 @@ export default function HomePage() {
     }
   }, [tabActivo, fechaConsultaPatrimonio, monedaBaseActual, cuentas, actualizarPatrimonio]);
 
-  // ==========================================
-  // HANDLERS DE TASAS Y MONEDA BASE
-  // ==========================================
+  // Handlers de tasas
   const handleCambiarMonedaBase = async (nuevaBase: string) => {
     try {
       await cambiarMonedaBase(nuevaBase);
       setMonedaBaseActual(nuevaBase);
       await actualizarPatrimonio();
     } catch (err: any) {
-      alert(err?.message || "Error al cambiar moneda base.");
+      setAvisoSesion(err?.message || "Error al cambiar moneda base.");
     }
   };
 
@@ -299,310 +199,6 @@ export default function HomePage() {
     await actualizarPatrimonio();
   };
 
-  // ==========================================
-  // HANDLERS DE CUENTAS Y MOVIMIENTOS
-  // ==========================================
-  const handleCrearCuenta = async (entrada: EntradaCuentaForm): Promise<boolean> => {
-    setErrorValidacion(null);
-
-    if (enTauri()) {
-      try {
-        await invoke("crear_cuenta", { entrada });
-        await cargarCuentasTauri();
-        setModalNuevaCuenta(false);
-        return true;
-      } catch (err: any) {
-        setErrorValidacion({
-          campo: err?.campo || "general",
-          mensaje: err?.mensaje || (typeof err === "string" ? err : "Error al registrar la cuenta"),
-        });
-        return false;
-      }
-    }
-
-    if (!entrada.nombre.trim()) {
-      setErrorValidacion({ campo: "nombre", mensaje: "El nombre de la cuenta no puede estar vacío." });
-      return false;
-    }
-    if (cuentas.some((c) => c.nombre.trim().toLowerCase() === entrada.nombre.trim().toLowerCase())) {
-      setErrorValidacion({
-        campo: "nombre",
-        mensaje: `Ya existe una cuenta con el nombre '${entrada.nombre}'. Elige un nombre distinto.`,
-      });
-      return false;
-    }
-
-    const nuevaId = `cta-${Date.now()}`;
-    const saldoNum = parseFloat(entrada.saldo_inicial.replace(",", "."));
-    const nuevaCuenta: CuentaItem = {
-      id: nuevaId,
-      nombre: entrada.nombre,
-      tipo: entrada.tipo,
-      moneda: entrada.moneda,
-      saldo_formateado: formatearMonto(saldoNum, entrada.moneda),
-    };
-
-    setSaldosIniciales((prev) => ({ ...prev, [nuevaId]: saldoNum }));
-    setCuentas((prev) => [...prev, nuevaCuenta]);
-    setModalNuevaCuenta(false);
-    return true;
-  };
-
-  const handleCrearCategoria = async (
-    entrada: EntradaNuevaCategoriaForm
-  ): Promise<boolean> => {
-    setErrorValidacion(null);
-    const nombreLimpio = entrada.nombre.trim();
-    if (!nombreLimpio) {
-      const err = {
-        campo: "categoria",
-        mensaje: "El nombre de la categoría no puede estar vacío.",
-      };
-      setErrorValidacion(err);
-      throw err;
-    }
-
-    if (enTauri()) {
-      try {
-        await invoke("crear_categoria", {
-          entrada: {
-            nombre: nombreLimpio,
-            tipo: entrada.tipo,
-          },
-        });
-        await cargarCategoriasTauri();
-        if (entrada.tipo === "gasto") {
-          setCategoriasGasto((prev) => (prev.includes(nombreLimpio) ? prev : [...prev, nombreLimpio]));
-        } else {
-          setCategoriasIngreso((prev) => (prev.includes(nombreLimpio) ? prev : [...prev, nombreLimpio]));
-        }
-        return true;
-      } catch (err: any) {
-        const errorObj = {
-          campo: err?.campo || "categoria",
-          mensaje:
-            err?.mensaje ||
-            (typeof err === "string" ? err : "Error al crear la categoría"),
-        };
-        setErrorValidacion(errorObj);
-        throw errorObj;
-      }
-    }
-
-    if (entrada.tipo === "gasto") {
-      setCategoriasGasto((prev) => [...prev, nombreLimpio]);
-    } else {
-      setCategoriasIngreso((prev) => [...prev, nombreLimpio]);
-    }
-    return true;
-  };
-
-  const handleRegistrarMovimiento = async (
-    entrada: EntradaMovimientoForm
-  ): Promise<boolean> => {
-    setErrorValidacion(null);
-    const hoy = new Date().toISOString().split("T")[0];
-    const fechaMovimiento = entrada.fecha?.trim() || hoy;
-
-    if (fechaMovimiento > hoy) {
-      const errorObj = {
-        campo: "fecha",
-        mensaje: `No se permiten movimientos con fechas futuras (${fechaMovimiento} es posterior a la fecha actual ${hoy}).`,
-      };
-      setErrorValidacion(errorObj);
-      throw errorObj;
-    }
-
-    if (entrada.esNuevaCategoria) {
-      try {
-        await handleCrearCategoria({
-          nombre: entrada.categoria.trim(),
-          tipo: entrada.tipo,
-        });
-      } catch (errCat: any) {
-        const msg = (
-          errCat?.mensaje ||
-          (typeof errCat === "string" ? errCat : "")
-        ).toLowerCase();
-        if (!msg.includes("ya existe")) {
-          throw errCat;
-        }
-      }
-    }
-
-    if (enTauri()) {
-      try {
-        const payloadRust = {
-          id_cuenta: entrada.id_cuenta,
-          tipo: entrada.tipo,
-          monto: entrada.monto,
-          categoria: entrada.categoria,
-          fecha: fechaMovimiento,
-          descripcion: entrada.nota?.trim() || "Sin descripción",
-        };
-        await invoke("registrar_movimiento", { entrada: payloadRust });
-        await cargarCuentasTauri();
-        if (cuentaSeleccionadaId) {
-          await abrirDetalleCuenta(cuentaSeleccionadaId);
-        }
-        return true;
-      } catch (err: any) {
-        const errorObj = {
-          campo: err?.campo || "monto",
-          mensaje:
-            err?.mensaje ||
-            (typeof err === "string" ? err : "Error al registrar el movimiento"),
-        };
-        setErrorValidacion(errorObj);
-        throw errorObj;
-      }
-    }
-
-    const cuenta = cuentas.find((c) => c.id === entrada.id_cuenta);
-    if (!cuenta) return false;
-
-    const montoNum = parseFloat(entrada.monto.replace(",", "."));
-    const nuevoMov: MovimientoItem = {
-      id: `mov-${Date.now()}`,
-      id_cuenta: entrada.id_cuenta,
-      tipo: entrada.tipo,
-      monto_num: montoNum,
-      monto_formateado: formatearMontoConSigno(montoNum, cuenta.moneda, entrada.tipo),
-      fecha: fechaMovimiento,
-      categoria: entrada.categoria,
-      nota: entrada.nota,
-      estado: "vigente",
-    };
-
-    setMovimientosPorCuenta((prev) => ({
-      ...prev,
-      [entrada.id_cuenta]: [nuevoMov, ...(prev[entrada.id_cuenta] || [])],
-    }));
-    return true;
-  };
-
-  const handleCorregirMovimiento = async (entrada: EntradaCorreccionForm): Promise<boolean> => {
-    setErrorValidacion(null);
-    if (enTauri()) {
-      try {
-        const payloadRust = {
-          id_movimiento_original: entrada.id_movimiento_original,
-          nuevo_monto: entrada.monto_correcto,
-          fecha: new Date().toISOString().split("T")[0],
-          descripcion: entrada.motivo?.trim() || "Ajuste de corrección",
-        };
-        await invoke("corregir_movimiento", { entrada: payloadRust });
-        await cargarCuentasTauri();
-        if (cuentaSeleccionadaId) {
-          await abrirDetalleCuenta(cuentaSeleccionadaId);
-        }
-        return true;
-      } catch (err: any) {
-        const errorObj = {
-          campo: err?.campo || "monto_correcto",
-          mensaje: err?.mensaje || (typeof err === "string" ? err : "Error al corregir el movimiento"),
-        };
-        setErrorValidacion(errorObj);
-        throw errorObj;
-      }
-    }
-
-    const cuenta = cuentas.find((c) => c.id === cuentaSeleccionadaId);
-    if (!cuenta) return false;
-
-    const montoNuevoNum = parseFloat(entrada.monto_correcto.replace(",", "."));
-    const movsActuales = movimientosPorCuenta[cuenta.id] || [];
-    const movOriginal = movsActuales.find((m) => m.id === entrada.id_movimiento_original);
-    if (!movOriginal) return false;
-
-    let delta = 0;
-    if (movOriginal.tipo === "gasto") {
-      delta = movOriginal.monto_num - montoNuevoNum;
-    } else {
-      delta = montoNuevoNum - movOriginal.monto_num;
-    }
-
-    const movCorregido: MovimientoItem = {
-      ...movOriginal,
-      estado: "corregido",
-    };
-
-    const movAjuste: MovimientoItem = {
-      id: `adj-${Date.now()}`,
-      id_cuenta: cuenta.id,
-      tipo: "ajuste",
-      monto_num: Math.abs(delta),
-      monto_formateado: formatearMontoConSigno(Math.abs(delta), cuenta.moneda, "ajuste"),
-      fecha: new Date().toISOString().split("T")[0],
-      categoria: "Ajuste por corrección",
-      nota: entrada.motivo?.trim() || `Corrección del movimiento #${movOriginal.id}`,
-      estado: "ajuste",
-      id_movimiento_referenciado: movOriginal.id,
-    };
-
-    setMovimientosPorCuenta((prev) => ({
-      ...prev,
-      [cuenta.id]: [
-        movAjuste,
-        ...prev[cuenta.id].map((m) => (m.id === movOriginal.id ? movCorregido : m)),
-      ],
-    }));
-
-    return true;
-  };
-
-  const abrirDetalleCuenta = (id: string) => {
-    setCuentaSeleccionadaId(id);
-    setVista("detalle");
-  };
-
-  const cuentaActivaDetalle = useMemo<DetalleCuentaData | null>(() => {
-    if (!cuentaSeleccionadaId) return null;
-    const cuenta = cuentas.find((c) => c.id === cuentaSeleccionadaId);
-    if (!cuenta) return null;
-
-    const saldoIni = saldosIniciales[cuenta.id] ?? 0;
-    const movsBrutos = movimientosPorCuenta[cuenta.id] || [];
-
-    const movs: MovimientoItem[] = movsBrutos.map((m: any) => {
-      const catTexto = typeof m.categoria === "object" && m.categoria !== null
-        ? (m.categoria.nombre || m.categoria.id || "Varios")
-        : (typeof m.categoria === "string" ? m.categoria : "Varios");
-
-      const tipoNorm = (typeof m.tipo === "string" ? m.tipo : m.tipo?.tipo || "gasto").toLowerCase();
-      const montoNum = Number(m.monto_num ?? m.monto?.cantidad ?? m.monto ?? 0);
-
-      return {
-        ...m,
-        id: String(m.id || ""),
-        id_cuenta: String(m.id_cuenta || cuenta.id),
-        tipo: tipoNorm as "gasto" | "ingreso" | "ajuste",
-        monto_num: montoNum,
-        monto_formateado: m.monto_formateado || formatearMontoConSigno(montoNum, cuenta.moneda, tipoNorm),
-        fecha: String(m.fecha || new Date().toISOString().split("T")[0]),
-        categoria: String(catTexto),
-        nota: String(m.nota || m.descripcion || ""),
-        estado: (tipoNorm === "ajuste" ? "ajuste" : m.estado || "vigente") as "vigente" | "corregido" | "ajuste",
-        id_movimiento_referenciado: m.id_movimiento_referenciado ? String(m.id_movimiento_referenciado) : undefined,
-      };
-    });
-
-    const { totalIngresos, totalGastos, totalAjustes, saldoActual } = calcularTotalesCuenta(saldoIni, movs);
-
-    return {
-      id: cuenta.id,
-      nombre: String(cuenta.nombre),
-      tipo: String(cuenta.tipo),
-      moneda: String(cuenta.moneda),
-      saldo_inicial_num: saldoIni,
-      saldo_actual_num: saldoActual,
-      total_ingresos_num: totalIngresos,
-      total_gastos_num: totalGastos,
-      total_ajustes_num: totalAjustes,
-      movimientos: movs,
-    };
-  }, [cuentaSeleccionadaId, cuentas, saldosIniciales, movimientosPorCuenta]);
-
   return (
     <div className="app-wrapper">
       <Navbar
@@ -614,9 +210,6 @@ export default function HomePage() {
             setCuentaSeleccionadaId(null);
           }
         }}
-        onOpenNuevaCuenta={() => setModalNuevaCuenta(true)}
-        onOpenDiagnostico={() => setModalDiagnostico(true)}
-        onOpenRegistrarTasa={() => setTabActivo("tasas")}
         onNavigateHome={() => {
           setTabActivo("cuentas");
           setVista("cuentas");
@@ -624,24 +217,90 @@ export default function HomePage() {
           cargarCuentasTauri();
           cargarCategoriasTauri();
         }}
+        usuario={usuario}
+        onOpenAuth={(modo) => {
+          setModoAuth(modo);
+          setModalAuth(true);
+        }}
+        onCerrarSesion={async () => {
+          await cerrarSesion();
+          setUsuario(null);
+          setTabActivo("cuentas");
+          setVista("cuentas");
+          setCuentaSeleccionadaId(null);
+          setFiltroParHistorial(null);
+        }}
+        servidorOffline={servidorOffline}
       />
 
       <main className="app-main">
-        {/* ======================================================== */}
-        {/* TAB 1: MIS CUENTAS Y MOVIMIENTOS                         */}
-        {/* ======================================================== */}
+        {/* Aviso no bloqueante de sesión vencida o servidor desconectado (RNF-17) */}
+        {(avisoSesion || servidorOffline) && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "10px 16px",
+              marginBottom: "18px",
+              borderRadius: "10px",
+              fontSize: "13px",
+              fontWeight: 500,
+              backgroundColor: avisoSesion ? "#FEF2F2" : "#FFFBEB",
+              color: avisoSesion ? "#B91C1C" : "#92400E",
+              border: `1px solid ${avisoSesion ? "#FCA5A5" : "#FDE68A"}`,
+            }}
+          >
+            <span>
+              {avisoSesion || "Sin conexión con el servidor. Tu libro personal sigue funcionando normalmente."}
+            </span>
+            {avisoSesion && (
+              <button
+                type="button"
+                onClick={() => {
+                  const eraVencimiento = avisoSesion.includes("venció");
+                  setAvisoSesion(null);
+                  if (eraVencimiento) {
+                    setModoAuth("login");
+                    setModalAuth(true);
+                  }
+                }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#B91C1C",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                }}
+              >
+                {avisoSesion.includes("venció") ? "Iniciar sesión" : "Cerrar"}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* TAB 1: MIS CUENTAS Y MOVIMIENTOS */}
         {tabActivo === "cuentas" && (
           vista === "cuentas" ? (
             <>
               <div className="hero-section">
                 <div>
                   <h1 className="hero-title">Tu dinero, en orden.</h1>
-                  <p className="hero-subtitle">
-                    Todas tus cuentas en un solo lugar, sin mezclar monedas.
-                  </p>
+                  <p className="hero-subtitle">Todas tus cuentas en un solo lugar, sin mezclar monedas.</p>
                 </div>
-                <div className="security-pill">
-                  <span>Solo en este dispositivo</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                  <div className="security-pill">
+                    <span>Solo en este dispositivo</span>
+                  </div>
+                  <button
+                    onClick={() => setModalNuevaCuenta(true)}
+                    className="btn btn-primary"
+                    style={{ padding: "9px 18px", fontSize: "13px" }}
+                  >
+                    <span style={{ fontSize: "15px", fontWeight: 700 }}>+</span>
+                    <span>Nueva cuenta</span>
+                  </button>
                 </div>
               </div>
 
@@ -666,16 +325,18 @@ export default function HomePage() {
                   cargarCuentasTauri();
                   cargarCategoriasTauri();
                 }}
-                onRegistrarMovimiento={handleRegistrarMovimiento}
+                onRegistrarMovimiento={async (m) => {
+                  const ok = await handleRegistrarMovimiento(m);
+                  if (ok && cuentaActivaDetalle) abrirDetalleCuenta(cuentaActivaDetalle.id);
+                  return ok;
+                }}
                 onCorregirMovimiento={handleCorregirMovimiento}
               />
             )
           )
         )}
 
-        {/* ======================================================== */}
-        {/* TAB 2: PATRIMONIO CONSOLIDADO                            */}
-        {/* ======================================================== */}
+        {/* TAB 2: PATRIMONIO CONSOLIDADO */}
         {tabActivo === "patrimonio" && (
           patrimonioData ? (
             <VistaPatrimonio
@@ -687,14 +348,10 @@ export default function HomePage() {
               onCambiarMonedaBase={handleCambiarMonedaBase}
               onGuardarTasa={handleGuardarTasa}
               onIrATasas={(origen, destino) => {
-                if (origen && destino) {
-                  setFiltroParHistorial({ origen, destino });
-                }
+                if (origen && destino) setFiltroParHistorial({ origen, destino });
                 setTabActivo("tasas");
               }}
-              onOpenCrearMoneda={() => {
-                setTabActivo("tasas");
-              }}
+              onOpenCrearMoneda={() => setTabActivo("tasas")}
             />
           ) : (
             <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>
@@ -703,9 +360,7 @@ export default function HomePage() {
           )
         )}
 
-        {/* ======================================================== */}
-        {/* TAB 3: TASAS DE CAMBIO E HISTORIAL                       */}
-        {/* ======================================================== */}
+        {/* TAB 3: TASAS DE CAMBIO E HISTORIAL */}
         {tabActivo === "tasas" && (
           <VistaTasas
             tasas={tasasHistorial}
@@ -716,31 +371,71 @@ export default function HomePage() {
             onCrearMoneda={handleCrearMoneda}
           />
         )}
+
+        {/* TAB 4: GRUPOS, AMIGOS Y GASTOS COMPARTIDOS (ENTREGA 6) */}
+        {tabActivo === "comunidad" && (
+          <VistaComunidad
+            key={usuario?.id || "anon"}
+            usuario={usuario}
+            monedas={monedasDisponibles}
+            onSolicitarLogin={() => {
+              setModoAuth("login");
+              setModalAuth(true);
+            }}
+          />
+        )}
       </main>
 
       <footer className="app-footer">
         <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 500 }}>
           <span>Datos guardados localmente</span>
+          <span style={{ color: "var(--border-subtle)" }}>•</span>
+          <span style={{ color: "var(--text-muted)" }}>Sin nube. Siempre tuyos.</span>
         </div>
-        <div style={{ color: "var(--text-muted)", fontWeight: 500 }}>
-          Sin nube. Sin conexión. Siempre tuyos.
-        </div>
+        <button
+          type="button"
+          onClick={() => setModalDiagnostico(true)}
+          className="btn btn-secondary"
+          style={{ padding: "4px 12px", fontSize: "12px" }}
+          title="Verificar conexión con el servidor"
+        >
+          Diagnóstico de red
+        </button>
       </footer>
 
-      {/* Modales de Entrega 2 y 3 */}
+      {/* Modales */}
       <ModalNuevaCuenta
         isOpen={modalNuevaCuenta}
         onClose={() => {
           setModalNuevaCuenta(false);
           setErrorValidacion(null);
         }}
-        onSubmit={handleCrearCuenta}
+        onSubmit={async (e) => {
+          const ok = await handleCrearCuenta(e);
+          if (ok) setModalNuevaCuenta(false);
+          return ok;
+        }}
         errorExterno={errorValidacion}
       />
 
       <ModalDiagnostico
         isOpen={modalDiagnostico}
         onClose={() => setModalDiagnostico(false)}
+      />
+
+      <ModalAuth
+        isOpen={modalAuth}
+        modoInicial={modoAuth}
+        onClose={() => setModalAuth(false)}
+        onLoginExitoso={(u) => {
+          setUsuario(u);
+          setTabActivo("cuentas");
+          setVista("cuentas");
+          setCuentaSeleccionadaId(null);
+          setFiltroParHistorial(null);
+          setAvisoSesion(null);
+          verificarEstadoServidor().then((activo) => setServidorOffline(!activo));
+        }}
       />
     </div>
   );

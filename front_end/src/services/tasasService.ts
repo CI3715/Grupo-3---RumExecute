@@ -21,14 +21,26 @@ export const MONEDAS_FABRICA: MonedaItem[] = [
   { codigo: "USDT", nombre: "Tether (dólar digital)", simbolo: "USDT", decimales: 2, es_fabrica: true },
 ];
 
-const STORAGE_KEY_MONEDAS = "cuentas_claras_monedas_propias";
-const STORAGE_KEY_TASAS = "cuentas_claras_tasas_cambio";
-const STORAGE_KEY_MONEDA_BASE = "cuentas_claras_moneda_base";
+function obtenerSufijoUsuario(): string {
+  if (typeof window === "undefined") return "sin_sesion";
+  try {
+    const raw = localStorage.getItem("cuentas_claras_session_user");
+    if (raw) {
+      const u = JSON.parse(raw);
+      if (u?.id) return String(u.id);
+    }
+  } catch {}
+  return "sin_sesion";
+}
+
+const keyMonedas = () => `cuentas_claras_monedas_v2_${obtenerSufijoUsuario()}`;
+const keyTasas = () => `cuentas_claras_tasas_v2_${obtenerSufijoUsuario()}`;
+const keyMonedaBase = () => `cuentas_claras_moneda_base_v2_${obtenerSufijoUsuario()}`;
 
 function obtenerMonedasLocales(): MonedaItem[] {
   if (typeof window === "undefined") return MONEDAS_FABRICA;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY_MONEDAS);
+    const raw = localStorage.getItem(keyMonedas());
     if (!raw) return MONEDAS_FABRICA;
     const personalizadas: MonedaItem[] = JSON.parse(raw);
     return [...MONEDAS_FABRICA, ...personalizadas.filter(p => !MONEDAS_FABRICA.some(f => f.codigo === p.codigo))];
@@ -41,13 +53,13 @@ function guardarMonedaLocal(nueva: MonedaItem) {
   if (typeof window === "undefined") return;
   const personalizadas = obtenerMonedasLocales().filter(m => !m.es_fabrica);
   personalizadas.push(nueva);
-  localStorage.setItem(STORAGE_KEY_MONEDAS, JSON.stringify(personalizadas));
+  localStorage.setItem(keyMonedas(), JSON.stringify(personalizadas));
 }
 
 function obtenerTasasLocales(): TasaCambioItem[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(STORAGE_KEY_TASAS);
+    const raw = localStorage.getItem(keyTasas());
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
@@ -56,7 +68,7 @@ function obtenerTasasLocales(): TasaCambioItem[] {
 
 function guardarTasasLocales(tasas: TasaCambioItem[]) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY_TASAS, JSON.stringify(tasas));
+  localStorage.setItem(keyTasas(), JSON.stringify(tasas));
 }
 
 export function obtenerFechaHoyISO(): string {
@@ -99,7 +111,7 @@ export async function obtenerMonedaBase(): Promise<string> {
     } catch {}
   }
   if (typeof window !== "undefined") {
-    return localStorage.getItem(STORAGE_KEY_MONEDA_BASE) || "USD";
+    return localStorage.getItem(keyMonedaBase()) || "USD";
   }
   return "USD";
 }
@@ -113,7 +125,7 @@ export async function cambiarMonedaBase(nuevoCodigo: string): Promise<string> {
     } catch {}
   }
   if (typeof window !== "undefined") {
-    localStorage.setItem(STORAGE_KEY_MONEDA_BASE, codigoUpper);
+    localStorage.setItem(keyMonedaBase(), codigoUpper);
   }
   return codigoUpper;
 }
