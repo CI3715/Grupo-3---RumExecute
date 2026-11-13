@@ -68,7 +68,7 @@ Thumbs.db
 *~
 .idea/
 .vscode/*
-!.vscode/settings.json
+.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
@@ -83,3 +83,15 @@ docs_locales/
 *.pdf
 *.Identifier
 .github/copilot-instructions.md
+# Entorno y Secretos
+.env
+.env.local
+
+# Docker y Datos
+postgres_data/
+
+# Python y Entornos
+__pycache__/
+*.pyc
+.venv/
+.pixi/

@@ -1,50 +1,1034 @@
 openapi: 3.1.0
 info:
-  title: Cuentas Claras - API Social y de Coordinación
-  description: Contrato de comunicación HTTP entre la aplicación cliente y el servidor backend para el proyecto Cuentas Claras (CI-3715).
+  title: Cuentas Claras API
+  description: Servidor Backend para la aplicación de finanzas personales Cuentas
+    Claras
   version: 0.1.0
-servers:
-  - url: http://localhost:8000
-    description: Servidor local de desarrollo
-
 paths:
-  /ping:
+  /usuarios:
+    post:
+      tags:
+      - Autenticación
+      summary: Registrar un nuevo usuario
+      operationId: registrar_usuario_usuarios_post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistroRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     get:
-      summary: Verificación de estado del servidor (Full Stack Ping)
-      description: Endpoint básico para comprobar conectividad activa y latencia entre el cliente y el servidor backend.
-      operationId: pingServidor
+      tags:
+      - Amistades
+      summary: Buscar usuario por coincidencia exacta (RF-SOC-04)
+      description: 'Búsqueda por coincidencia exacta. No devuelve el correo.
+
+        404 si no existe o ante búsquedas parciales.'
+      operationId: buscar_usuario_usuarios_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: usuario
+        in: query
+        required: true
+        schema:
+          type: string
+          description: Nombre de usuario exacto a buscar
+          title: Usuario
+        description: Nombre de usuario exacto a buscar
       responses:
         '200':
-          description: Servidor operativo y respondiendo exitosamente.
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioPublicoResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /sesiones:
+    post:
+      tags:
+      - Autenticación
+      summary: Iniciar sesión y obtener token de acceso temporal
+      operationId: iniciar_sesion_sesiones_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SesionResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /usuarios/yo:
+    get:
+      tags:
+      - Autenticación
+      summary: Obtener perfil propio del usuario autenticado
+      description: 'Ruta protegida que utiliza el middleware de autenticación (obtener_usuario_actual).
+
+        Si el token es inválido o expiró, el middleware rechaza con 401 automáticamente.'
+      operationId: obtener_perfil_propio_usuarios_yo_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioResponse'
+      security:
+      - HTTPBearer: []
+  /amistades:
+    get:
+      tags:
+      - Amistades
+      summary: Listar amigos e invitaciones pendientes (recibidas y enviadas)
+      operationId: listar_amistades_amistades_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoAmistadesResponse'
+      security:
+      - HTTPBearer: []
+    post:
+      tags:
+      - Amistades
+      summary: Enviar invitación de amistad (RF-SOC-05)
+      operationId: invitar_amistad_amistades_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnviarInvitacionRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitacionAmistadResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /amistades/{id}/respuesta:
+    post:
+      tags:
+      - Amistades
+      summary: Responder (aceptar o rechazar) invitación de amistad (INV-10)
+      operationId: responder_invitacion_amistades__id__respuesta_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResponderAmistadRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespuestaAmistadResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /amistades/{id}:
+    delete:
+      tags:
+      - Amistades
+      summary: Eliminar amistad activa (RF-SOC-06)
+      operationId: eliminar_amistad_amistades__id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /grupos:
+    get:
+      tags:
+      - Grupos y Gastos
+      summary: Listar mis grupos e invitaciones pendientes
+      operationId: listar_mis_grupos_grupos_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoGruposResponse'
+      security:
+      - HTTPBearer: []
+    post:
+      tags:
+      - Grupos y Gastos
+      summary: Crear grupo (RF-COM-01)
+      operationId: crear_grupo_grupos_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrearGrupoRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrupoCreadoResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /grupos/{id}/miembros:
+    post:
+      tags:
+      - Grupos y Gastos
+      summary: Invitar amigo a un grupo (RF-COM-02)
+      operationId: invitar_miembro_grupos__id__miembros_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvitarMiembroRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitacionGrupoResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /grupos/{id}/miembros/yo/respuesta:
+    post:
+      tags:
+      - Grupos y Gastos
+      summary: Responder invitación de grupo (Aceptar/Rechazar)
+      operationId: responder_invitacion_grupo_grupos__id__miembros_yo_respuesta_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResponderInvitacionGrupoRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespuestaInvitacionGrupoResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /grupos/{id}/gastos:
+    post:
+      tags:
+      - Grupos y Gastos
+      summary: Registrar gasto compartido (RF-COM-04 / RF-COM-05)
+      operationId: registrar_gasto_grupos__id__gastos_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrarGastoRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GastoResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /grupos/{id}:
+    get:
+      tags:
+      - Grupos y Gastos
+      summary: Ver grupo, gastos y balances (RF-COM-08 / ESC-08)
+      description: 'Invariante Crítico (INV-17 / ESC-08):
+
+        Si el usuario no es miembro, responde 404 Not Found idéntico a que si no existiera.'
+      operationId: obtener_detalle_grupo_grupos__id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetalleGrupoResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /ping:
+    get:
+      summary: Ping
+      description: 'Endpoint de prueba (Ping Flow) para verificar la comunicación
+
+        entre la aplicación cliente y el servidor backend.'
+      operationId: ping_ping_get
+      responses:
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/PingResponse'
-
 components:
   schemas:
-    PingResponse:
+    AmigoResponse:
+      properties:
+        amistad_id:
+          type: string
+          title: Amistad Id
+        nombre_usuario:
+          type: string
+          title: Nombre Usuario
+        nombre_visible:
+          type: string
+          title: Nombre Visible
       type: object
       required:
-        - estado
-        - mensaje
-        - version
-        - timestamp
+      - amistad_id
+      - nombre_usuario
+      - nombre_visible
+      title: AmigoResponse
+    CrearGrupoRequest:
+      properties:
+        nombre:
+          type: string
+          title: Nombre
+          examples:
+          - Viaje a Mérida
+        moneda:
+          type: string
+          title: Moneda
+          examples:
+          - USD
+        descripcion:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Descripcion
+          default: ''
+          examples:
+          - Vacaciones de marzo
+      type: object
+      required:
+      - nombre
+      - moneda
+      title: CrearGrupoRequest
+    CuotaResponse:
+      properties:
+        usuario_id:
+          type: string
+          title: Usuario Id
+        nombre_usuario:
+          type: string
+          title: Nombre Usuario
+        monto:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Monto
+        lleva_residuo:
+          type: boolean
+          title: Lleva Residuo
+      type: object
+      required:
+      - usuario_id
+      - nombre_usuario
+      - monto
+      - lleva_residuo
+      title: CuotaResponse
+    DetalleGrupoResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        nombre_grupo:
+          type: string
+          title: Nombre Grupo
+        moneda:
+          type: string
+          title: Moneda
+        descripcion:
+          type: string
+          title: Descripcion
+        miembros:
+          items:
+            $ref: '#/components/schemas/MiembroDetalleResponse'
+          type: array
+          title: Miembros
+        gastos:
+          items:
+            $ref: '#/components/schemas/GastoResponse'
+          type: array
+          title: Gastos
+      type: object
+      required:
+      - id
+      - nombre_grupo
+      - moneda
+      - descripcion
+      - miembros
+      - gastos
+      title: DetalleGrupoResponse
+    EnviarInvitacionRequest:
+      properties:
+        nombre_usuario:
+          type: string
+          title: Nombre Usuario
+          examples:
+          - beto
+      type: object
+      required:
+      - nombre_usuario
+      title: EnviarInvitacionRequest
+    GastoResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        grupo_id:
+          type: string
+          title: Grupo Id
+        concepto:
+          type: string
+          title: Concepto
+        pagador_id:
+          type: string
+          title: Pagador Id
+        monto:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Monto
+        fecha:
+          type: string
+          title: Fecha
+        cuotas:
+          items:
+            $ref: '#/components/schemas/CuotaResponse'
+          type: array
+          title: Cuotas
+      type: object
+      required:
+      - id
+      - grupo_id
+      - concepto
+      - pagador_id
+      - monto
+      - fecha
+      - cuotas
+      title: GastoResponse
+    GrupoCreadoResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        nombre_grupo:
+          type: string
+          title: Nombre Grupo
+        moneda:
+          type: string
+          title: Moneda
+        administrador_id:
+          type: string
+          title: Administrador Id
+        descripcion:
+          type: string
+          title: Descripcion
+      type: object
+      required:
+      - id
+      - nombre_grupo
+      - moneda
+      - administrador_id
+      - descripcion
+      title: GrupoCreadoResponse
+    GrupoResumenResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        nombre_grupo:
+          type: string
+          title: Nombre Grupo
+        moneda:
+          type: string
+          title: Moneda
+        descripcion:
+          type: string
+          title: Descripcion
+        administrador_id:
+          type: string
+          title: Administrador Id
+      type: object
+      required:
+      - id
+      - nombre_grupo
+      - moneda
+      - descripcion
+      - administrador_id
+      title: GrupoResumenResponse
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    InvitacionAmistadResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        nombre_usuario_solicitante:
+          type: string
+          title: Nombre Usuario Solicitante
+        nombre_usuario_receptor:
+          type: string
+          title: Nombre Usuario Receptor
+        estado:
+          type: string
+          title: Estado
+      type: object
+      required:
+      - id
+      - nombre_usuario_solicitante
+      - nombre_usuario_receptor
+      - estado
+      title: InvitacionAmistadResponse
+    InvitacionGrupoResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        grupo_id:
+          type: string
+          title: Grupo Id
+        invitado_id:
+          type: string
+          title: Invitado Id
+        invitador_id:
+          type: string
+          title: Invitador Id
+        estado:
+          type: string
+          title: Estado
+      type: object
+      required:
+      - id
+      - grupo_id
+      - invitado_id
+      - invitador_id
+      - estado
+      title: InvitacionGrupoResponse
+    InvitacionGrupoResumenResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        grupo_id:
+          type: string
+          title: Grupo Id
+        invitador_id:
+          type: string
+          title: Invitador Id
+        estado:
+          type: string
+          title: Estado
+      type: object
+      required:
+      - id
+      - grupo_id
+      - invitador_id
+      - estado
+      title: InvitacionGrupoResumenResponse
+    InvitacionResumenResponse:
+      properties:
+        amistad_id:
+          type: string
+          title: Amistad Id
+        nombre_usuario:
+          type: string
+          title: Nombre Usuario
+        nombre_visible:
+          type: string
+          title: Nombre Visible
+      type: object
+      required:
+      - amistad_id
+      - nombre_usuario
+      - nombre_visible
+      title: InvitacionResumenResponse
+    InvitarMiembroRequest:
+      properties:
+        nombre_usuario:
+          type: string
+          title: Nombre Usuario
+          examples:
+          - beto
+      type: object
+      required:
+      - nombre_usuario
+      title: InvitarMiembroRequest
+    ListadoAmistadesResponse:
+      properties:
+        amigos:
+          items:
+            $ref: '#/components/schemas/AmigoResponse'
+          type: array
+          title: Amigos
+        invitaciones_recibidas:
+          items:
+            $ref: '#/components/schemas/InvitacionResumenResponse'
+          type: array
+          title: Invitaciones Recibidas
+        invitaciones_enviadas:
+          items:
+            $ref: '#/components/schemas/InvitacionResumenResponse'
+          type: array
+          title: Invitaciones Enviadas
+      type: object
+      required:
+      - amigos
+      - invitaciones_recibidas
+      - invitaciones_enviadas
+      title: ListadoAmistadesResponse
+    ListadoGruposResponse:
+      properties:
+        grupos:
+          items:
+            $ref: '#/components/schemas/GrupoResumenResponse'
+          type: array
+          title: Grupos
+        invitaciones_recibidas:
+          items:
+            $ref: '#/components/schemas/InvitacionGrupoResumenResponse'
+          type: array
+          title: Invitaciones Recibidas
+      type: object
+      required:
+      - grupos
+      - invitaciones_recibidas
+      title: ListadoGruposResponse
+    LoginRequest:
+      properties:
+        correo:
+          type: string
+          title: Correo
+          examples:
+          - juan@example.com
+        contrasena:
+          type: string
+          title: Contrasena
+          examples:
+          - MiClaveSegura123
+      type: object
+      required:
+      - correo
+      - contrasena
+      title: LoginRequest
+    MiembroDetalleResponse:
+      properties:
+        usuario_id:
+          type: string
+          title: Usuario Id
+        nombre_usuario:
+          type: string
+          title: Nombre Usuario
+        nombre_visible:
+          type: string
+          title: Nombre Visible
+        es_administrador:
+          type: boolean
+          title: Es Administrador
+        balance:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Balance
+      type: object
+      required:
+      - usuario_id
+      - nombre_usuario
+      - nombre_visible
+      - es_administrador
+      - balance
+      title: MiembroDetalleResponse
+    PingResponse:
       properties:
         estado:
           type: string
-          example: ok
-          description: Estado de salud del servidor backend.
+          title: Estado
+          examples:
+          - ok
         mensaje:
           type: string
-          example: Servidor Cuentas Claras activo
-          description: Mensaje descriptivo retornado por el servidor.
+          title: Mensaje
+          examples:
+          - Servidor Cuentas Claras activo
         version:
           type: string
-          example: 0.1.0
-          description: Versión semántica del servidor.
+          title: Version
+          examples:
+          - 0.1.0
         timestamp:
           type: string
-          format: date-time
-          example: 2026-10-04T19:50:00Z
-          description: Marca de tiempo ISO-8601 del servidor al procesar la solicitud.
+          title: Timestamp
+          examples:
+          - '2026-10-07T20:00:00Z'
+      type: object
+      required:
+      - estado
+      - mensaje
+      - version
+      - timestamp
+      title: PingResponse
+    RegistrarGastoRequest:
+      properties:
+        concepto:
+          type: string
+          title: Concepto
+          examples:
+          - Cena de bienvenida
+        monto:
+          anyOf:
+          - type: number
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Monto
+          examples:
+          - 100.0
+        pagador_id:
+          type: string
+          title: Pagador Id
+          examples:
+          - usuario_uuid
+        regla_division:
+          type: string
+          title: Regla Division
+          description: IGUALES, PORCENTAJES, MONTOS
+          examples:
+          - IGUALES
+        participantes:
+          items:
+            type: string
+          type: array
+          title: Participantes
+          examples:
+          - - uuid1
+            - uuid2
+        valores:
+          anyOf:
+          - additionalProperties:
+              anyOf:
+              - type: number
+              - type: string
+                pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: object
+          - type: 'null'
+          title: Valores
+          examples:
+          - uuid1: 50.0
+            uuid2: 50.0
+      type: object
+      required:
+      - concepto
+      - monto
+      - pagador_id
+      - regla_division
+      - participantes
+      title: RegistrarGastoRequest
+    RegistroRequest:
+      properties:
+        nombre_usuario:
+          type: string
+          title: Nombre Usuario
+          examples:
+          - juanito123
+        nombre_visible:
+          type: string
+          title: Nombre Visible
+          examples:
+          - Juan Pérez
+        correo:
+          type: string
+          title: Correo
+          examples:
+          - juan@example.com
+        contrasena:
+          type: string
+          minLength: 1
+          title: Contrasena
+          examples:
+          - MiClaveSegura123
+      type: object
+      required:
+      - nombre_usuario
+      - nombre_visible
+      - correo
+      - contrasena
+      title: RegistroRequest
+    ResponderAmistadRequest:
+      properties:
+        aceptar:
+          type: boolean
+          title: Aceptar
+          examples:
+          - true
+      type: object
+      required:
+      - aceptar
+      title: ResponderAmistadRequest
+    ResponderInvitacionGrupoRequest:
+      properties:
+        aceptar:
+          type: boolean
+          title: Aceptar
+          examples:
+          - true
+      type: object
+      required:
+      - aceptar
+      title: ResponderInvitacionGrupoRequest
+    RespuestaAmistadResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        estado:
+          type: string
+          title: Estado
+      type: object
+      required:
+      - id
+      - estado
+      title: RespuestaAmistadResponse
+    RespuestaInvitacionGrupoResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        grupo_id:
+          type: string
+          title: Grupo Id
+        estado:
+          type: string
+          title: Estado
+      type: object
+      required:
+      - id
+      - grupo_id
+      - estado
+      title: RespuestaInvitacionGrupoResponse
+    SesionResponse:
+      properties:
+        access_token:
+          type: string
+          title: Access Token
+        token_type:
+          type: string
+          title: Token Type
+          default: bearer
+        expires_at:
+          type: string
+          title: Expires At
+        usuario:
+          $ref: '#/components/schemas/UsuarioResponse'
+      type: object
+      required:
+      - access_token
+      - expires_at
+      - usuario
+      title: SesionResponse
+    UsuarioPublicoResponse:
+      properties:
+        nombre_usuario:
+          type: string
+          title: Nombre Usuario
+        nombre_visible:
+          type: string
+          title: Nombre Visible
+      type: object
+      required:
+      - nombre_usuario
+      - nombre_visible
+      title: UsuarioPublicoResponse
+    UsuarioResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        nombre_usuario:
+          type: string
+          title: Nombre Usuario
+        nombre_visible:
+          type: string
+          title: Nombre Visible
+        correo:
+          type: string
+          title: Correo
+        fecha_alta:
+          type: string
+          title: Fecha Alta
+      type: object
+      required:
+      - id
+      - nombre_usuario
+      - nombre_visible
+      - correo
+      - fecha_alta
+      title: UsuarioResponse
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer
+servers:
+- url: http://localhost:8000
+  description: Servidor local de desarrollo

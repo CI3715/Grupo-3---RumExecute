@@ -102,12 +102,12 @@ def dividir_por_porcentajes(
     if suma < Decimal("100"):
         raise ErrorDominio(
             "porcentajes",
-            f"Los porcentajes suman {suma}, es decir, faltan {Decimal("100") - suma}",
+            f"Los porcentajes suman {suma}, es decir, faltan {Decimal('100') - suma}",
         )
     elif suma > Decimal("100"):
         raise ErrorDominio(
             "porcentajes",
-            f"Los porcentajes suman {suma}, es decir, sobran {suma - Decimal("100")}", 
+            f"Los porcentajes suman {suma}, es decir, sobran {suma - Decimal('100')}", 
         )
     # A cada nombre se le asigna su monto referente al porcentaje de su cuota
     cuotas = {uid: total * p / Decimal("100") for uid, p in porcentajes.items()}

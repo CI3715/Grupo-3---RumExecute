@@ -97,7 +97,12 @@ pub fn run() {
             comandos::corregir_movimiento,
             comandos::obtener_detalle_cuenta,
             comandos::crear_categoria,
-            comandos::listar_categorias
+            comandos::listar_categorias,
+            comandos::registrar_usuario,
+            comandos::iniciar_sesion,
+            comandos::obtener_perfil_propio,
+            comandos::cerrar_sesion,
+            comandos::obtener_token_sesion
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -3,8 +3,8 @@ Middleware y Dependencias de Autenticación de FastAPI.
 Valida el encabezado 'Authorization: Bearer <token>' en rutas protegidas.
 Responde con 401 Unauthorized si el token está ausente, alterado o vencido.
 """
-from typing import Dict, Any
-from fastapi import Request, HTTPException, status
+from typing import Dict, Any, Optional
+from fastapi import Request, HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt  # type: ignore
 
@@ -14,7 +14,7 @@ security = HTTPBearer(auto_error=False)
 
 
 async def obtener_usuario_actual(
-    credenciales: HTTPAuthorizationCredentials = None,
+    credenciales: Optional[HTTPAuthorizationCredentials] = Depends(security),
     request: Request = None
 ) -> Dict[str, Any]:
     """
