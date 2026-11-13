@@ -29,13 +29,12 @@ interface ResumenCuentasRust {
   cuentas: CuentaRust[];
   subtotales_por_moneda: Array<{ cantidad: string | number; moneda: string }>;
 }
-const obtenerStorageKeyLibro = (usuarioId?: string | null) =>
-  `cuentas_claras_libro_v2_${usuarioId || "sin_sesion"}`;
+const STORAGE_KEY_LIBRO_LOCAL = "cuentas_claras_libro_local_v1";
 const enTauri = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-export function useCuentas(usuarioId?: string | null) {
+export function useCuentas() {
   const [vista, setVista] = useState<"cuentas" | "detalle">("cuentas");
   const [cuentaSeleccionadaId, setCuentaSeleccionadaId] = useState<string | null>(null);
-  const [claveCargada, setClaveCargada] = useState<string | null>(null);
+  const [hidratado, setHidratado] = useState(false);
   const [cuentas, setCuentas] = useState<CuentaItem[]>([]);
   const [subtotales, setSubtotales] = useState<SubtotalMoneda[]>([]);
   const [saldosIniciales, setSaldosIniciales] = useState<Record<string, number>>({});
@@ -43,14 +42,13 @@ export function useCuentas(usuarioId?: string | null) {
   const [categoriasGasto, setCategoriasGasto] = useState<string[]>(CATEGORIAS_GASTO);
   const [categoriasIngreso, setCategoriasIngreso] = useState<string[]>(CATEGORIAS_INGRESO);
   const [errorValidacion, setErrorValidacion] = useState<ErrorValidacion | null>(null);
-  const storageKeyActual = obtenerStorageKeyLibro(usuarioId);
-  // Hidratación por usuario desde localStorage en modo Web (cada nuevo usuario empieza en 0)
+  // Hidratación del libro personal local del dispositivo (INV-16 / RES-02: independiente de la sesión de usuario)
   useEffect(() => {
     if (enTauri() || typeof window === "undefined") return;
-    setVista("cuentas");
-    setCuentaSeleccionadaId(null);
     try {
-      const guardado = localStorage.getItem(storageKeyActual);
+      const guardado =
+        localStorage.getItem(STORAGE_KEY_LIBRO_LOCAL) ||
+        localStorage.getItem("cuentas_claras_libro_v2_sin_sesion");
       if (guardado) {
         const parsed = JSON.parse(guardado);
         setCuentas(Array.isArray(parsed.cuentas) ? parsed.cuentas : []);
@@ -66,28 +64,21 @@ export function useCuentas(usuarioId?: string | null) {
             ? parsed.categoriasIngreso
             : CATEGORIAS_INGRESO
         );
-      } else {
-        // Usuario nuevo o sin datos previos: empieza completamente en 0
-        setCuentas([]);
-        setSaldosIniciales({});
-        setMovimientosPorCuenta({});
-        setCategoriasGasto(CATEGORIAS_GASTO);
-        setCategoriasIngreso(CATEGORIAS_INGRESO);
       }
     } catch {
       setCuentas([]);
       setSaldosIniciales({});
       setMovimientosPorCuenta({});
     } finally {
-      setClaveCargada(storageKeyActual);
+      setHidratado(true);
     }
-  }, [storageKeyActual]);
-  // Persistencia automática por usuario en localStorage y recálculo de subtotales
+  }, []);
+  // Persistencia automática en el dispositivo y recálculo de subtotales
   useEffect(() => {
-    if (enTauri() || claveCargada !== storageKeyActual || typeof window === "undefined") return;
+    if (enTauri() || !hidratado || typeof window === "undefined") return;
     try {
       localStorage.setItem(
-        storageKeyActual,
+        STORAGE_KEY_LIBRO_LOCAL,
         JSON.stringify({
           cuentas,
           saldosIniciales,
@@ -115,7 +106,7 @@ export function useCuentas(usuarioId?: string | null) {
       };
     });
     setSubtotales(nuevosSubtotales);
-  }, [claveCargada, storageKeyActual, cuentas, saldosIniciales, movimientosPorCuenta, categoriasGasto, categoriasIngreso]);
+  }, [hidratado, cuentas, saldosIniciales, movimientosPorCuenta, categoriasGasto, categoriasIngreso]);
   const cargarCuentasTauri = useCallback(async () => {
     if (!enTauri()) return;
     try {
