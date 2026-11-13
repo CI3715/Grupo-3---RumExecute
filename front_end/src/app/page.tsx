@@ -49,7 +49,7 @@ export default function HomePage() {
   const [modalAuth, setModalAuth] = useState(false);
   const [modoAuth, setModoAuth] = useState<"login" | "registro">("login");
 
-  // Hook desacoplado de cuentas, movimientos y categorías locales aislado por usuario
+  // Hook desacoplado de cuentas, movimientos y categorías locales del dispositivo (INV-16 / RES-02)
   const {
     cuentas,
     subtotales,
@@ -70,7 +70,7 @@ export default function HomePage() {
     handleCrearCategoria,
     handleRegistrarMovimiento,
     handleCorregirMovimiento,
-  } = useCuentas(usuario?.id);
+  } = useCuentas();
 
   // Estado de Tasas y Patrimonio Consolidado (Entrega 4)
   const [fechaConsultaPatrimonio, setFechaConsultaPatrimonio] = useState<string>(obtenerFechaHoyISO());
@@ -129,13 +129,13 @@ export default function HomePage() {
     }
   }, [cuentas, saldosIniciales, movimientosPorCuenta, fechaConsultaPatrimonio]);
 
-  // Carga inicial y recarga por cambio de usuario
+  // Carga inicial de datos locales del dispositivo
   useEffect(() => {
     cargarCuentasTauri();
     cargarCategoriasTauri();
     cargarMonedasYBase();
     cargarTasas();
-  }, [usuario?.id, cargarCuentasTauri, cargarCategoriasTauri, cargarMonedasYBase, cargarTasas]);
+  }, [cargarCuentasTauri, cargarCategoriasTauri, cargarMonedasYBase, cargarTasas]);
 
   // Verificación de conectividad y restauración inmediata de sesión al iniciar
   useEffect(() => {
