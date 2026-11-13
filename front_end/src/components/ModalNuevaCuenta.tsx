@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { normalizarMontoInput, completarDecimalesOnBlur } from "../utils/formato";
+import { listarMonedas } from "../services/tasasService";
 
 export interface EntradaCuentaForm {
   nombre: string;
@@ -52,8 +52,8 @@ export default function ModalNuevaCuenta({
   const [listaMonedas, setListaMonedas] = useState<MonedaItem[]>(MONEDAS_DEFAULT);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
-      invoke<MonedaItem[]>("listar_monedas")
+    if (isOpen) {
+      listarMonedas()
         .then((cat) => cat?.length && setListaMonedas(cat))
         .catch(() => {});
     }

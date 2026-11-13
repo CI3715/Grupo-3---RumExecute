@@ -36,6 +36,7 @@ export default function VistaTasas({
   // Filtros de tabla
   const [filtroMoneda, setFiltroMoneda] = useState<string>(filtroPar?.origen || "TODOS");
   const [eliminandoId, setEliminandoId] = useState<string | null>(null);
+  const [tasaPorEliminar, setTasaPorEliminar] = useState<TasaCambioItem | null>(null);
 
   // Formulario Nueva Tasa
   const [formTasa, setFormTasa] = useState<{
@@ -184,15 +185,12 @@ export default function VistaTasas({
     }
   };
 
-  const handleEliminarTasaConfirm = async (t: TasaCambioItem) => {
-    const seguro = window.confirm(
-      `¿Deseas eliminar la tasa ${t.origen} → ${t.destino} de ${t.valor} con fecha ${t.fecha_vigencia}?`
-    );
-    if (!seguro) return;
-
+  const confirmarEliminacionTasa = async () => {
+    if (!tasaPorEliminar) return;
     try {
-      setEliminandoId(t.id);
-      await onEliminarTasa(t.id);
+      setEliminandoId(tasaPorEliminar.id);
+      await onEliminarTasa(tasaPorEliminar.id);
+      setTasaPorEliminar(null);
     } finally {
       setEliminandoId(null);
     }
@@ -552,6 +550,55 @@ export default function VistaTasas({
         </div>
       </div>
 
+      {/* 4.5. Aviso de Confirmación de Eliminación Integrado en la Página */}
+      {tasaPorEliminar && (
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: "14px",
+            backgroundColor: "#FEF2F2",
+            border: "1px solid #FCA5A5",
+            padding: "14px 20px",
+            borderRadius: "12px",
+          }}
+        >
+          <div style={{ fontSize: "13.5px", color: "#991B1B", fontWeight: 600 }}>
+            ¿Deseas eliminar la tasa <strong>{tasaPorEliminar.origen} → {tasaPorEliminar.destino}</strong> de{" "}
+            <strong>{tasaPorEliminar.valor}</strong> con fecha <strong>{tasaPorEliminar.fecha_vigencia}</strong>?
+          </div>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
+              type="button"
+              onClick={() => setTasaPorEliminar(null)}
+              disabled={eliminandoId === tasaPorEliminar.id}
+              className="btn btn-secondary"
+              style={{ padding: "6px 14px", fontSize: "12.5px" }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={confirmarEliminacionTasa}
+              disabled={eliminandoId === tasaPorEliminar.id}
+              className="btn"
+              style={{
+                padding: "6px 14px",
+                fontSize: "12.5px",
+                fontWeight: 700,
+                backgroundColor: "#DC2626",
+                color: "#FFFFFF",
+                border: "none",
+              }}
+            >
+              {eliminandoId === tasaPorEliminar.id ? "Eliminando..." : "Sí, eliminar"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 5. Tabla de Historial */}
       <div
         style={{
@@ -619,7 +666,7 @@ export default function VistaTasas({
 
                       <td style={{ padding: "14px 18px", textAlign: "center" }}>
                         <button
-                          onClick={() => handleEliminarTasaConfirm(t)}
+                          onClick={() => setTasaPorEliminar(t)}
                           disabled={eliminandoId === t.id}
                           style={{
                             fontSize: "11.5px",
