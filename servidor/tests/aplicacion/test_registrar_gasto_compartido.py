@@ -54,10 +54,20 @@ def repositorios(usuario_existente):
 
     return repo_usuarios, repo_grupos, repo_gastos
 
+@pytest.fixture
+def repo_claves():
+    claves = Mock()
+    claves.buscar.return_value = ...   # ¿qué debe devolver por defecto?
+    return claves
 
 @pytest.fixture
-def caso_uso(repositorios):
-    return RegistrarGastoCompartido(*repositorios)
+def persistencia():
+    return Mock()
+
+
+@pytest.fixture
+def caso_uso(repositorios, repo_claves, persistencia):
+    return RegistrarGastoCompartido(*repositorios, repo_claves, persistencia)
 
 
 def registrar(
@@ -84,9 +94,7 @@ def registrar(
     )
 
 
-def test_registrar_gasto_igualitario(caso_uso, repositorios):
-    _, _, repo_gastos = repositorios
-
+def test_registrar_gasto_igualitario(caso_uso, persistencia):
     respuesta = registrar(caso_uso)
 
     assert respuesta.monto == D("10.00")
@@ -106,15 +114,14 @@ def test_registrar_gasto_igualitario(caso_uso, repositorios):
     ) == D("10.00")
 
     UUID(respuesta.id)
-    repo_gastos.guardar_gasto.assert_called_once()
+    persistencia.guardar_gasto.assert_called_once()
 
 
-def test_guarda_entidad_gasto_completa(caso_uso, repositorios):
-    _, _, repo_gastos = repositorios
+def test_guarda_entidad_gasto_completa(caso_uso, persistencia):
 
     respuesta = registrar(caso_uso)
 
-    gasto = repo_gastos.guardar_gasto.call_args.args[0]
+    gasto = persistencia.guardar_gasto.call_args.args[0]
 
     assert isinstance(gasto, Gasto)
     assert gasto.id == respuesta.id
@@ -318,3 +325,23 @@ def test_no_expone_datos_privados(caso_uso):
         not hasattr(cuota, "correo")
         for cuota in respuesta.cuotas
     )
+
+def test_guarda_por_persistencia_y_genera_un_evento_por_participante(
+    caso_uso, persistencia, repositorios
+):
+    _, _, repo_gastos = repositorios
+
+    respuesta = registrar(caso_uso)
+
+    persistencia.guardar_gasto.assert_called_once()
+    repo_gastos.guardar_gasto.assert_not_called()
+
+    gasto, eventos, registro = persistencia.guardar_gasto.call_args.args
+
+    assert registro is None
+    assert len(eventos) == 3
+    assert {e.usuario_id for e in eventos} == {
+        "usuario-1", "usuario-2", "usuario-3",
+    }
+    assert all(e.posicion is None for e in eventos)
+    assert sum((e.monto_parte for e in eventos), D("0")) == respuesta.monto

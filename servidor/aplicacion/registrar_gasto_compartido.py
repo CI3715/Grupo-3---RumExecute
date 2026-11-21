@@ -10,6 +10,8 @@ from aplicacion.errores import GrupoNoEncontrado, UsuarioNoEncontrado
 from aplicacion.puertos.repositorio_grupos import RepositorioGrupos
 from aplicacion.puertos.repositorio_gastos import RepositorioGastos
 from aplicacion.puertos.repositorio_usuarios import RepositorioUsuarios
+from aplicacion.puertos.repositorio_claves_idempotencia import RepositorioClavesIdempotencia
+from aplicacion.puertos.persistencia_gasto_compartido import PersistenciaGastoCompartido
 
 from dominio.balance import Gasto
 from dominio.division import (
@@ -19,6 +21,7 @@ from dominio.division import (
 )
 from dominio.errores import ErrorDominio
 from dominio.grupo import es_miembro
+from dominio.evento_cambio import EventoCambioUsuario
 
 
 class RegistrarGastoCompartido:
@@ -28,10 +31,14 @@ class RegistrarGastoCompartido:
         repositorio_usuarios: RepositorioUsuarios,
         repositorio_grupos: RepositorioGrupos,
         repositorio_gastos: RepositorioGastos,
+        repositorio_claves: RepositorioClavesIdempotencia,
+        persistencia: PersistenciaGastoCompartido
     ):
         self.repositorio_usuarios = repositorio_usuarios
         self.repositorio_grupos = repositorio_grupos
         self.repositorio_gastos = repositorio_gastos
+        self.repositorio_claves = repositorio_claves
+        self.persistencia = persistencia
 
     def ejecutar(
         self,
@@ -154,7 +161,24 @@ class RegistrarGastoCompartido:
         )
 
         # 8. Persistir el gasto y sus cuotas.
-        self.repositorio_gastos.guardar_gasto(gasto)
+        eventos = tuple(
+            EventoCambioUsuario(
+                id=str(uuid4()),
+                posicion=None,
+                usuario_id=cuota.usuario_id,
+                grupo_id=gasto.grupo_id,
+                nombre_grupo=grupo.nombre_grupo,
+                gasto_id=gasto.id,
+                concepto=gasto.concepto,
+                fecha=gasto.fecha,
+                moneda=grupo.moneda,
+                monto_parte=cuota.monto,
+                incluye_redondeo=cuota.lleva_residuo,
+            )
+            for cuota in gasto.cuotas
+        )
+
+        self.persistencia.guardar_gasto(gasto, eventos, None)
 
         # 9. Construir respuesta pública.
         return GastoCompartidoRespuesta(
