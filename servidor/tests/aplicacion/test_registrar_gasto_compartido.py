@@ -15,7 +15,8 @@ from dominio.errores import ErrorDominio
 from dominio.grupo import GrupoCompartido
 from dominio.idempotencia import (
     calcular_huella,
-    RegistroIdempotenciaGasto
+    RegistroIdempotenciaGasto,
+    ErrorConflictoIdempotencia
 )
 from dominio.division import dividir_partes_iguales
 
@@ -408,3 +409,36 @@ def test_reintento_con_misma_huella_no_crea_otro_gasto(
     persistencia.guardar_gasto.assert_not_called()
     assert respuesta.creado is False
     assert respuesta.id == "gasto-existente"
+
+def test_misma_clave_con_datos_distintos_lanza_conflicto(
+    caso_uso, persistencia, repo_claves
+):
+    huella_otra = calcular_huella(
+        grupo_id="grupo-1",
+        concepto="Almuerzo",
+        pagador_id="usuario-1",
+        monto=D("10.00"),
+        tipo_division="IGUALES",
+        participantes_ids=["usuario-1", "usuario-2", "usuario-3"],
+        valores=None,
+    )
+    repo_claves.buscar.return_value = RegistroIdempotenciaGasto(
+        clave="clave-abc",
+        usuario_id="usuario-1",
+        huella=huella_otra,
+        gasto_id="gasto-existente",
+    )
+
+    with pytest.raises(ErrorConflictoIdempotencia):
+        registrar(caso_uso, clave="clave-abc")
+
+    persistencia.guardar_gasto.assert_not_called()
+
+def test_sin_clave_no_consulta_ni_guarda_registro_de_idempotencia(
+    caso_uso, persistencia, repo_claves
+):
+    registrar(caso_uso)
+
+    repo_claves.buscar.assert_not_called()
+    _, _, registro = persistencia.guardar_gasto.call_args.args
+    assert registro is None 
