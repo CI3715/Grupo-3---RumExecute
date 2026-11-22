@@ -1,7 +1,14 @@
 import hashlib
 import json
-from dataclasses import dataclass;
-from decimal import Decimal;
+from dataclasses import dataclass
+from decimal import Decimal
+from dominio.errores import ErrorConflicto
+
+
+class ErrorConflictoIdempotencia(ErrorConflicto):
+    """Lanzada cuando una misma clave de idempotencia se reutiliza con datos distintos (HTTP 409)."""
+    def __init__(self, mensaje: str = "La clave de idempotencia ya fue utilizada con datos distintos."):
+        super().__init__("idempotency_key", mensaje)
 
 
 @dataclass(frozen=True)
