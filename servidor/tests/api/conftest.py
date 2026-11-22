@@ -42,7 +42,7 @@ def db_session():
         with engine_test.begin() as conn:
             conn.execute(
                 text(
-                    "TRUNCATE TABLE partes_gasto, gastos_grupo, miembros_grupo, grupos, amistades, usuarios RESTART IDENTITY CASCADE;"
+                    "TRUNCATE TABLE partes_gasto, gastos_grupo, miembros_grupo, grupos, amistades, usuarios, eventos_cambio_usuario, claves_idempotencia_gastos RESTART IDENTITY CASCADE;"
                 )
             )
 
