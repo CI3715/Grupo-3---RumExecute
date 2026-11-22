@@ -17,43 +17,63 @@ class Gasto:
     fecha: datetime
 
     def __post_init__(self):
+        # Validar identificadores.
+        for campo in ("id", "grupo_id", "pagador_id"):
+            valor = getattr(self, campo)
+
+            if not isinstance(valor, str) or not valor.strip():
+                raise ErrorDominio(campo, f"El campo {campo} es obligatorio.")
+
+        # Validar concepto.
+        if not isinstance(self.concepto, str) or not self.concepto.strip():
+            raise ErrorDominio("concepto", "El concepto es obligatorio.")
+
         object.__setattr__(self, "concepto", self.concepto.strip())
 
-        if not self.id:
-            raise ErrorDominio(
-                "id",
-                "El identificador del gasto es obligatorio."
-            )
-        if not self.grupo_id:
-            raise ErrorDominio(
-                "grupo_id",
-                "El identificador del grupo es obligatorio."
-            )
-        if not self.pagador_id:
-            raise ErrorDominio(
-                "pagador_id",
-                "El identificador del pagador es obligatorio."
-            )
-        if not self.concepto:
-            raise ErrorDominio("concepto", "El concepto es obligatorio.")
-        if self.fecha.tzinfo is None:
-            raise ErrorDominio("fecha", "La fecha debe incluir zona horaria (UTC).")
-        # Normalizar a UTC-0
-        if self.fecha.tzinfo != timezone.utc:
-            object.__setattr__(self, "fecha", self.fecha.astimezone(timezone.utc))
+        # Validar fecha.
+        if not isinstance(self.fecha, datetime) or self.fecha.tzinfo is None:
+            raise ErrorDominio("fecha", "La fecha debe incluir zona horaria.")
+
+        # Normalizar fecha a UTC.
+        if self.fecha.utcoffset() is None:
+            raise ErrorDominio("fecha", "La fecha debe tener una zona horaria válida.")
+
+        object.__setattr__(self, "fecha", self.fecha.astimezone(timezone.utc))
+
+        # Validar monto.
+        if not isinstance(self.monto, Decimal) or not self.monto.is_finite():
+            raise ErrorDominio("monto", "El monto debe ser un Decimal finito.")
+
         if self.monto <= Decimal("0"):
             raise ErrorDominio("monto", "El monto debe ser mayor que cero.")
+
         if self.monto != self.monto.quantize(Decimal("0.01")):
             raise ErrorDominio("monto", "El monto admite como máximo dos decimales.")
-        if not self.cuotas:
+
+        # Validar cuotas.
+        if not isinstance(self.cuotas, tuple) or not self.cuotas:
             raise ErrorDominio("cuotas", "El gasto debe tener al menos una cuota.")
-        if sum((c.monto for c in self.cuotas), Decimal("0")) != self.monto:
+
+        if not all(isinstance(c, CuotaDivision) for c in self.cuotas):
+            raise ErrorDominio("cuotas", "Todas las cuotas deben ser instancias de CuotaDivision.")
+
+        # No puede haber dos cuotas para el mismo usuario.
+        participantes = [c.usuario_id for c in self.cuotas]
+
+        if len(participantes) != len(set(participantes)):
+            raise ErrorDominio("cuotas", "No puede haber cuotas repetidas para un mismo usuario.")
+
+        # La suma de las cuotas debe coincidir exactamente con el gasto.
+        total_cuotas = sum(
+            (c.monto for c in self.cuotas),
+            Decimal("0")
+        )
+
+        if total_cuotas != self.monto:
             raise ErrorDominio("cuotas", "Las cuotas no suman el monto del gasto.")
 
 # Funcion para validar si la suma de los balances de cada miembro da cero
-def validar_balances_suma_cero(
-        balances: dict[str, Decimal]
-) -> None:
+def validar_balances_suma_cero(balances: dict[str, Decimal]) -> None:
     if not balances:
         raise ErrorDominio ("balances", "Debe haber al menos un balance.")
     suma = sum(balances.values(), Decimal("0"))
