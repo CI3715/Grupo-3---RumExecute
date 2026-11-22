@@ -22,6 +22,11 @@ from dominio.division import (
 from dominio.errores import ErrorDominio
 from dominio.grupo import es_miembro
 from dominio.evento_cambio import EventoCambioUsuario
+from dominio.idempotencia import (
+    RegistroIdempotenciaGasto,
+    calcular_huella,
+    ErrorConflictoIdempotencia,
+)
 
 
 class RegistrarGastoCompartido:
@@ -50,6 +55,7 @@ class RegistrarGastoCompartido:
         tipo_division: str,
         participantes_ids: list[str],
         valores: dict[str, Decimal] | None = None,
+        clave_idempotencia: str | None = None, 
     ) -> GastoCompartidoRespuesta:
 
         # 1. Verificar que el grupo exista y sea accesible.
@@ -59,6 +65,37 @@ class RegistrarGastoCompartido:
             grupo, usuario_autenticado_id
         ):
             raise GrupoNoEncontrado()
+
+        registro_idempotencia = None
+        id_gasto_nuevo = str(uuid4())   # generado aquí, se usa también en el paso 7
+
+        if clave_idempotencia is not None:
+            huella = calcular_huella(
+                grupo_id=grupo.id,
+                concepto=concepto,
+                pagador_id=pagador_id,
+                monto=monto,
+                tipo_division=tipo_division,
+                participantes_ids=participantes_ids,
+                valores=valores,
+            )
+
+            previo = self.repositorio_claves.buscar(usuario_autenticado_id, clave_idempotencia)
+
+            if previo is not None:
+                if previo.huella != huella:
+                    raise ErrorConflictoIdempotencia(
+                        "clave",
+                        "La clave de idempotencia ya fue usada con datos distintos.",
+                    )
+                # mismo gasto: lo resolvemos en el siguiente paso
+
+            registro_idempotencia = RegistroIdempotenciaGasto(
+                clave=clave_idempotencia,
+                usuario_id=usuario_autenticado_id,
+                huella=huella,
+                gasto_id=id_gasto_nuevo,
+            )
 
         # 2. Verificar que el pagador sea miembro.
         if not es_miembro(grupo, pagador_id):
@@ -178,7 +215,7 @@ class RegistrarGastoCompartido:
             for cuota in gasto.cuotas
         )
 
-        self.persistencia.guardar_gasto(gasto, eventos, None)
+        self.persistencia.guardar_gasto(gasto, eventos, registro_idempotencia)
 
         # 9. Construir respuesta pública.
         return GastoCompartidoRespuesta(

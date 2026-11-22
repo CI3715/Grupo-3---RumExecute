@@ -1,8 +1,12 @@
 import hashlib
 import json
-from dataclasses import dataclass;
-from decimal import Decimal;
+from dataclasses import dataclass
+from decimal import Decimal
 
+from dominio.errores import ErrorConflicto
+
+class ErrorConflictoIdempotencia(ErrorConflicto):
+    """La clave de idempotencia ya fue usada con datos distintos (409)."""
 
 @dataclass(frozen=True)
 class RegistroIdempotenciaGasto:

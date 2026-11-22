@@ -57,7 +57,7 @@ def repositorios(usuario_existente):
 @pytest.fixture
 def repo_claves():
     claves = Mock()
-    claves.buscar.return_value = ...   # ¿qué debe devolver por defecto?
+    claves.buscar.return_value = None
     return claves
 
 @pytest.fixture
@@ -78,6 +78,7 @@ def registrar(
     valores=None,
     pagador="usuario-1",
     autenticado="usuario-1",
+    clave=None,
 ):
     if participantes is None:
         participantes = ["usuario-1", "usuario-2", "usuario-3"]
@@ -91,8 +92,8 @@ def registrar(
         tipo_division=tipo,
         participantes_ids=participantes,
         valores=valores,
+        clave_idempotencia=clave,
     )
-
 
 def test_registrar_gasto_igualitario(caso_uso, persistencia):
     respuesta = registrar(caso_uso)
@@ -345,3 +346,17 @@ def test_guarda_por_persistencia_y_genera_un_evento_por_participante(
     }
     assert all(e.posicion is None for e in eventos)
     assert sum((e.monto_parte for e in eventos), D("0")) == respuesta.monto
+
+def test_con_clave_nueva_guarda_el_registro_de_idempotencia(
+    caso_uso, persistencia, repo_claves
+):
+    repo_claves.buscar.return_value = None
+
+    registrar(caso_uso, clave="clave-abc")
+
+    repo_claves.buscar.assert_called_once_with("usuario-1", "clave-abc")
+
+    _, _, registro = persistencia.guardar_gasto.call_args.args
+    assert registro is not None
+    assert registro.clave == "clave-abc"
+    assert registro.usuario_id == "usuario-1"
