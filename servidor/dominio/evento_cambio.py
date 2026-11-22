@@ -3,6 +3,8 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 from .errores import ErrorDominio
+from dominio.balance import Gasto
+from dominio.division import CuotaDivision
 
 @dataclass(frozen=True)
 class EventoCambioUsuario:
@@ -48,3 +50,41 @@ class EventoCambioUsuario:
                 "monto_parte",
                 "El monto de la parte no puede ser negativo ni infinito"
             )
+
+def crear_evento_cambio(
+    gasto: Gasto,
+    cuota: CuotaDivision,
+    nombre_grupo: str,
+    moneda: str,
+    evento_id: str,
+    posicion: int,
+) -> EventoCambioUsuario:
+    """
+    Construye el evento de cambio correspondiente
+    a la cuota de un participante de un gasto.
+
+    No genera IDs, posiciones ni recalcula cuotas.
+    """
+
+    if not isinstance(gasto, Gasto):
+        raise ErrorDominio("gasto", "El gasto debe ser una instancia de Gasto.")
+
+    if not isinstance(cuota, CuotaDivision):
+        raise ErrorDominio("cuota", "La cuota debe ser una instancia de CuotaDivision.")
+
+    if cuota not in gasto.cuotas:
+        raise ErrorDominio("cuota", "La cuota no pertenece al gasto indicado.")
+
+    return EventoCambioUsuario(
+        id=evento_id,
+        posicion=posicion,
+        usuario_id=cuota.usuario_id,
+        grupo_id=gasto.grupo_id,
+        nombre_grupo=nombre_grupo,
+        gasto_id=gasto.id,
+        concepto=gasto.concepto,
+        fecha=gasto.fecha,
+        moneda=moneda,
+        monto_parte=cuota.monto,
+        incluye_redondeo=cuota.lleva_residuo,
+    )
