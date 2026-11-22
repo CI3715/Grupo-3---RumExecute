@@ -21,3 +21,10 @@ class GastoCompartidoRespuesta:
     fecha: datetime
     cuotas: tuple[CuotaRespuesta, ...]
     creado: bool = True
+    es_reintento: bool = False
+
+    def __post_init__(self):
+        if not self.creado and not self.es_reintento:
+            object.__setattr__(self, "es_reintento", True)
+        elif self.es_reintento and self.creado:
+            object.__setattr__(self, "creado", False)

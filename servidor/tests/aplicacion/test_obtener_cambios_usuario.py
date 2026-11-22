@@ -6,11 +6,10 @@ from unittest.mock import Mock
 import pytest
 
 from aplicacion.dtos.cambios_respuesta import EventoCambioRespuesta
+from aplicacion.errores import ErrorAplicacion
 from aplicacion.obtener_cambios_usuario import ObtenerCambiosUsuario
 from dominio.errores import ErrorDominio
 from dominio.evento_cambio import EventoCambioUsuario
-from aplicacion.errores import ErrorAplicacion
-
 
 
 def evento(posicion: int, usuario_id: str = "usuario-1") -> EventoCambioUsuario:
@@ -134,6 +133,7 @@ def test_mapea_todos_los_campos_al_dto_de_respuesta(caso_uso, repo_eventos):
     assert dto.monto_parte == D("33.33")
     assert dto.incluye_redondeo is True
 
+
 def test_evento_sin_posicion_es_un_estado_inconsistente(caso_uso, repo_eventos):
     repo_eventos.listar_posteriores.return_value = [
         replace(evento(1), posicion=None)
@@ -155,3 +155,45 @@ def test_desde_invalido_lanza_error_y_no_consulta(caso_uso, repo_eventos, desde)
 
     assert exc.value.campo == "desde"
     repo_eventos.listar_posteriores.assert_not_called()
+
+
+def test_cursor_negativo_lanza_error_dominio():
+    repo = Mock()
+    caso_uso = ObtenerCambiosUsuario(repo)
+
+    with pytest.raises(ErrorDominio) as exc:
+        caso_uso.ejecutar(usuario_id="u1", desde_cursor=-1)
+
+    assert exc.value.campo == "desde"
+    repo.consultar_cambios_usuario.assert_not_called()
+
+
+def test_obtener_cambios_exitoso():
+    repo = Mock()
+    ev = EventoCambioUsuario(
+        id="ev-1",
+        posicion=1,
+        usuario_id="u1",
+        grupo_id="g1",
+        nombre_grupo="Viaje",
+        gasto_id="gasto-1",
+        concepto="Hotel",
+        fecha=datetime.now(timezone.utc),
+        moneda="USD",
+        monto_parte=D("50.00"),
+        incluye_redondeo=False,
+    )
+    repo.consultar_cambios_usuario.return_value = ([ev], 1, False)
+
+    caso_uso = ObtenerCambiosUsuario(repo)
+    res = caso_uso.ejecutar(usuario_id="u1", desde_cursor=0, limite=100)
+
+    repo.consultar_cambios_usuario.assert_called_once_with(
+        usuario_id="u1",
+        desde_cursor=0,
+        limite=100,
+    )
+    assert res.nuevo_cursor == 1
+    assert res.quedan_mas is False
+    assert len(res.eventos) == 1
+    assert res.eventos[0].id == "ev-1"

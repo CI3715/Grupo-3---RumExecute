@@ -10,7 +10,7 @@ Endpoints cubiertos:
 """
 from typing import Dict, Any, List, Optional
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Header, Response
 from pydantic import BaseModel, Field
 
 from dominio.errores import ErrorDominio, ErrorConflicto, ErrorPermiso
@@ -302,11 +302,21 @@ def responder_invitacion_grupo(
     "/grupos/{id}/gastos",
     status_code=status.HTTP_201_CREATED,
     response_model=GastoResponse,
+    responses={
+        200: {"model": GastoResponse, "description": "Gasto existente retornado por idempotencia."},
+        201: {"model": GastoResponse, "description": "Gasto registrado exitosamente."},
+        400: {"description": "Datos inválidos."},
+        401: {"description": "Token inválido o ausente."},
+        404: {"description": "Grupo no encontrado o no es miembro."},
+        409: {"description": "Clave de idempotencia usada con datos distintos."},
+    },
     summary="Registrar gasto compartido (RF-COM-04 / RF-COM-05)"
 )
 def registrar_gasto(
     id: str,
     payload: RegistrarGastoRequest,
+    response: Response,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
     usuario_autenticado: Dict[str, Any] = Depends(obtener_usuario_actual),
     caso_uso: RegistrarGastoCompartido = Depends(caso_uso_registrar_gasto_compartido),
 ):
@@ -320,7 +330,14 @@ def registrar_gasto(
             tipo_division=payload.regla_division.upper(),
             participantes_ids=payload.participantes,
             valores=payload.valores,
+            clave_idempotencia=idempotency_key,
         )
+
+        if getattr(res, "es_reintento", False):
+            response.status_code = status.HTTP_200_OK
+        else:
+            response.status_code = status.HTTP_201_CREATED
+
         return GastoResponse(
             id=res.id,
             grupo_id=res.grupo_id,
@@ -342,6 +359,11 @@ def registrar_gasto(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Grupo no encontrado.",
+        )
+    except ErrorConflicto as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"campo": e.campo, "mensaje": e.mensaje},
         )
     except ErrorDominio as e:
         # Porcentajes o montos que no cuadran (indicando la diferencia exacta)

@@ -5,7 +5,7 @@ use crate::dominio::evento::{DatosMovimientoCorregido, EventoLibro};
 use crate::dominio::moneda::CatalogoMonedas;
 use crate::dominio::moneda::Moneda;
 use crate::dominio::monto::Monto;
-use crate::dominio::movimiento::Movimiento;
+use crate::dominio::movimiento::{Movimiento, TipoMovimiento};
 use serde::{Deserialize, Serialize};
 
 const DISPOSITIVO_LOCAL: &str = "dispositivo-local";
@@ -84,6 +84,22 @@ pub fn corregir_movimiento(
                     fecha: datos.fecha,
                     descripcion: datos.descripcion,
                     id_movimiento_referenciado: None,
+                    es_gasto_grupo: false,
+                });
+            }
+            EventoLibro::GastoDeGrupoAplicado { datos, .. }
+                if datos.id_movimiento == entrada.id_movimiento_original =>
+            {
+                movimiento_original_opt = Some(Movimiento {
+                    id: datos.id_movimiento,
+                    id_cuenta: datos.id_cuenta,
+                    tipo: TipoMovimiento::Gasto,
+                    monto: datos.monto,
+                    categoria: None,
+                    fecha: datos.fecha,
+                    descripcion: format!("{} · {}", datos.nombre_grupo, datos.concepto),
+                    id_movimiento_referenciado: None,
+                    es_gasto_grupo: true,
                 });
             }
             _ => {}
@@ -100,6 +116,15 @@ pub fn corregir_movimiento(
             ),
         )
     })?;
+
+    // RF-COM-10: Los gastos de grupo no se pueden editar ni corregir desde el libro personal
+    if movimiento_original.es_gasto_grupo {
+        return Err(ErrorDominio::new(
+            "id_movimiento_original",
+            "Los gastos originados en grupos compartidos no pueden ser corregidos ni editados desde el libro personal.",
+        )
+        .into());
+    }
 
     // Obtener la cuenta asociada al movimiento para conocer su moneda
     let cuenta = cuentas
@@ -281,6 +306,48 @@ mod tests {
 
         let ErrorCorregirMovimiento::Validacion(e) = err else {
             panic!("Se esperaba error de validación");
+        };
+        assert_eq!(e.campo, "id_movimiento_original");
+    }
+
+    #[test]
+    fn rechaza_si_el_movimiento_es_de_gasto_de_grupo() {
+        let mut p = Prueba::nueva();
+
+        // Registrar un evento de gasto de grupo aplicado
+        let datos_gasto = crate::dominio::evento::DatosGastoDeGrupoAplicado {
+            id_evento_servidor: "evt-srv-1".to_string(),
+            id_movimiento: "mov-grupo-1".to_string(),
+            id_cuenta: "cta-1".to_string(),
+            grupo_id: "grp-1".to_string(),
+            nombre_grupo: "Viaje".to_string(),
+            gasto_id: "gasto-srv-1".to_string(),
+            concepto: "Cena grupal".to_string(),
+            monto: Monto::new(Decimal::new(6000, 2), CodigoMoneda::USD),
+            fecha: "2026-10-21".to_string(),
+        };
+        p.repo
+            .guardar(EventoLibro::nuevo_gasto_de_grupo_aplicado(
+                "evt-grp-1",
+                "2026-10-21T12:00:00Z",
+                "disp-test",
+                datos_gasto,
+            ))
+            .unwrap();
+
+        let entrada = EntradaCorregirMovimiento {
+            id_movimiento_original: "mov-grupo-1".to_string(),
+            nuevo_monto: "50,00".to_string(),
+            fecha: "2026-10-21".to_string(),
+            descripcion: "Intento de corrección".to_string(),
+        };
+
+        let err = p
+            .corregir(entrada)
+            .expect_err("Debe rechazar corrección de gasto de grupo (RF-COM-10)");
+
+        let ErrorCorregirMovimiento::Validacion(e) = err else {
+            panic!("Se esperaba error de validación, se obtuvo: {:?}", err);
         };
         assert_eq!(e.campo, "id_movimiento_original");
     }

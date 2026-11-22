@@ -1,4 +1,5 @@
 pub mod cliente_auth;
+pub mod cliente_sync;
 pub mod memoria_repo;
 pub mod sistema;
 pub mod sqlite_repo;

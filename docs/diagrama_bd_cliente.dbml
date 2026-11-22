@@ -1,0 +1,110 @@
+Project CuentasClarasClienteLocal {
+  database_type: 'SQLite'
+  Note: '''
+    # Base de Datos Local del Dispositivo - Cliente de Escritorio (Tauri / Rust)
+    Motor: SQLite 3 embebido localmente en la máquina del usuario.
+    
+    Principios Arquitectónicos:
+    1. Privacidad Absoluta (INV-16 / RES-02): Esta base de datos vive exclusivamente en
+       el dispositivo del usuario. Nunca se replica completa ni se envía al servidor.
+    2. Event Sourcing (ADR-003): El libro personal se construye como un registro append-only
+       inmutable de eventos protegido por triggers SQL contra DELETE y UPDATE.
+    3. Sincronización Idempotente (INV-13, INV-14, INV-15): Al bajar lotes del servidor,
+       la transacción atómica actualiza eventos, cuentas y cursor simultáneamente.
+  '''
+}
+
+// ============================================================================
+// 1. LIBRO PERSONAL INMUTABLE (Event Sourcing - Entregas 1 a 4 y Entrega 7)
+// ============================================================================
+
+Table eventos_libro {
+  secuencia integer [pk, increment, note: 'Orden monotónico de eventos en el dispositivo local']
+  id text [unique, not null, note: 'Identificador único del evento local (UUID v4)']
+  tipo text [not null, note: 'CuentaCreada, MovimientoRegistrado, MovimientoCorregido, GastoDeGrupoAplicado']
+  momento_registro text [not null, note: 'Marca temporal ISO-8601 en UTC-0']
+  dispositivo_origen text [not null, note: 'Identificador del dispositivo que registró el evento']
+  evento_json text [not null, note: '''
+    JSON con el estado del evento:
+    - Para GastoDeGrupoAplicado: guarda id_evento_servidor, cuenta_id, concepto ("<Grupo> · <Gasto>"),
+      monto, fecha, es_gasto_grupo = true (bloquea corrección en el núcleo RF-COM-10).
+  ''']
+
+  note: '''
+    Protegido por triggers de SQLite:
+    - eventos_libro_no_actualizar: ABORT ante cualquier UPDATE.
+    - eventos_libro_no_eliminar: ABORT ante cualquier DELETE.
+  '''
+}
+
+// ============================================================================
+// 2. CONFIGURACIÓN LOCAL DE GRUPOS (Entrega 7: Asignación de Cuentas INV-18)
+// ============================================================================
+
+Table local_cuentas_por_grupo {
+  grupo_id text [pk, note: 'UUID del grupo en el servidor']
+  cuenta_id_personal text [not null, note: 'Cuenta personal elegida por el usuario para este grupo']
+  moneda text [not null, note: 'Moneda del grupo (debe coincidir exactamente con la cuenta INV-18)']
+  actualizado_en text [not null, note: 'Fecha de configuración']
+
+  note: 'Decisión 100% privada: El servidor nunca sabe qué cuenta eligió el usuario'
+}
+
+// ============================================================================
+// 3. PARTES PENDIENTES DE APLICAR (Entrega 7: INV-18)
+// ============================================================================
+
+Table local_partes_pendientes {
+  id text [pk, note: 'UUID de la parte pendiente']
+  id_evento_servidor text [unique, not null, note: 'ID del evento del servidor. Evita duplicados en reintentos']
+  grupo_id text [not null]
+  nombre_grupo text [not null]
+  gasto_id text [not null]
+  concepto text [not null]
+  monto numeric(12, 2) [not null]
+  moneda text [not null]
+  fecha text [not null, note: 'Fecha UTC del gasto original']
+  recibido_en text [not null, default: `CURRENT_TIMESTAMP`]
+
+  note: '''
+    Si llega un gasto de un grupo sin cuenta personal asignada, se guarda aquí.
+    En cuanto el usuario elija la cuenta para el grupo, las partes pendientes se
+    aplican automáticamente al libro personal en una transacción atómica.
+  '''
+}
+
+// ============================================================================
+// 4. CONTROL DE SINCRONIZACIÓN Y CURSOR (Entrega 7: INV-14)
+// ============================================================================
+
+Table local_sincronizacion_cursor {
+  id integer [pk, note: 'Fila única (ID = 1) para guardar el estado del cursor']
+  ultimo_cursor integer [not null, default: 0, note: 'Posición más alta recibida y procesada del servidor']
+  fecha_ultima_sincronizacion text [note: 'Momento de la última llamada exitosa a GET /cambios']
+
+  note: '''
+    Se actualiza dentro de la misma transacción atómica que aplica los eventos.
+    Si la app se cierra a mitad de lote, el cursor no avanza y se reintenta limpiamente.
+  '''
+}
+
+// ============================================================================
+// 5. COLA DE GASTOS SIN CONEXIÓN (Entrega 7: RNF-17, ESC-09)
+// ============================================================================
+
+Table local_cola_gastos_offline {
+  id text [pk, note: 'UUID local de la operación en cola']
+  idempotency_key text [unique, not null, note: 'Clave única generada una sola vez para este gasto']
+  grupo_id text [not null, note: 'Grupo destinatario']
+  payload_json text [not null, note: 'Payload completo del gasto a enviar a POST /grupos/{id}/gastos']
+  estado text [not null, default: 'PENDIENTE', note: 'PENDIENTE, EN_PROCESO, ERROR']
+  creado_en text [not null, default: `CURRENT_TIMESTAMP`]
+  ultimo_intento text [note: 'Momento del último reintento de conexión']
+  mensaje_error text [note: 'Mensaje devuelto por el servidor si la operación fue rechazada']
+
+  note: '''
+    Permite registrar gastos sin conexión.
+    Al volver la red, se despachan en orden FIFO.
+    Si el servidor rechaza uno, se saca de la cola mostrando el error sin bloquear el resto.
+  '''
+}

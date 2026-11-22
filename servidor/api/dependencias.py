@@ -10,6 +10,8 @@ from infraestructura.repositorio_usuarios_postgres import RepositorioUsuariosPos
 from infraestructura.repositorio_amistades_postgres import RepositorioAmistadesPostgres
 from infraestructura.repositorio_grupos_postgres import RepositorioGruposPostgres
 from infraestructura.repositorio_gastos_postgres import RepositorioGastosPostgres
+from infraestructura.repositorio_idempotencia_postgres import RepositorioIdempotenciaPostgres
+from infraestructura.repositorio_eventos_cambio_postgres import RepositorioEventosCambioPostgres
 from infraestructura.adaptadores_servicios import (
     AdaptadorServicioHash,
     AdaptadorServicioTokens,
@@ -32,6 +34,7 @@ from aplicacion.invitar_miembro_grupo import InvitarMiembroGrupo
 from aplicacion.responder_invitacion_grupo import ResponderInvitacionGrupo
 from aplicacion.registrar_gasto_compartido import RegistrarGastoCompartido
 from aplicacion.obtener_detalle_grupo import ObtenerDetalleGrupo
+from aplicacion.obtener_cambios_usuario import ObtenerCambiosUsuario
 
 servicio_hash_global = AdaptadorServicioHash()
 servicio_tokens_global = AdaptadorServicioTokens()
@@ -129,10 +132,14 @@ def caso_uso_responder_invitacion_grupo(db: Session = Depends(get_db)) -> Respon
 
 
 def caso_uso_registrar_gasto_compartido(db: Session = Depends(get_db)) -> RegistrarGastoCompartido:
+    repo_gastos = RepositorioGastosPostgres(db)
+    repo_claves = RepositorioIdempotenciaPostgres(db)
     return RegistrarGastoCompartido(
         repositorio_usuarios=RepositorioUsuariosPostgres(db),
         repositorio_grupos=RepositorioGruposPostgres(db),
-        repositorio_gastos=RepositorioGastosPostgres(db),
+        repositorio_gastos=repo_gastos,
+        repositorio_claves=repo_claves,
+        persistencia=repo_gastos,
     )
 
 
@@ -142,3 +149,8 @@ def caso_uso_obtener_detalle_grupo(db: Session = Depends(get_db)) -> ObtenerDeta
         repositorio_grupos=RepositorioGruposPostgres(db),
         repositorio_gastos=RepositorioGastosPostgres(db),
     )
+
+
+def caso_uso_obtener_cambios_usuario(db: Session = Depends(get_db)) -> ObtenerCambiosUsuario:
+    repo = RepositorioEventosCambioPostgres(db)
+    return ObtenerCambiosUsuario(repositorio_eventos=repo)

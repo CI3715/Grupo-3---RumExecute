@@ -1,0 +1,173 @@
+Project CuentasClarasServidor {
+  database_type: 'PostgreSQL'
+  Note: '''
+    # Base de Datos Relacional - Servidor Backend (Cuentas Claras)
+    Motor: PostgreSQL 16 (Docker Compose)
+    Entregas: 5 (Autenticación), 6 (Red Social y Grupos) y 7 (The Sync Flow).
+    
+    Principio Arquitectónico Rector (INV-16 / RES-02):
+    El servidor actúa estrictamente como coordinador social de identidades, amistades,
+    grupos y gastos compartidos. NUNCA almacena ni recibe cuentas bancarias, tarjetas,
+    movimientos privados, saldos personales ni patrimonio de los usuarios.
+  '''
+}
+
+// ============================================================================
+// 1. MÓDULO DE IDENTIDAD Y AUTENTICACIÓN (Entrega 5)
+// ============================================================================
+
+Table usuarios {
+  id varchar(36) [pk, note: 'UUID v4 generado por el dominio antes de persistir']
+  nombre_usuario varchar(30) [unique, not null, note: 'Único, búsqueda por coincidencia exacta (RF-SOC-04)']
+  nombre_visible varchar(100) [not null, note: 'Nombre para mostrar en la interfaz']
+  correo varchar(255) [unique, not null, note: 'Normalizado en minúsculas y único en BD (RF-SOC-01)']
+  password_hash varchar(255) [not null, note: 'Hash Argon2id con 16 bytes de sal aleatoria (RNF-05). Jamás expuesto en la API']
+  creado_en timestamptz [not null, default: `now()`, note: 'Fecha de alta con zona horaria UTC-0 estricta']
+
+  indexes {
+    nombre_usuario [name: 'ix_usuarios_nombre_usuario']
+    correo [name: 'ix_usuarios_correo']
+  }
+}
+
+// ============================================================================
+// 2. MÓDULO DE RED SOCIAL Y AMISTADES (Entrega 6)
+// ============================================================================
+
+Table amistades {
+  id varchar(36) [pk, note: 'UUID v4']
+  usuario_origen_id varchar(36) [not null, note: 'Solicitante de la amistad']
+  usuario_destino_id varchar(36) [not null, note: 'Receptor de la solicitud']
+  estado varchar(20) [not null, note: 'PENDIENTE, ACTIVA, RECHAZADA (INV-10)']
+  creado_en timestamptz [not null, default: `now()`, note: 'Fecha de envío']
+  actualizado_en timestamptz [not null, default: `now()`, note: 'Fecha de respuesta o modificación']
+
+  indexes {
+    (usuario_origen_id, usuario_destino_id) [unique, name: 'uq_amistad_origen_destino']
+    estado [name: 'ix_amistades_estado']
+  }
+}
+
+// ============================================================================
+// 3. MÓDULO DE GRUPOS COMPARTIDOS (Entrega 6)
+// ============================================================================
+
+Table grupos {
+  id varchar(36) [pk, note: 'UUID v4']
+  nombre varchar(100) [not null, note: 'Nombre del grupo (ej. Viaje a Mérida)']
+  descripcion text [note: 'Propósito opcional del grupo']
+  moneda varchar(3) [not null, note: 'Código ISO de 3 letras mayúsculas (USD, EUR, VES)']
+  actividad_fecha varchar(100) [note: 'Fecha o período de actividad descriptivo']
+  creador_id varchar(36) [not null, note: 'Administrador que creó el grupo']
+  creado_en timestamptz [not null, default: `now()`]
+}
+
+Table miembros_grupo {
+  id varchar(36) [pk, note: 'UUID v4']
+  grupo_id varchar(36) [not null]
+  usuario_id varchar(36) [not null]
+  rol varchar(20) [not null, default: 'MIEMBRO', note: 'ADMIN, MIEMBRO']
+  estado varchar(20) [not null, default: 'PENDIENTE', note: 'PENDIENTE, ACEPTADO (RF-COM-02)']
+  creado_en timestamptz [not null, default: `now()`]
+
+  indexes {
+    (grupo_id, usuario_id) [unique, name: 'uq_grupo_usuario']
+    estado [name: 'ix_miembros_estado']
+  }
+}
+
+// ============================================================================
+// 4. MÓDULO DE GASTOS COMPARTIDOS Y CUOTAS (Entrega 6)
+// Patrón Ledger / Event Sourcing: Los saldos no se mutan, se derivan de los gastos
+// ============================================================================
+
+Table gastos_grupo {
+  id varchar(36) [pk, note: 'UUID v4']
+  grupo_id varchar(36) [not null]
+  pagador_id varchar(36) [not null, note: 'Miembro que desembolsó el dinero']
+  concepto varchar(255) [not null, note: 'Descripción del gasto (ej. Cena de bienvenida)']
+  monto numeric(12, 2) [not null, note: 'Monto total con dos decimales exactos (RNF-08)']
+  fecha timestamptz [not null, note: 'Fecha y hora en UTC']
+  regla_division varchar(20) [not null, note: 'IGUALES, PORCENTAJES, MONTOS_FIJOS']
+  creado_en timestamptz [not null, default: `now()`]
+
+  indexes {
+    grupo_id [name: 'ix_gastos_grupo_grupo_id']
+    pagador_id [name: 'ix_gastos_grupo_pagador_id']
+  }
+}
+
+Table partes_gasto {
+  id varchar(36) [pk, note: 'UUID v4']
+  gasto_id varchar(36) [not null]
+  usuario_id varchar(36) [not null, note: 'Participante que debe esta cuota']
+  monto_cuota numeric(12, 2) [not null, note: 'Valor exacto de la cuota']
+  porcentaje_indicado numeric(5, 2) [note: 'Porcentaje en división por porcentajes']
+  monto_fijo_indicado numeric(12, 2) [note: 'Monto fijo en división por montos']
+  lleva_residuo boolean [not null, default: false, note: 'True si recibió el céntimo sobrante por orden alfabético (INV-07 / ESC-10)']
+
+  indexes {
+    (gasto_id, usuario_id) [unique, name: 'uq_gasto_usuario']
+  }
+}
+
+// ============================================================================
+// 5. MÓDULO DE SINCRONIZACIÓN E IDEMPOTENCIA (Entrega 7: The Sync Flow)
+// ============================================================================
+
+Table eventos_cambio_usuario {
+  id varchar(36) [pk, note: 'UUID v4 del evento de cambio']
+  posicion integer [not null, unique, note: 'Secuencia monotónica autoincremental (Cursor numérico)']
+  usuario_id varchar(36) [not null, note: 'Destinatario exclusivo del cambio. Aislamiento INV-17']
+  grupo_id varchar(36) [not null]
+  nombre_grupo varchar(100) [not null, note: 'Desnormalizado para facilitar concepto <Grupo> · <Gasto> en cliente']
+  gasto_id varchar(36) [not null]
+  concepto varchar(255) [not null]
+  fecha timestamptz [not null, note: 'Fecha UTC del gasto original']
+  moneda varchar(3) [not null, note: 'Moneda del grupo']
+  monto_parte numeric(12, 2) [not null, note: 'Monto individual adeudado por el participante']
+  incluye_redondeo boolean [not null, default: false]
+  creado_en timestamptz [not null, default: `now()`, note: 'Momento de inserción en el registro']
+
+  indexes {
+    (usuario_id, posicion) [name: 'ix_eventos_usuario_posicion', note: 'Para consulta eficiente: WHERE usuario_id = :u AND posicion > :cursor ORDER BY posicion ASC LIMIT 100']
+  }
+}
+
+Table claves_idempotencia_gastos {
+  id varchar(36) [pk, note: 'UUID v4']
+  clave varchar(255) [not null, note: 'Encabezado Idempotency-Key enviado por el cliente']
+  usuario_id varchar(36) [not null, note: 'La clave solo es única por usuario emisor']
+  huella varchar(64) [not null, note: 'Hash SHA-256 canónico del payload (RNF-17 / ESC-09)']
+  gasto_id varchar(36) [not null, note: 'Gasto ya creado para responder 200 OK en reintentos idénticos']
+  creado_en timestamptz [not null, default: `now()`]
+
+  indexes {
+    (usuario_id, clave) [unique, name: 'uq_idempotencia_usuario_clave']
+  }
+}
+
+// ============================================================================
+// RELACIONES DE CLAVE FORÁNEA (Integridad Referencial con ON DELETE CASCADE)
+// ============================================================================
+
+Ref: amistades.usuario_origen_id > usuarios.id [delete: cascade]
+Ref: amistades.usuario_destino_id > usuarios.id [delete: cascade]
+
+Ref: grupos.creador_id > usuarios.id [delete: cascade]
+
+Ref: miembros_grupo.grupo_id > grupos.id [delete: cascade]
+Ref: miembros_grupo.usuario_id > usuarios.id [delete: cascade]
+
+Ref: gastos_grupo.grupo_id > grupos.id [delete: cascade]
+Ref: gastos_grupo.pagador_id > usuarios.id [delete: cascade]
+
+Ref: partes_gasto.gasto_id > gastos_grupo.id [delete: cascade]
+Ref: partes_gasto.usuario_id > usuarios.id [delete: cascade]
+
+Ref: eventos_cambio_usuario.usuario_id > usuarios.id [delete: cascade]
+Ref: eventos_cambio_usuario.grupo_id > grupos.id [delete: cascade]
+Ref: eventos_cambio_usuario.gasto_id > gastos_grupo.id [delete: cascade]
+
+Ref: claves_idempotencia_gastos.usuario_id > usuarios.id [delete: cascade]
+Ref: claves_idempotencia_gastos.gasto_id > gastos_grupo.id [delete: cascade]

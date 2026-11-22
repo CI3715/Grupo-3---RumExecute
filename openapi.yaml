@@ -328,6 +328,14 @@ paths:
         schema:
           type: string
           title: Id
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Idempotency-Key
       requestBody:
         required: true
         content:
@@ -336,11 +344,25 @@ paths:
               $ref: '#/components/schemas/RegistrarGastoRequest'
       responses:
         '201':
-          description: Successful Response
+          description: Gasto registrado exitosamente.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/GastoResponse'
+        '200':
+          description: Gasto existente retornado por idempotencia.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GastoResponse'
+        '400':
+          description: Datos inválidos.
+        '401':
+          description: Token inválido o ausente.
+        '404':
+          description: Grupo no encontrado o no es miembro.
+        '409':
+          description: Clave de idempotencia usada con datos distintos.
         '422':
           description: Validation Error
           content:
@@ -372,6 +394,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DetalleGrupoResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /cambios:
+    get:
+      tags:
+      - Sincronización
+      summary: Obtener eventos de cambio del usuario (INV-16 / INV-17 / Subtarea 3.2)
+      operationId: obtener_cambios_cambios_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: desde
+        in: query
+        required: false
+        schema:
+          description: Cursor numérico de cambios
+          default: 0
+          title: Desde
+        description: Cursor numérico de cambios
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CambiosUsuarioResponse'
         '422':
           description: Validation Error
           content:
@@ -411,6 +463,29 @@ components:
       - nombre_usuario
       - nombre_visible
       title: AmigoResponse
+    CambiosUsuarioResponse:
+      properties:
+        eventos:
+          items:
+            $ref: '#/components/schemas/EventoCambioResponse'
+          type: array
+          title: Eventos
+        nuevo_cursor:
+          type: integer
+          title: Nuevo Cursor
+          examples:
+          - 1
+        quedan_mas:
+          type: boolean
+          title: Quedan Mas
+          examples:
+          - false
+      type: object
+      required:
+      - eventos
+      - nuevo_cursor
+      - quedan_mas
+      title: CambiosUsuarioResponse
     CrearGrupoRequest:
       properties:
         nombre:
@@ -502,6 +577,78 @@ components:
       required:
       - nombre_usuario
       title: EnviarInvitacionRequest
+    EventoCambioResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+          examples:
+          - 11111111-1111-1111-1111-111111111111
+        posicion:
+          type: integer
+          title: Posicion
+          examples:
+          - 1
+        usuario_id:
+          type: string
+          title: Usuario Id
+          examples:
+          - usuario_uuid
+        grupo_id:
+          type: string
+          title: Grupo Id
+          examples:
+          - grupo_uuid
+        nombre_grupo:
+          type: string
+          title: Nombre Grupo
+          examples:
+          - Viaje a Mérida
+        gasto_id:
+          type: string
+          title: Gasto Id
+          examples:
+          - gasto_uuid
+        concepto:
+          type: string
+          title: Concepto
+          examples:
+          - Hotel
+        fecha:
+          type: string
+          title: Fecha
+          examples:
+          - '2026-10-07T20:00:00Z'
+        moneda:
+          type: string
+          title: Moneda
+          examples:
+          - USD
+        monto_parte:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Monto Parte
+          examples:
+          - 33.33
+        incluye_redondeo:
+          type: boolean
+          title: Incluye Redondeo
+          examples:
+          - false
+      type: object
+      required:
+      - id
+      - posicion
+      - usuario_id
+      - grupo_id
+      - nombre_grupo
+      - gasto_id
+      - concepto
+      - fecha
+      - moneda
+      - monto_parte
+      - incluye_redondeo
+      title: EventoCambioResponse
     GastoResponse:
       properties:
         id:

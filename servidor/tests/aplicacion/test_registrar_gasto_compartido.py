@@ -354,6 +354,29 @@ def test_guarda_por_persistencia_y_genera_un_evento_por_participante(
     assert all(e.posicion is None for e in eventos)
     assert sum((e.monto_parte for e in eventos), D("0")) == respuesta.monto
 
+def test_guarda_clave_idempotencia_si_se_proporciona(caso_uso, persistencia):
+    respuesta = caso_uso.ejecutar(
+        usuario_autenticado_id="usuario-1",
+        grupo_id="grupo-1",
+        concepto="Cena",
+        pagador_id="usuario-1",
+        monto=D("10.00"),
+        tipo_division="IGUALES",
+        participantes_ids=["usuario-1", "usuario-2", "usuario-3"],
+        clave_idempotencia="key-12345",
+    )
+
+    persistencia.guardar_gasto.assert_called_once()
+    gasto, eventos, registro = persistencia.guardar_gasto.call_args.args
+
+    assert registro is not None
+    assert registro.clave == "key-12345"
+    assert registro.usuario_id == "usuario-1"
+    assert registro.gasto_id == respuesta.id
+    assert respuesta.es_reintento is False
+    assert respuesta.creado is True
+
+
 def test_con_clave_nueva_guarda_el_registro_de_idempotencia(
     caso_uso, persistencia, repo_claves
 ):
@@ -367,6 +390,7 @@ def test_con_clave_nueva_guarda_el_registro_de_idempotencia(
     assert registro is not None
     assert registro.clave == "clave-abc"
     assert registro.usuario_id == "usuario-1"
+
 
 def test_reintento_con_misma_huella_no_crea_otro_gasto(
     caso_uso, persistencia, repo_claves, repositorios
@@ -393,7 +417,7 @@ def test_reintento_con_misma_huella_no_crea_otro_gasto(
             D("10.00"),
             {"usuario-1": "ana", "usuario-2": "beto", "usuario-3": "carla"},
         ),
-        fecha=datetime(2026, 11, 20, 12, 0, tzinfo=timezone.utc)
+        fecha=datetime(2026, 11, 20, 12, 0, tzinfo=timezone.utc),
     )
 
     repo_claves.buscar.return_value = RegistroIdempotenciaGasto(
@@ -403,12 +427,15 @@ def test_reintento_con_misma_huella_no_crea_otro_gasto(
         gasto_id="gasto-existente",
     )
     repo_gastos.obtener.return_value = gasto_previo
+    repo_gastos.obtener_por_id.return_value = gasto_previo
 
     respuesta = registrar(caso_uso, clave="clave-abc")
 
     persistencia.guardar_gasto.assert_not_called()
     assert respuesta.creado is False
+    assert respuesta.es_reintento is True
     assert respuesta.id == "gasto-existente"
+
 
 def test_misma_clave_con_datos_distintos_lanza_conflicto(
     caso_uso, persistencia, repo_claves
@@ -434,6 +461,7 @@ def test_misma_clave_con_datos_distintos_lanza_conflicto(
 
     persistencia.guardar_gasto.assert_not_called()
 
+
 def test_sin_clave_no_consulta_ni_guarda_registro_de_idempotencia(
     caso_uso, persistencia, repo_claves
 ):
@@ -441,4 +469,4 @@ def test_sin_clave_no_consulta_ni_guarda_registro_de_idempotencia(
 
     repo_claves.buscar.assert_not_called()
     _, _, registro = persistencia.guardar_gasto.call_args.args
-    assert registro is None 
+    assert registro is None

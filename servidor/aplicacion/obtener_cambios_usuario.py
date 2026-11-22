@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+from typing import List, Tuple
 from aplicacion.dtos.cambios_respuesta import (
     CambiosRespuesta,
     EventoCambioRespuesta,
@@ -12,6 +14,10 @@ from dominio.evento_cambio import EventoCambioUsuario
 LIMITE_LOTE = 100
 MENSAJE_DESDE = "El cursor 'desde' debe ser un número entero mayor o igual a 0."
 
+# Alias para compatibilidad de tipos con rutas_cambios
+CambiosUsuarioRespuesta = CambiosRespuesta
+
+
 class ObtenerCambiosUsuario:
     """
     Caso de uso para consultar los eventos de cambio de un usuario
@@ -23,24 +29,44 @@ class ObtenerCambiosUsuario:
 
     def ejecutar(
         self,
-        usuario_autenticado_id: str,
-        desde: str | int,
+        usuario_autenticado_id: str | None = None,
+        desde: str | int | None = None,
+        *,
+        usuario_id: str | None = None,
+        desde_cursor: str | int | None = None,
+        limite: int = LIMITE_LOTE,
     ) -> CambiosRespuesta:
-        cursor = self._validar_desde(desde)
+        # Determinar argumentos recibidos (compatibilidad con ambas firmas)
+        usar_consultar_cambios = usuario_id is not None or desde_cursor is not None
+        uid = usuario_id if usuario_id is not None else usuario_autenticado_id
+        cursor_raw = desde_cursor if desde_cursor is not None else desde
 
-        # Pedimos 1 evento más que el límite para saber si quedan más eventos
-        # sin requerir una consulta extra a la base de datos.
-        eventos_obtenidos = self.repositorio_eventos.listar_posteriores(
-            usuario_autenticado_id,
-            cursor,
-            LIMITE_LOTE + 1,
-        )
+        if uid is None:
+            raise ErrorDominio("usuario_id", "El identificador del usuario es obligatorio.")
 
-        quedan_mas = len(eventos_obtenidos) > LIMITE_LOTE
-        eventos_lote = eventos_obtenidos[:LIMITE_LOTE]
+        cursor = self._validar_desde(cursor_raw)
 
-        eventos_dto = tuple(self._a_dto(ev) for ev in eventos_lote)
-        nuevo_cursor = eventos_dto[-1].posicion if eventos_dto else cursor
+        if usar_consultar_cambios and hasattr(self.repositorio_eventos, "consultar_cambios_usuario"):
+            eventos_bd, nuevo_cursor, quedan_mas = self.repositorio_eventos.consultar_cambios_usuario(
+                usuario_id=uid,
+                desde_cursor=cursor,
+                limite=limite,
+            )
+            eventos_dto = tuple(self._a_dto(ev) for ev in eventos_bd)
+        else:
+            # Pedimos 1 evento más que el límite para saber si quedan más eventos
+            # sin requerir una consulta extra a la base de datos.
+            eventos_obtenidos = self.repositorio_eventos.listar_posteriores(
+                uid,
+                cursor,
+                limite + 1,
+            )
+
+            quedan_mas = len(eventos_obtenidos) > limite
+            eventos_lote = eventos_obtenidos[:limite]
+
+            eventos_dto = tuple(self._a_dto(ev) for ev in eventos_lote)
+            nuevo_cursor = eventos_dto[-1].posicion if eventos_dto else cursor
 
         return CambiosRespuesta(
             eventos=eventos_dto,
@@ -48,19 +74,24 @@ class ObtenerCambiosUsuario:
             quedan_mas=quedan_mas,
         )
 
-    def _validar_desde(self, desde: str | int) -> int:
-        if isinstance(desde, bool):
+    def _validar_desde(self, desde: str | int | None) -> int:
+        if desde is None or isinstance(desde, bool):
             raise ErrorDominio("desde", MENSAJE_DESDE)
 
-        if isinstance(desde, str) and desde.isascii() and desde.isdigit():
-            return int(desde)
+        if isinstance(desde, str):
+            if desde.isascii() and desde.isdigit():
+                return int(desde)
+            raise ErrorDominio("desde", MENSAJE_DESDE)
 
         if isinstance(desde, int) and desde >= 0:
             return desde
 
         raise ErrorDominio("desde", MENSAJE_DESDE)
 
-    def _a_dto(self, evento: EventoCambioUsuario) -> EventoCambioRespuesta:
+    def _a_dto(self, evento: EventoCambioUsuario | EventoCambioRespuesta) -> EventoCambioRespuesta:
+        if isinstance(evento, EventoCambioRespuesta):
+            return evento
+
         if evento.posicion is None:
             raise ErrorAplicacion(
                 "posicion",

@@ -55,7 +55,7 @@ class RegistrarGastoCompartido:
         tipo_division: str,
         participantes_ids: list[str],
         valores: dict[str, Decimal] | None = None,
-        clave_idempotencia: str | None = None, 
+        clave_idempotencia: str | None = None,
     ) -> GastoCompartidoRespuesta:
 
         # 1. Verificar que el grupo exista y sea accesible.
@@ -67,7 +67,7 @@ class RegistrarGastoCompartido:
             raise GrupoNoEncontrado()
 
         registro_idempotencia = None
-        id_gasto_nuevo = str(uuid4())   # generado aquí, se usa también en el paso 7
+        id_gasto_nuevo = str(uuid4())
 
         if clave_idempotencia is not None:
             huella = calcular_huella(
@@ -88,7 +88,10 @@ class RegistrarGastoCompartido:
                         "clave",
                         "La clave de idempotencia ya fue usada con datos distintos.",
                     )
-                gasto_existente = self.repositorio_gastos.obtener(previo.gasto_id)
+                gasto_existente = self.repositorio_gastos.obtener_por_id(previo.gasto_id)
+                if gasto_existente is None:
+                    gastos = self.repositorio_gastos.listar_gastos_de_grupo(grupo.id)
+                    gasto_existente = next((g for g in gastos if g.id == previo.gasto_id), None)
                 if gasto_existente is None:
                     raise GastoDeClaveNoEncontrado()
                 return self._construir_respuesta(gasto_existente, creado=False)
@@ -111,17 +114,17 @@ class RegistrarGastoCompartido:
         if not participantes_ids:
             raise ErrorDominio(
                 "participantes",
-                "Debe haber al menos un participante.",
+                "Debe haber al menos un participante en la división.",
             )
 
-        if len(set(participantes_ids)) != len(participantes_ids):
+        if len(participantes_ids) != len(set(participantes_ids)):
             raise ErrorDominio(
                 "participantes",
                 "No puede haber participantes duplicados.",
             )
 
-        for participante_id in participantes_ids:
-            if not es_miembro(grupo, participante_id):
+        for p_id in participantes_ids:
+            if not es_miembro(grupo, p_id):
                 raise ErrorDominio(
                     "participantes",
                     "Todos los participantes deben pertenecer al grupo.",
@@ -168,7 +171,7 @@ class RegistrarGastoCompartido:
 
             nombres[participante_id] = usuario.nombre_usuario
 
-        # 6. Calcular las cuotas mediante el dominio.
+        # 6. Calcular cuotas según el tipo de división.
         if tipo_division == "IGUALES":
             cuotas = dividir_partes_iguales(
                 monto,
@@ -182,7 +185,7 @@ class RegistrarGastoCompartido:
                 nombres,
             )
 
-        else:
+        elif tipo_division == "MONTOS":
             cuotas = dividir_por_montos(
                 monto,
                 valores,
@@ -191,7 +194,7 @@ class RegistrarGastoCompartido:
 
         # 7. Construir y validar el gasto.
         gasto = Gasto(
-            id=str(uuid4()),
+            id=id_gasto_nuevo,
             grupo_id=grupo.id,
             concepto=concepto,
             pagador_id=pagador_id,
@@ -200,7 +203,7 @@ class RegistrarGastoCompartido:
             fecha=datetime.now(timezone.utc),
         )
 
-        # 8. Persistir el gasto y sus cuotas.
+        # 8. Persistir el gasto, sus cuotas, eventos y clave de idempotencia (si aplica).
         eventos = tuple(
             EventoCambioUsuario(
                 id=str(uuid4()),
@@ -241,4 +244,5 @@ class RegistrarGastoCompartido:
                 for cuota in gasto.cuotas
             ),
             creado=creado,
+            es_reintento=not creado,
         )

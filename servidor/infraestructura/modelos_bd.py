@@ -12,6 +12,8 @@ from sqlalchemy import (  # type: ignore
     DateTime,
     Numeric,
     Boolean,
+    Integer,
+    Sequence,
     ForeignKey,
     UniqueConstraint,
     Index
@@ -126,3 +128,56 @@ class ParteGasto(Base):
     __table_args__ = (
         UniqueConstraint("gasto_id", "usuario_id", name="uq_gasto_usuario"),
     )
+
+
+class EventoCambioUsuarioModel(Base):
+    __tablename__ = "eventos_cambio_usuario"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    posicion = Column(
+        Integer,
+        Sequence("eventos_cambio_posicion_seq"),
+        autoincrement=True,
+        nullable=False,
+        unique=True,
+        index=True
+    )
+    usuario_id = Column(String(36), ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False, index=True)
+    grupo_id = Column(String(36), ForeignKey("grupos.id", ondelete="CASCADE"), nullable=False)
+    nombre_grupo = Column(String(100), nullable=False)
+    gasto_id = Column(String(36), ForeignKey("gastos_grupo.id", ondelete="CASCADE"), nullable=False)
+    concepto = Column(String(255), nullable=False)
+    fecha = Column(DateTime(timezone=True), nullable=False)
+    moneda = Column(String(3), nullable=False)
+    monto_parte = Column(Numeric(12, 2), nullable=False)
+    incluye_redondeo = Column(Boolean, nullable=False, default=False)
+    creado_en = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_eventos_usuario_posicion", "usuario_id", "posicion"),
+    )
+
+
+class ClaveIdempotenciaGasto(Base):
+    __tablename__ = "claves_idempotencia_gastos"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    clave = Column(String(255), nullable=False)
+    usuario_id = Column(String(36), ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False, index=True)
+    huella = Column(String(64), nullable=False)
+    gasto_id = Column(String(36), ForeignKey("gastos_grupo.id", ondelete="CASCADE"), nullable=False)
+    creado_en = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("usuario_id", "clave", name="uq_idempotencia_usuario_clave"),
+        Index("ix_idempotencia_usuario_clave", "usuario_id", "clave"),
+    )
+
