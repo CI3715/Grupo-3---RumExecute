@@ -57,7 +57,7 @@ def repositorios(usuario_existente):
 @pytest.fixture
 def repo_claves():
     claves = Mock()
-    claves.buscar.return_value = ...   # ¿qué debe devolver por defecto?
+    claves.buscar.return_value = None
     return claves
 
 @pytest.fixture
@@ -345,3 +345,110 @@ def test_guarda_por_persistencia_y_genera_un_evento_por_participante(
     }
     assert all(e.posicion is None for e in eventos)
     assert sum((e.monto_parte for e in eventos), D("0")) == respuesta.monto
+
+
+def test_guarda_clave_idempotencia_si_se_proporciona(caso_uso, persistencia):
+    respuesta = caso_uso.ejecutar(
+        usuario_autenticado_id="usuario-1",
+        grupo_id="grupo-1",
+        concepto="Cena",
+        pagador_id="usuario-1",
+        monto=D("10.00"),
+        tipo_division="IGUALES",
+        participantes_ids=["usuario-1", "usuario-2", "usuario-3"],
+        clave_idempotencia="key-12345",
+    )
+
+    persistencia.guardar_gasto.assert_called_once()
+    gasto, eventos, registro = persistencia.guardar_gasto.call_args.args
+
+    assert registro is not None
+    assert registro.clave == "key-12345"
+    assert registro.usuario_id == "usuario-1"
+    assert registro.gasto_id == respuesta.id
+    assert respuesta.es_reintento is False
+
+
+def test_reintento_con_misma_clave_y_datos_devuelve_gasto_existente_sin_guardar_nuevo(
+    caso_uso, persistencia, repo_claves, repositorios
+):
+    from dominio.idempotencia import RegistroIdempotenciaGasto, calcular_huella
+
+    _, _, repo_gastos = repositorios
+    huella_esperada = calcular_huella(
+        grupo_id="grupo-1",
+        concepto="Cena",
+        pagador_id="usuario-1",
+        monto=D("10.00"),
+        tipo_division="IGUALES",
+        participantes_ids=["usuario-1", "usuario-2", "usuario-3"],
+    )
+
+    repo_claves.buscar.return_value = RegistroIdempotenciaGasto(
+        clave="key-repetida",
+        usuario_id="usuario-1",
+        huella=huella_esperada,
+        gasto_id="gasto-existente-uuid",
+    )
+
+    from datetime import datetime, timezone
+    from dominio.division import CuotaDivision
+
+    cuota = CuotaDivision(
+        usuario_id="usuario-1",
+        nombre_usuario="ana",
+        monto=D("10.00"),
+        lleva_residuo=False,
+    )
+    gasto_existente = Gasto(
+        id="gasto-existente-uuid",
+        grupo_id="grupo-1",
+        concepto="Cena",
+        pagador_id="usuario-1",
+        monto=D("10.00"),
+        cuotas=(cuota,),
+        fecha=datetime.now(timezone.utc),
+    )
+    repo_gastos.obtener_por_id.return_value = gasto_existente
+
+    respuesta = caso_uso.ejecutar(
+        usuario_autenticado_id="usuario-1",
+        grupo_id="grupo-1",
+        concepto="Cena",
+        pagador_id="usuario-1",
+        monto=D("10.00"),
+        tipo_division="IGUALES",
+        participantes_ids=["usuario-1", "usuario-2", "usuario-3"],
+        clave_idempotencia="key-repetida",
+    )
+
+    persistencia.guardar_gasto.assert_not_called()
+    assert respuesta.id == "gasto-existente-uuid"
+    assert respuesta.es_reintento is True
+
+
+def test_reintento_con_misma_clave_y_datos_distintos_lanza_error_conflicto(
+    caso_uso, persistencia, repo_claves
+):
+    from dominio.idempotencia import RegistroIdempotenciaGasto, ErrorConflictoIdempotencia
+
+    repo_claves.buscar.return_value = RegistroIdempotenciaGasto(
+        clave="key-repetida",
+        usuario_id="usuario-1",
+        huella="otra-huella-completamente-distinta",
+        gasto_id="gasto-previo-uuid",
+    )
+
+    with pytest.raises(ErrorConflictoIdempotencia):
+        caso_uso.ejecutar(
+            usuario_autenticado_id="usuario-1",
+            grupo_id="grupo-1",
+            concepto="Cena",
+            pagador_id="usuario-1",
+            monto=D("10.00"),
+            tipo_division="IGUALES",
+            participantes_ids=["usuario-1", "usuario-2", "usuario-3"],
+            clave_idempotencia="key-repetida",
+        )
+
+    persistencia.guardar_gasto.assert_not_called()

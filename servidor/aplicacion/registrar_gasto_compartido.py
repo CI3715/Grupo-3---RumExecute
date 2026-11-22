@@ -22,6 +22,11 @@ from dominio.division import (
 from dominio.errores import ErrorDominio
 from dominio.grupo import es_miembro
 from dominio.evento_cambio import EventoCambioUsuario
+from dominio.idempotencia import (
+    RegistroIdempotenciaGasto,
+    calcular_huella,
+    ErrorConflictoIdempotencia,
+)
 
 
 class RegistrarGastoCompartido:
@@ -50,6 +55,7 @@ class RegistrarGastoCompartido:
         tipo_division: str,
         participantes_ids: list[str],
         valores: dict[str, Decimal] | None = None,
+        clave_idempotencia: str | None = None,
     ) -> GastoCompartidoRespuesta:
 
         # 1. Verificar que el grupo exista y sea accesible.
@@ -59,6 +65,54 @@ class RegistrarGastoCompartido:
             grupo, usuario_autenticado_id
         ):
             raise GrupoNoEncontrado()
+
+        # 1.1 Verificar idempotencia previa antes de procesar el gasto
+        huella = None
+        if clave_idempotencia:
+            huella = calcular_huella(
+                grupo_id=grupo.id,
+                concepto=concepto,
+                pagador_id=pagador_id,
+                monto=monto,
+                tipo_division=tipo_division,
+                participantes_ids=participantes_ids,
+                valores=valores,
+            )
+            registro = self.repositorio_claves.buscar(
+                usuario_autenticado_id,
+                clave_idempotencia,
+            )
+            if registro is not None:
+                if registro.huella != huella:
+                    raise ErrorConflictoIdempotencia(
+                        "La clave de idempotencia ya fue utilizada con datos distintos."
+                    )
+
+                # Clave y huella idénticas: retornar gasto existente sin duplicar
+                gasto_existente = self.repositorio_gastos.obtener_por_id(registro.gasto_id)
+                if gasto_existente is None:
+                    gastos = self.repositorio_gastos.listar_gastos_de_grupo(grupo.id)
+                    gasto_existente = next((g for g in gastos if g.id == registro.gasto_id), None)
+
+                if gasto_existente is not None:
+                    return GastoCompartidoRespuesta(
+                        id=gasto_existente.id,
+                        grupo_id=gasto_existente.grupo_id,
+                        concepto=gasto_existente.concepto,
+                        pagador_id=gasto_existente.pagador_id,
+                        monto=gasto_existente.monto,
+                        fecha=gasto_existente.fecha,
+                        cuotas=tuple(
+                            CuotaRespuesta(
+                                usuario_id=cuota.usuario_id,
+                                nombre_usuario=cuota.nombre_usuario,
+                                monto=cuota.monto,
+                                lleva_residuo=cuota.lleva_residuo,
+                            )
+                            for cuota in gasto_existente.cuotas
+                        ),
+                        es_reintento=True,
+                    )
 
         # 2. Verificar que el pagador sea miembro.
         if not es_miembro(grupo, pagador_id):
@@ -160,7 +214,7 @@ class RegistrarGastoCompartido:
             fecha=datetime.now(timezone.utc),
         )
 
-        # 8. Persistir el gasto y sus cuotas.
+        # 8. Persistir el gasto, sus cuotas, eventos y clave de idempotencia (si aplica).
         eventos = tuple(
             EventoCambioUsuario(
                 id=str(uuid4()),
@@ -178,7 +232,16 @@ class RegistrarGastoCompartido:
             for cuota in gasto.cuotas
         )
 
-        self.persistencia.guardar_gasto(gasto, eventos, None)
+        registro_idemp = None
+        if clave_idempotencia and huella:
+            registro_idemp = RegistroIdempotenciaGasto(
+                clave=clave_idempotencia,
+                usuario_id=usuario_autenticado_id,
+                huella=huella,
+                gasto_id=gasto.id,
+            )
+
+        self.persistencia.guardar_gasto(gasto, eventos, registro_idemp)
 
         # 9. Construir respuesta pública.
         return GastoCompartidoRespuesta(
