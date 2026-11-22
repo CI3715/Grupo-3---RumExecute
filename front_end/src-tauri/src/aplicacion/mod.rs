@@ -31,6 +31,9 @@ pub mod registrar_usuario;
 pub mod responder_invitacion_amistad;
 pub mod responder_invitacion_grupo;
 pub mod restaurar_sesion;
+pub mod asignar_cuenta_grupo;
+pub mod sincronizar_cambios;
+pub mod cola_offline;
 
 #[cfg(test)]
 mod pruebas_entrega4;
