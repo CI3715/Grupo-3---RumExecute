@@ -20,3 +20,4 @@ class GastoCompartidoRespuesta:
     monto: Decimal
     fecha: datetime
     cuotas: tuple[CuotaRespuesta, ...]
+    es_reintento: bool = False
