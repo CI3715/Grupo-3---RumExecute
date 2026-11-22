@@ -2,6 +2,7 @@ from dataclasses import replace
 from decimal import Decimal as D
 from unittest.mock import Mock
 from uuid import UUID
+from datetime import datetime, timezone
 
 import pytest
 
@@ -12,6 +13,11 @@ from aplicacion.registrar_gasto_compartido import (
 from dominio.balance import Gasto
 from dominio.errores import ErrorDominio
 from dominio.grupo import GrupoCompartido
+from dominio.idempotencia import (
+    calcular_huella,
+    RegistroIdempotenciaGasto
+)
+from dominio.division import dividir_partes_iguales
 
 
 @pytest.fixture
@@ -360,3 +366,45 @@ def test_con_clave_nueva_guarda_el_registro_de_idempotencia(
     assert registro is not None
     assert registro.clave == "clave-abc"
     assert registro.usuario_id == "usuario-1"
+
+def test_reintento_con_misma_huella_no_crea_otro_gasto(
+    caso_uso, persistencia, repo_claves, repositorios
+):
+    _, _, repo_gastos = repositorios
+
+    huella = calcular_huella(
+        grupo_id="grupo-1",
+        concepto="Cena",
+        pagador_id="usuario-1",
+        monto=D("10.00"),
+        tipo_division="IGUALES",
+        participantes_ids=["usuario-1", "usuario-2", "usuario-3"],
+        valores=None,
+    )
+
+    gasto_previo = Gasto(
+        id="gasto-existente",
+        grupo_id="grupo-1",
+        concepto="Cena",
+        pagador_id="usuario-1",
+        monto=D("10.00"),
+        cuotas=dividir_partes_iguales(
+            D("10.00"),
+            {"usuario-1": "ana", "usuario-2": "beto", "usuario-3": "carla"},
+        ),
+        fecha=datetime(2026, 11, 20, 12, 0, tzinfo=timezone.utc)
+    )
+
+    repo_claves.buscar.return_value = RegistroIdempotenciaGasto(
+        clave="clave-abc",
+        usuario_id="usuario-1",
+        huella=huella,
+        gasto_id="gasto-existente",
+    )
+    repo_gastos.obtener.return_value = gasto_previo
+
+    respuesta = registrar(caso_uso, clave="clave-abc")
+
+    persistencia.guardar_gasto.assert_not_called()
+    assert respuesta.creado is False
+    assert respuesta.id == "gasto-existente"

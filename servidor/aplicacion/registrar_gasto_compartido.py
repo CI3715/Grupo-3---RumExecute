@@ -6,7 +6,7 @@ from aplicacion.dtos.gasto_compartido_respuesta import (
     CuotaRespuesta,
     GastoCompartidoRespuesta,
 )
-from aplicacion.errores import GrupoNoEncontrado, UsuarioNoEncontrado
+from aplicacion.errores import GrupoNoEncontrado, UsuarioNoEncontrado, GastoDeClaveNoEncontrado
 from aplicacion.puertos.repositorio_grupos import RepositorioGrupos
 from aplicacion.puertos.repositorio_gastos import RepositorioGastos
 from aplicacion.puertos.repositorio_usuarios import RepositorioUsuarios
@@ -88,7 +88,10 @@ class RegistrarGastoCompartido:
                         "clave",
                         "La clave de idempotencia ya fue usada con datos distintos.",
                     )
-                # mismo gasto: lo resolvemos en el siguiente paso
+                gasto_existente = self.repositorio_gastos.obtener(previo.gasto_id)
+                if gasto_existente is None:
+                    raise GastoDeClaveNoEncontrado()
+                return self._construir_respuesta(gasto_existente, creado=False)
 
             registro_idempotencia = RegistroIdempotenciaGasto(
                 clave=clave_idempotencia,
@@ -218,6 +221,9 @@ class RegistrarGastoCompartido:
         self.persistencia.guardar_gasto(gasto, eventos, registro_idempotencia)
 
         # 9. Construir respuesta pública.
+        return self._construir_respuesta(gasto, creado=True)
+
+    def _construir_respuesta(self, gasto, creado: bool) -> GastoCompartidoRespuesta:
         return GastoCompartidoRespuesta(
             id=gasto.id,
             grupo_id=gasto.grupo_id,
@@ -234,4 +240,5 @@ class RegistrarGastoCompartido:
                 )
                 for cuota in gasto.cuotas
             ),
+            creado=creado,
         )
