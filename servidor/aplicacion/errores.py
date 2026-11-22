@@ -86,3 +86,13 @@ class GrupoNoEncontrado(ErrorAplicacion):
             "grupo",
             "El grupo no existe."
         )
+
+class GastoDeClaveNoEncontrado(ErrorAplicacion):
+    """
+    La clave de idempotencia apunta a un gasto que ya no existe
+    """
+    def __init__(self):
+        super().__init__(
+            "clave",
+            "El gasto asociado a la clave de idempotencia no existe."
+        )
