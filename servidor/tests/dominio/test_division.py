@@ -1,13 +1,27 @@
+from dataclasses import FrozenInstanceError
+
 from decimal import Decimal as D
 import pytest
 
 from dominio.division import (
+    CuotaDivision,
     dividir_partes_iguales,
     dividir_por_montos,
     dividir_por_porcentajes,
     repartir_residuo,
 )
 from dominio.errores import ErrorDominio
+
+def cuota_valida(**cambios):
+    datos = {
+        "usuario_id": "usuario-1",
+        "nombre_usuario": "ana",
+        "monto": D("33.34"),
+        "lleva_residuo": True,
+    }
+
+    datos.update(cambios)
+    return CuotaDivision(**datos)
 
 def como_dict(cuotas):
     return {c.nombre_usuario: (c.monto, c.lleva_residuo) for c in cuotas}
@@ -128,3 +142,116 @@ def test_rechaza_nombres_de_usuario_repetidos_entre_participantes():
     # Dos IDs distintos pero con el mismo username (rompería el orden determinista)
     nombres_con_duplicado = {"id-1": "ana", "id-2": "ana"}
     assert campo(dividir_partes_iguales, D("100.00"), nombres_con_duplicado).campo == "participantes"
+
+def test_crear_cuota_valida():
+    cuota = cuota_valida()
+
+    assert cuota.usuario_id == "usuario-1"
+    assert cuota.nombre_usuario == "ana"
+    assert cuota.monto == D("33.34")
+    assert cuota.lleva_residuo is True
+
+
+def test_cuota_es_inmutable():
+    cuota = cuota_valida()
+
+    with pytest.raises(FrozenInstanceError):
+        cuota.monto = D("50.00")
+
+
+@pytest.mark.parametrize("campo", [
+    "usuario_id",
+    "nombre_usuario",
+])
+def test_cuota_rechaza_identificadores_vacios(campo):
+    with pytest.raises(ErrorDominio) as exc:
+        cuota_valida(**{campo: "   "})
+
+    assert exc.value.campo == campo
+
+
+@pytest.mark.parametrize("monto", [
+    D("-0.01"),
+    D("-10.00"),
+])
+def test_cuota_rechaza_montos_negativos(monto):
+    with pytest.raises(ErrorDominio) as exc:
+        cuota_valida(monto=monto)
+
+    assert exc.value.campo == "monto"
+
+
+@pytest.mark.parametrize("monto", [
+    D("NaN"),
+    D("Infinity"),
+    D("-Infinity"),
+])
+def test_cuota_rechaza_montos_no_finitos(monto):
+    with pytest.raises(ErrorDominio) as exc:
+        cuota_valida(monto=monto)
+
+    assert exc.value.campo == "monto"
+
+
+@pytest.mark.parametrize("monto", [
+    "10.00",
+    10.0,
+    10,
+    None,
+])
+def test_cuota_rechaza_montos_que_no_son_decimal(monto):
+    with pytest.raises(ErrorDominio) as exc:
+        cuota_valida(monto=monto)
+
+    assert exc.value.campo == "monto"
+
+
+@pytest.mark.parametrize("monto", [
+    D("10.001"),
+    D("33.335"),
+    D("0.009"),
+])
+def test_cuota_rechaza_fracciones_de_centimo(monto):
+    with pytest.raises(ErrorDominio) as exc:
+        cuota_valida(monto=monto)
+
+    assert exc.value.campo == "monto"
+
+
+def test_cuota_permite_monto_cero():
+    cuota = cuota_valida(monto=D("0.00"))
+
+    assert cuota.monto == D("0.00")
+
+
+def test_cuota_permite_dos_decimales():
+    cuota = cuota_valida(monto=D("33.34"))
+
+    assert cuota.monto == D("33.34")
+
+
+def test_cuota_permite_decimales_equivalentes():
+    cuota = cuota_valida(monto=D("10.000"))
+
+    assert cuota.monto == D("10.00")
+
+
+@pytest.mark.parametrize("valor", [
+    "True",
+    1,
+    0,
+    None,
+])
+def test_cuota_rechaza_marca_redondeo_no_booleana(valor):
+    with pytest.raises(ErrorDominio) as exc:
+        cuota_valida(lleva_residuo=valor)
+
+    assert exc.value.campo == "lleva_residuo"
+
+
+def test_cuota_permite_ambas_marcas_de_redondeo():
+    con_residuo = cuota_valida(lleva_residuo=True)
+    sin_residuo = cuota_valida(lleva_residuo=False)
+
+    assert con_residuo.lleva_residuo is True
+    assert sin_residuo.lleva_residuo is False
