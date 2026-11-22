@@ -1,4 +1,3 @@
-
 from typing import Protocol
 
 from dominio.balance import Gasto
@@ -49,4 +48,11 @@ class RepositorioGastos(Protocol):
         gasto_id: str,
     ) -> Gasto | None:
         """Devuelve un gasto por su identificador único, o None si no existe."""
+        ...
+
+    def obtener(
+        self,
+        gasto_id: str,
+    ) -> Gasto | None:
+        """Alias de obtener_por_id para compatibilidad."""
         ...

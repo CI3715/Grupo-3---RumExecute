@@ -122,3 +122,5 @@ class RepositorioGastosPostgres(RepositorioGastos, PersistenciaGastoCompartido):
         if not g:
             return None
         return self._mapear_a_dominio(g)
+
+    obtener = obtener_por_id

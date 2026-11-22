@@ -2,6 +2,7 @@ from dataclasses import replace
 from decimal import Decimal as D
 from unittest.mock import Mock
 from uuid import UUID
+from datetime import datetime, timezone
 
 import pytest
 
@@ -12,6 +13,12 @@ from aplicacion.registrar_gasto_compartido import (
 from dominio.balance import Gasto
 from dominio.errores import ErrorDominio
 from dominio.grupo import GrupoCompartido
+from dominio.idempotencia import (
+    calcular_huella,
+    RegistroIdempotenciaGasto,
+    ErrorConflictoIdempotencia
+)
+from dominio.division import dividir_partes_iguales
 
 
 @pytest.fixture
@@ -78,6 +85,7 @@ def registrar(
     valores=None,
     pagador="usuario-1",
     autenticado="usuario-1",
+    clave=None,
 ):
     if participantes is None:
         participantes = ["usuario-1", "usuario-2", "usuario-3"]
@@ -91,8 +99,8 @@ def registrar(
         tipo_division=tipo,
         participantes_ids=participantes,
         valores=valores,
+        clave_idempotencia=clave,
     )
-
 
 def test_registrar_gasto_igualitario(caso_uso, persistencia):
     respuesta = registrar(caso_uso)
@@ -346,7 +354,6 @@ def test_guarda_por_persistencia_y_genera_un_evento_por_participante(
     assert all(e.posicion is None for e in eventos)
     assert sum((e.monto_parte for e in eventos), D("0")) == respuesta.monto
 
-
 def test_guarda_clave_idempotencia_si_se_proporciona(caso_uso, persistencia):
     respuesta = caso_uso.ejecutar(
         usuario_autenticado_id="usuario-1",
@@ -367,88 +374,99 @@ def test_guarda_clave_idempotencia_si_se_proporciona(caso_uso, persistencia):
     assert registro.usuario_id == "usuario-1"
     assert registro.gasto_id == respuesta.id
     assert respuesta.es_reintento is False
+    assert respuesta.creado is True
 
 
-def test_reintento_con_misma_clave_y_datos_devuelve_gasto_existente_sin_guardar_nuevo(
-    caso_uso, persistencia, repo_claves, repositorios
-):
-    from dominio.idempotencia import RegistroIdempotenciaGasto, calcular_huella
-
-    _, _, repo_gastos = repositorios
-    huella_esperada = calcular_huella(
-        grupo_id="grupo-1",
-        concepto="Cena",
-        pagador_id="usuario-1",
-        monto=D("10.00"),
-        tipo_division="IGUALES",
-        participantes_ids=["usuario-1", "usuario-2", "usuario-3"],
-    )
-
-    repo_claves.buscar.return_value = RegistroIdempotenciaGasto(
-        clave="key-repetida",
-        usuario_id="usuario-1",
-        huella=huella_esperada,
-        gasto_id="gasto-existente-uuid",
-    )
-
-    from datetime import datetime, timezone
-    from dominio.division import CuotaDivision
-
-    cuota = CuotaDivision(
-        usuario_id="usuario-1",
-        nombre_usuario="ana",
-        monto=D("10.00"),
-        lleva_residuo=False,
-    )
-    gasto_existente = Gasto(
-        id="gasto-existente-uuid",
-        grupo_id="grupo-1",
-        concepto="Cena",
-        pagador_id="usuario-1",
-        monto=D("10.00"),
-        cuotas=(cuota,),
-        fecha=datetime.now(timezone.utc),
-    )
-    repo_gastos.obtener_por_id.return_value = gasto_existente
-
-    respuesta = caso_uso.ejecutar(
-        usuario_autenticado_id="usuario-1",
-        grupo_id="grupo-1",
-        concepto="Cena",
-        pagador_id="usuario-1",
-        monto=D("10.00"),
-        tipo_division="IGUALES",
-        participantes_ids=["usuario-1", "usuario-2", "usuario-3"],
-        clave_idempotencia="key-repetida",
-    )
-
-    persistencia.guardar_gasto.assert_not_called()
-    assert respuesta.id == "gasto-existente-uuid"
-    assert respuesta.es_reintento is True
-
-
-def test_reintento_con_misma_clave_y_datos_distintos_lanza_error_conflicto(
+def test_con_clave_nueva_guarda_el_registro_de_idempotencia(
     caso_uso, persistencia, repo_claves
 ):
-    from dominio.idempotencia import RegistroIdempotenciaGasto, ErrorConflictoIdempotencia
+    repo_claves.buscar.return_value = None
+
+    registrar(caso_uso, clave="clave-abc")
+
+    repo_claves.buscar.assert_called_once_with("usuario-1", "clave-abc")
+
+    _, _, registro = persistencia.guardar_gasto.call_args.args
+    assert registro is not None
+    assert registro.clave == "clave-abc"
+    assert registro.usuario_id == "usuario-1"
+
+
+def test_reintento_con_misma_huella_no_crea_otro_gasto(
+    caso_uso, persistencia, repo_claves, repositorios
+):
+    _, _, repo_gastos = repositorios
+
+    huella = calcular_huella(
+        grupo_id="grupo-1",
+        concepto="Cena",
+        pagador_id="usuario-1",
+        monto=D("10.00"),
+        tipo_division="IGUALES",
+        participantes_ids=["usuario-1", "usuario-2", "usuario-3"],
+        valores=None,
+    )
+
+    gasto_previo = Gasto(
+        id="gasto-existente",
+        grupo_id="grupo-1",
+        concepto="Cena",
+        pagador_id="usuario-1",
+        monto=D("10.00"),
+        cuotas=dividir_partes_iguales(
+            D("10.00"),
+            {"usuario-1": "ana", "usuario-2": "beto", "usuario-3": "carla"},
+        ),
+        fecha=datetime(2026, 11, 20, 12, 0, tzinfo=timezone.utc),
+    )
 
     repo_claves.buscar.return_value = RegistroIdempotenciaGasto(
-        clave="key-repetida",
+        clave="clave-abc",
         usuario_id="usuario-1",
-        huella="otra-huella-completamente-distinta",
-        gasto_id="gasto-previo-uuid",
+        huella=huella,
+        gasto_id="gasto-existente",
+    )
+    repo_gastos.obtener.return_value = gasto_previo
+    repo_gastos.obtener_por_id.return_value = gasto_previo
+
+    respuesta = registrar(caso_uso, clave="clave-abc")
+
+    persistencia.guardar_gasto.assert_not_called()
+    assert respuesta.creado is False
+    assert respuesta.es_reintento is True
+    assert respuesta.id == "gasto-existente"
+
+
+def test_misma_clave_con_datos_distintos_lanza_conflicto(
+    caso_uso, persistencia, repo_claves
+):
+    huella_otra = calcular_huella(
+        grupo_id="grupo-1",
+        concepto="Almuerzo",
+        pagador_id="usuario-1",
+        monto=D("10.00"),
+        tipo_division="IGUALES",
+        participantes_ids=["usuario-1", "usuario-2", "usuario-3"],
+        valores=None,
+    )
+    repo_claves.buscar.return_value = RegistroIdempotenciaGasto(
+        clave="clave-abc",
+        usuario_id="usuario-1",
+        huella=huella_otra,
+        gasto_id="gasto-existente",
     )
 
     with pytest.raises(ErrorConflictoIdempotencia):
-        caso_uso.ejecutar(
-            usuario_autenticado_id="usuario-1",
-            grupo_id="grupo-1",
-            concepto="Cena",
-            pagador_id="usuario-1",
-            monto=D("10.00"),
-            tipo_division="IGUALES",
-            participantes_ids=["usuario-1", "usuario-2", "usuario-3"],
-            clave_idempotencia="key-repetida",
-        )
+        registrar(caso_uso, clave="clave-abc")
 
     persistencia.guardar_gasto.assert_not_called()
+
+
+def test_sin_clave_no_consulta_ni_guarda_registro_de_idempotencia(
+    caso_uso, persistencia, repo_claves
+):
+    registrar(caso_uso)
+
+    repo_claves.buscar.assert_not_called()
+    _, _, registro = persistencia.guardar_gasto.call_args.args
+    assert registro is None

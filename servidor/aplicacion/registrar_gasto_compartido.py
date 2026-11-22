@@ -6,7 +6,7 @@ from aplicacion.dtos.gasto_compartido_respuesta import (
     CuotaRespuesta,
     GastoCompartidoRespuesta,
 )
-from aplicacion.errores import GrupoNoEncontrado, UsuarioNoEncontrado
+from aplicacion.errores import GrupoNoEncontrado, UsuarioNoEncontrado, GastoDeClaveNoEncontrado
 from aplicacion.puertos.repositorio_grupos import RepositorioGrupos
 from aplicacion.puertos.repositorio_gastos import RepositorioGastos
 from aplicacion.puertos.repositorio_usuarios import RepositorioUsuarios
@@ -66,9 +66,10 @@ class RegistrarGastoCompartido:
         ):
             raise GrupoNoEncontrado()
 
-        # 1.1 Verificar idempotencia previa antes de procesar el gasto
-        huella = None
-        if clave_idempotencia:
+        registro_idempotencia = None
+        id_gasto_nuevo = str(uuid4())
+
+        if clave_idempotencia is not None:
             huella = calcular_huella(
                 grupo_id=grupo.id,
                 concepto=concepto,
@@ -78,41 +79,29 @@ class RegistrarGastoCompartido:
                 participantes_ids=participantes_ids,
                 valores=valores,
             )
-            registro = self.repositorio_claves.buscar(
-                usuario_autenticado_id,
-                clave_idempotencia,
-            )
-            if registro is not None:
-                if registro.huella != huella:
-                    raise ErrorConflictoIdempotencia(
-                        "La clave de idempotencia ya fue utilizada con datos distintos."
-                    )
 
-                # Clave y huella idénticas: retornar gasto existente sin duplicar
-                gasto_existente = self.repositorio_gastos.obtener_por_id(registro.gasto_id)
+            previo = self.repositorio_claves.buscar(usuario_autenticado_id, clave_idempotencia)
+
+            if previo is not None:
+                if previo.huella != huella:
+                    raise ErrorConflictoIdempotencia(
+                        "clave",
+                        "La clave de idempotencia ya fue usada con datos distintos.",
+                    )
+                gasto_existente = self.repositorio_gastos.obtener_por_id(previo.gasto_id)
                 if gasto_existente is None:
                     gastos = self.repositorio_gastos.listar_gastos_de_grupo(grupo.id)
-                    gasto_existente = next((g for g in gastos if g.id == registro.gasto_id), None)
+                    gasto_existente = next((g for g in gastos if g.id == previo.gasto_id), None)
+                if gasto_existente is None:
+                    raise GastoDeClaveNoEncontrado()
+                return self._construir_respuesta(gasto_existente, creado=False)
 
-                if gasto_existente is not None:
-                    return GastoCompartidoRespuesta(
-                        id=gasto_existente.id,
-                        grupo_id=gasto_existente.grupo_id,
-                        concepto=gasto_existente.concepto,
-                        pagador_id=gasto_existente.pagador_id,
-                        monto=gasto_existente.monto,
-                        fecha=gasto_existente.fecha,
-                        cuotas=tuple(
-                            CuotaRespuesta(
-                                usuario_id=cuota.usuario_id,
-                                nombre_usuario=cuota.nombre_usuario,
-                                monto=cuota.monto,
-                                lleva_residuo=cuota.lleva_residuo,
-                            )
-                            for cuota in gasto_existente.cuotas
-                        ),
-                        es_reintento=True,
-                    )
+            registro_idempotencia = RegistroIdempotenciaGasto(
+                clave=clave_idempotencia,
+                usuario_id=usuario_autenticado_id,
+                huella=huella,
+                gasto_id=id_gasto_nuevo,
+            )
 
         # 2. Verificar que el pagador sea miembro.
         if not es_miembro(grupo, pagador_id):
@@ -125,17 +114,17 @@ class RegistrarGastoCompartido:
         if not participantes_ids:
             raise ErrorDominio(
                 "participantes",
-                "Debe haber al menos un participante.",
+                "Debe haber al menos un participante en la división.",
             )
 
-        if len(set(participantes_ids)) != len(participantes_ids):
+        if len(participantes_ids) != len(set(participantes_ids)):
             raise ErrorDominio(
                 "participantes",
                 "No puede haber participantes duplicados.",
             )
 
-        for participante_id in participantes_ids:
-            if not es_miembro(grupo, participante_id):
+        for p_id in participantes_ids:
+            if not es_miembro(grupo, p_id):
                 raise ErrorDominio(
                     "participantes",
                     "Todos los participantes deben pertenecer al grupo.",
@@ -182,7 +171,7 @@ class RegistrarGastoCompartido:
 
             nombres[participante_id] = usuario.nombre_usuario
 
-        # 6. Calcular las cuotas mediante el dominio.
+        # 6. Calcular cuotas según el tipo de división.
         if tipo_division == "IGUALES":
             cuotas = dividir_partes_iguales(
                 monto,
@@ -196,7 +185,7 @@ class RegistrarGastoCompartido:
                 nombres,
             )
 
-        else:
+        elif tipo_division == "MONTOS":
             cuotas = dividir_por_montos(
                 monto,
                 valores,
@@ -205,7 +194,7 @@ class RegistrarGastoCompartido:
 
         # 7. Construir y validar el gasto.
         gasto = Gasto(
-            id=str(uuid4()),
+            id=id_gasto_nuevo,
             grupo_id=grupo.id,
             concepto=concepto,
             pagador_id=pagador_id,
@@ -232,18 +221,12 @@ class RegistrarGastoCompartido:
             for cuota in gasto.cuotas
         )
 
-        registro_idemp = None
-        if clave_idempotencia and huella:
-            registro_idemp = RegistroIdempotenciaGasto(
-                clave=clave_idempotencia,
-                usuario_id=usuario_autenticado_id,
-                huella=huella,
-                gasto_id=gasto.id,
-            )
-
-        self.persistencia.guardar_gasto(gasto, eventos, registro_idemp)
+        self.persistencia.guardar_gasto(gasto, eventos, registro_idempotencia)
 
         # 9. Construir respuesta pública.
+        return self._construir_respuesta(gasto, creado=True)
+
+    def _construir_respuesta(self, gasto, creado: bool) -> GastoCompartidoRespuesta:
         return GastoCompartidoRespuesta(
             id=gasto.id,
             grupo_id=gasto.grupo_id,
@@ -260,4 +243,6 @@ class RegistrarGastoCompartido:
                 )
                 for cuota in gasto.cuotas
             ),
+            creado=creado,
+            es_reintento=not creado,
         )
