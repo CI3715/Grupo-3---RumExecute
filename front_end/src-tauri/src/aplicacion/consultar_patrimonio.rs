@@ -141,6 +141,7 @@ fn reconstruir_cuentas(
                     fecha: datos.fecha.clone(),
                     descripcion: datos.descripcion.clone(),
                     id_movimiento_referenciado: None,
+                    es_gasto_grupo: false,
                 };
                 aplicar_a_cuenta(&mut cuentas, &movimiento)?;
             }
@@ -156,6 +157,23 @@ fn reconstruir_cuentas(
                     fecha: datos.fecha.clone(),
                     descripcion: datos.descripcion.clone(),
                     id_movimiento_referenciado: Some(datos.id_movimiento_original.clone()),
+                    es_gasto_grupo: false,
+                };
+                aplicar_a_cuenta(&mut cuentas, &movimiento)?;
+            }
+            EventoLibro::GastoDeGrupoAplicado { datos, .. }
+                if fecha_del_dia(&datos.fecha) <= fecha_consulta =>
+            {
+                let movimiento = Movimiento {
+                    id: datos.id_movimiento.clone(),
+                    id_cuenta: datos.id_cuenta.clone(),
+                    tipo: TipoMovimiento::Gasto,
+                    monto: datos.monto,
+                    categoria: None,
+                    fecha: datos.fecha.clone(),
+                    descripcion: format!("{} · {}", datos.nombre_grupo, datos.concepto),
+                    id_movimiento_referenciado: None,
+                    es_gasto_grupo: true,
                 };
                 aplicar_a_cuenta(&mut cuentas, &movimiento)?;
             }

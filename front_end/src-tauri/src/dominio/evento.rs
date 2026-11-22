@@ -76,6 +76,20 @@ pub struct DatosMonedaBaseCambiada {
     pub nueva_moneda: CodigoMoneda,
 }
 
+/// Datos específicos asociados a la aplicación inmutable de una parte de gasto de grupo (INV-13, INV-15, RF-COM-10).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DatosGastoDeGrupoAplicado {
+    pub id_evento_servidor: String,
+    pub id_movimiento: String,
+    pub id_cuenta: String,
+    pub grupo_id: String,
+    pub nombre_grupo: String,
+    pub gasto_id: String,
+    pub concepto: String,
+    pub monto: Monto,
+    pub fecha: String,
+}
+
 /// Datos específicos asociados a la creación de una moneda personalizada.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DatosMonedaCreada {
@@ -152,6 +166,13 @@ pub enum EventoLibro {
         momento_registro: String,
         dispositivo_origen: String,
         datos: DatosMonedaCreada,
+    },
+    GastoDeGrupoAplicado {
+        id: String,
+        tipo: String,
+        momento_registro: String,
+        dispositivo_origen: String,
+        datos: DatosGastoDeGrupoAplicado,
     },
 }
 
@@ -284,6 +305,22 @@ impl EventoLibro {
         }
     }
 
+    /// Constructor para un evento inmutable de parte de gasto de grupo aplicada (RF-COM-10, INV-13, INV-15).
+    pub fn nuevo_gasto_de_grupo_aplicado(
+        id: impl Into<String>,
+        momento_registro: impl Into<String>,
+        dispositivo_origen: impl Into<String>,
+        datos: DatosGastoDeGrupoAplicado,
+    ) -> Self {
+        Self::GastoDeGrupoAplicado {
+            id: id.into(),
+            tipo: "gasto_de_grupo_aplicado".to_string(),
+            momento_registro: momento_registro.into(),
+            dispositivo_origen: dispositivo_origen.into(),
+            datos,
+        }
+    }
+
     /// Retorna el ID único del evento.
     pub fn id(&self) -> &str {
         match self {
@@ -294,7 +331,8 @@ impl EventoLibro {
             | EventoLibro::TasaRegistrada { id, .. }
             | EventoLibro::TasaEliminada { id, .. }
             | EventoLibro::MonedaBaseCambiada { id, .. }
-            | EventoLibro::MonedaCreada { id, .. } => id,
+            | EventoLibro::MonedaCreada { id, .. }
+            | EventoLibro::GastoDeGrupoAplicado { id, .. } => id,
         }
     }
 
@@ -308,7 +346,8 @@ impl EventoLibro {
             | EventoLibro::TasaRegistrada { tipo, .. }
             | EventoLibro::TasaEliminada { tipo, .. }
             | EventoLibro::MonedaBaseCambiada { tipo, .. }
-            | EventoLibro::MonedaCreada { tipo, .. } => tipo,
+            | EventoLibro::MonedaCreada { tipo, .. }
+            | EventoLibro::GastoDeGrupoAplicado { tipo, .. } => tipo,
         }
     }
 
@@ -337,6 +376,9 @@ impl EventoLibro {
                 momento_registro, ..
             }
             | EventoLibro::MonedaCreada {
+                momento_registro, ..
+            }
+            | EventoLibro::GastoDeGrupoAplicado {
                 momento_registro, ..
             } => momento_registro,
         }
@@ -368,6 +410,9 @@ impl EventoLibro {
             }
             | EventoLibro::MonedaCreada {
                 dispositivo_origen, ..
+            }
+            | EventoLibro::GastoDeGrupoAplicado {
+                dispositivo_origen, ..
             } => dispositivo_origen,
         }
     }
@@ -378,6 +423,7 @@ impl EventoLibro {
             EventoLibro::CuentaCreada { datos, .. } => Some(&datos.id_cuenta),
             EventoLibro::MovimientoRegistrado { datos, .. } => Some(&datos.id_cuenta),
             EventoLibro::MovimientoCorregido { datos, .. } => Some(&datos.id_cuenta),
+            EventoLibro::GastoDeGrupoAplicado { datos, .. } => Some(&datos.id_cuenta),
             EventoLibro::CategoriaCreada { .. }
             | EventoLibro::TasaRegistrada { .. }
             | EventoLibro::TasaEliminada { .. }

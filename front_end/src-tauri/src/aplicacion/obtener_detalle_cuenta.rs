@@ -77,6 +77,7 @@ pub fn obtener_detalle_cuenta(
                         fecha: datos.fecha,
                         descripcion: datos.descripcion,
                         id_movimiento_referenciado: None,
+                        es_gasto_grupo: false,
                     });
                 }
             }
@@ -91,6 +92,22 @@ pub fn obtener_detalle_cuenta(
                         fecha: datos.fecha,
                         descripcion: datos.descripcion,
                         id_movimiento_referenciado: Some(datos.id_movimiento_original),
+                        es_gasto_grupo: false,
+                    });
+                }
+            }
+            EventoLibro::GastoDeGrupoAplicado { datos, .. } => {
+                if datos.id_cuenta == clean_id {
+                    movimientos.push(Movimiento {
+                        id: datos.id_movimiento,
+                        id_cuenta: datos.id_cuenta,
+                        tipo: TipoMovimiento::Gasto,
+                        monto: datos.monto,
+                        categoria: None,
+                        fecha: datos.fecha,
+                        descripcion: format!("{} · {}", datos.nombre_grupo, datos.concepto),
+                        id_movimiento_referenciado: None,
+                        es_gasto_grupo: true,
                     });
                 }
             }

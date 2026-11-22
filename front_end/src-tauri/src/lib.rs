@@ -102,7 +102,15 @@ pub fn run() {
             comandos::iniciar_sesion,
             comandos::obtener_perfil_propio,
             comandos::cerrar_sesion,
-            comandos::obtener_token_sesion
+            comandos::obtener_token_sesion,
+            comandos::elegir_cuenta_grupo,
+            comandos::sincronizar_cambios,
+            comandos::reiniciar_cursor,
+            comandos::despachar_cola_offline,
+            comandos::encolar_gasto_offline,
+            comandos::listar_cola_offline,
+            comandos::listar_partes_pendientes,
+            comandos::obtener_cuenta_grupo
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -9,6 +9,7 @@ import infraestructura.modelos_bd  # Carga los modelos para que Base los conozca
 from api.rutas_auth import router as router_auth
 from api.rutas_amistades import router as router_amistades
 from api.rutas_grupos import router as router_grupos
+from api.rutas_cambios import router as router_cambios
 
 
 @asynccontextmanager
@@ -47,6 +48,7 @@ app.add_middleware(
 app.include_router(router_auth)
 app.include_router(router_amistades)
 app.include_router(router_grupos)
+app.include_router(router_cambios)
 
 
 # 4. Definición del Endpoint GET /ping

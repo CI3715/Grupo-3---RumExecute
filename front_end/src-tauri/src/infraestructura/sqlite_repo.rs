@@ -1,12 +1,88 @@
+use std::collections::HashMap;
 use std::path::Path;
+use std::str::FromStr;
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
+use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
 
 use crate::aplicacion::puertos::{ErrorRepositorio, RepositorioLibro};
-use crate::dominio::evento::EventoLibro;
+use crate::dominio::evento::{DatosGastoDeGrupoAplicado, EventoLibro};
+use crate::dominio::moneda::CodigoMoneda;
+use crate::dominio::monto::Monto;
+
+// ============================================================================
+// Modelos DTO de Persistencia Local SQLite (Entrega 7)
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CuentaPorGrupo {
+    pub grupo_id: String,
+    pub cuenta_id_personal: String,
+    pub moneda: String,
+    pub actualizado_en: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PartePendienteLocal {
+    pub id: String,
+    pub id_evento_servidor: String,
+    pub posicion: i64,
+    pub grupo_id: String,
+    pub nombre_grupo: String,
+    pub gasto_id: String,
+    pub concepto: String,
+    pub monto: String,
+    pub moneda: String,
+    pub fecha: String,
+    pub incluye_redondeo: bool,
+    pub recibido_en: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OperacionGastoOffline {
+    pub id: String,
+    pub idempotency_key: String,
+    pub grupo_id: String,
+    pub concepto: String,
+    pub monto: String,
+    pub pagador_id: String,
+    pub regla_division: String,
+    pub participantes: Vec<String>,
+    pub valores: Option<HashMap<String, String>>,
+    pub creado_en: String,
+    pub estado: String,
+    pub error_mensaje: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventoServidorRecibido {
+    pub id: String,
+    pub posicion: i64,
+    pub usuario_id: String,
+    pub grupo_id: String,
+    pub nombre_grupo: String,
+    pub gasto_id: String,
+    pub concepto: String,
+    pub fecha: String,
+    pub moneda: String,
+    pub monto_parte: Decimal,
+    pub incluye_redondeo: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResultadoSincronizacionLocal {
+    pub eventos_aplicados: usize,
+    pub partes_pendientes: usize,
+    pub nuevo_cursor: i64,
+}
+
+// ============================================================================
+// Repositorio SQLite
+// ============================================================================
 
 pub struct RepositorioLibroSqlite {
-    conexion: Connection,
+    pub(crate) conexion: Connection,
 }
 
 impl RepositorioLibroSqlite {
@@ -18,6 +94,8 @@ impl RepositorioLibroSqlite {
             .execute_batch(
                 "
                 PRAGMA foreign_keys = ON;
+
+                -- 1. Libro contable append-only protegido por triggers (Entregas 1-4)
                 CREATE TABLE IF NOT EXISTS eventos_libro (
                     secuencia INTEGER PRIMARY KEY AUTOINCREMENT,
                     id TEXT NOT NULL UNIQUE,
@@ -36,6 +114,62 @@ impl RepositorioLibroSqlite {
                 BEGIN
                     SELECT RAISE(ABORT, 'Los eventos del libro son inmutables');
                 END;
+
+                -- 2. Índice único de eventos del servidor ya aplicados (INV-13, INV-15)
+                CREATE TABLE IF NOT EXISTS local_eventos_servidor_aplicados (
+                    id_evento_servidor TEXT PRIMARY KEY,
+                    evento_libro_id TEXT NOT NULL,
+                    aplicado_en TEXT NOT NULL
+                );
+
+                -- 3. Elección local de cuenta personal por grupo (INV-16, INV-18)
+                CREATE TABLE IF NOT EXISTS local_cuentas_por_grupo (
+                    grupo_id TEXT PRIMARY KEY,
+                    cuenta_id_personal TEXT NOT NULL,
+                    moneda TEXT NOT NULL,
+                    actualizado_en TEXT NOT NULL
+                );
+
+                -- 4. Partes pendientes de aplicar cuando un grupo no tiene cuenta elegida (INV-18)
+                CREATE TABLE IF NOT EXISTS local_partes_pendientes (
+                    id TEXT PRIMARY KEY,
+                    id_evento_servidor TEXT NOT NULL UNIQUE,
+                    posicion INTEGER NOT NULL,
+                    grupo_id TEXT NOT NULL,
+                    nombre_grupo TEXT NOT NULL,
+                    gasto_id TEXT NOT NULL,
+                    concepto TEXT NOT NULL,
+                    monto TEXT NOT NULL,
+                    moneda TEXT NOT NULL,
+                    fecha TEXT NOT NULL,
+                    incluye_redondeo INTEGER NOT NULL DEFAULT 0,
+                    recibido_en TEXT NOT NULL
+                );
+
+                -- 5. Control de cursor de sincronización unidireccional (INV-14)
+                CREATE TABLE IF NOT EXISTS local_sincronizacion_cursor (
+                    id INTEGER PRIMARY KEY,
+                    ultimo_cursor INTEGER NOT NULL DEFAULT 0,
+                    fecha_ultima_sincronizacion TEXT
+                );
+                INSERT OR IGNORE INTO local_sincronizacion_cursor (id, ultimo_cursor, fecha_ultima_sincronizacion)
+                VALUES (1, 0, NULL);
+
+                -- 6. Cola local de gastos sin conexión (RNF-17, ESC-09)
+                CREATE TABLE IF NOT EXISTS local_cola_gastos_offline (
+                    id TEXT PRIMARY KEY,
+                    idempotency_key TEXT NOT NULL UNIQUE,
+                    grupo_id TEXT NOT NULL,
+                    concepto TEXT NOT NULL,
+                    monto TEXT NOT NULL,
+                    pagador_id TEXT NOT NULL,
+                    regla_division TEXT NOT NULL,
+                    participantes_json TEXT NOT NULL,
+                    valores_json TEXT,
+                    creado_en TEXT NOT NULL,
+                    estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+                    error_mensaje TEXT
+                );
                 ",
             )
             .map_err(|error| {
@@ -43,6 +177,493 @@ impl RepositorioLibroSqlite {
             })?;
 
         Ok(Self { conexion })
+    }
+
+    // --- Métodos de Asignación de Cuenta por Grupo (INV-18) ---
+
+    pub fn asignar_cuenta_grupo(
+        &mut self,
+        grupo_id: &str,
+        cuenta_id: &str,
+        moneda: &str,
+        momento_actual: &str,
+        dispositivo: &str,
+    ) -> Result<usize, ErrorRepositorio> {
+        let tx = self
+            .conexion
+            .transaction()
+            .map_err(|e| ErrorRepositorio(format!("Error iniciando transacción SQLite: {e}")))?;
+
+        // Guardar la asignación de cuenta por grupo
+        tx.execute(
+            "INSERT INTO local_cuentas_por_grupo (grupo_id, cuenta_id_personal, moneda, actualizado_en)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(grupo_id) DO UPDATE SET
+                cuenta_id_personal = excluded.cuenta_id_personal,
+                moneda = excluded.moneda,
+                actualizado_en = excluded.actualizado_en",
+            params![grupo_id, cuenta_id, moneda, momento_actual],
+        )
+        .map_err(|e| ErrorRepositorio(format!("Error guardando cuenta de grupo: {e}")))?;
+
+        // Buscar partes pendientes para este grupo y aplicarlas automáticamente (INV-18 / Subtarea 2.3)
+        let mut consulta = tx
+            .prepare(
+                "SELECT id, id_evento_servidor, grupo_id, nombre_grupo, gasto_id, concepto, monto, moneda, fecha
+                 FROM local_partes_pendientes WHERE grupo_id = ?1",
+            )
+            .map_err(|e| ErrorRepositorio(format!("Error consultando partes pendientes: {e}")))?;
+
+        let filas = consulta
+            .query_map(params![grupo_id], |fila| {
+                Ok((
+                    fila.get::<_, String>(0)?,
+                    fila.get::<_, String>(1)?,
+                    fila.get::<_, String>(2)?,
+                    fila.get::<_, String>(3)?,
+                    fila.get::<_, String>(4)?,
+                    fila.get::<_, String>(5)?,
+                    fila.get::<_, String>(6)?,
+                    fila.get::<_, String>(7)?,
+                    fila.get::<_, String>(8)?,
+                ))
+            })
+            .map_err(|e| ErrorRepositorio(format!("Error leyendo partes pendientes: {e}")))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| ErrorRepositorio(format!("Error extrayendo partes pendientes: {e}")))?;
+
+        drop(consulta);
+
+        let mut aplicadas = 0;
+        for (_id_parte, id_ev_servidor, g_id, nom_g, gasto_id, concepto, monto_str, mon, fecha) in filas {
+            if mon.trim().eq_ignore_ascii_case(moneda.trim()) {
+                let monto_dec = Decimal::from_str(&monto_str)
+                    .map_err(|e| ErrorRepositorio(format!("Error convirtiendo monto decimal: {e}")))?;
+                let cod_moneda = CodigoMoneda::parse(&mon)
+                    .map_err(|e| ErrorRepositorio(format!("Moneda inválida: {e:?}")))?;
+                let monto_obj = Monto::new(monto_dec, cod_moneda);
+
+                let id_evento_local = uuid::Uuid::new_v4().to_string();
+                let id_movimiento = uuid::Uuid::new_v4().to_string();
+
+                let datos = DatosGastoDeGrupoAplicado {
+                    id_evento_servidor: id_ev_servidor.clone(),
+                    id_movimiento,
+                    id_cuenta: cuenta_id.to_string(),
+                    grupo_id: g_id,
+                    nombre_grupo: nom_g,
+                    gasto_id,
+                    concepto,
+                    monto: monto_obj,
+                    fecha,
+                };
+
+                let ev_libro = EventoLibro::nuevo_gasto_de_grupo_aplicado(
+                    &id_evento_local,
+                    momento_actual,
+                    dispositivo,
+                    datos,
+                );
+
+                let json = serde_json::to_string(&ev_libro)
+                    .map_err(|e| ErrorRepositorio(format!("Error serializando evento: {e}")))?;
+
+                tx.execute(
+                    "INSERT INTO eventos_libro (id, tipo, momento_registro, dispositivo_origen, evento_json)
+                     VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![
+                        ev_libro.id(),
+                        ev_libro.tipo(),
+                        ev_libro.momento_registro(),
+                        ev_libro.dispositivo_origen(),
+                        json
+                    ],
+                )
+                .map_err(|e| ErrorRepositorio(format!("Error insertando en eventos_libro: {e}")))?;
+
+                tx.execute(
+                    "INSERT INTO local_eventos_servidor_aplicados (id_evento_servidor, evento_libro_id, aplicado_en)
+                     VALUES (?1, ?2, ?3)",
+                    params![id_ev_servidor, id_evento_local, momento_actual],
+                )
+                .map_err(|e| ErrorRepositorio(format!("Error registrando evento servidor: {e}")))?;
+
+                tx.execute(
+                    "DELETE FROM local_partes_pendientes WHERE id_evento_servidor = ?1",
+                    params![id_ev_servidor],
+                )
+                .map_err(|e| ErrorRepositorio(format!("Error eliminando parte pendiente: {e}")))?;
+
+                aplicadas += 1;
+            }
+        }
+
+        tx.commit()
+            .map_err(|e| ErrorRepositorio(format!("Error en commit de asignación de cuenta: {e}")))?;
+
+        Ok(aplicadas)
+    }
+
+    pub fn obtener_cuenta_grupo(&self, grupo_id: &str) -> Result<Option<CuentaPorGrupo>, ErrorRepositorio> {
+        let fila = self
+            .conexion
+            .query_row(
+                "SELECT grupo_id, cuenta_id_personal, moneda, actualizado_en FROM local_cuentas_por_grupo WHERE grupo_id = ?1",
+                params![grupo_id],
+                |r| {
+                    Ok(CuentaPorGrupo {
+                        grupo_id: r.get(0)?,
+                        cuenta_id_personal: r.get(1)?,
+                        moneda: r.get(2)?,
+                        actualizado_en: r.get(3)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(|e| ErrorRepositorio(format!("Error consultando cuenta por grupo: {e}")))?;
+
+        Ok(fila)
+    }
+
+    pub fn listar_cuentas_por_grupo(&self) -> Result<Vec<CuentaPorGrupo>, ErrorRepositorio> {
+        let mut prep = self
+            .conexion
+            .prepare("SELECT grupo_id, cuenta_id_personal, moneda, actualizado_en FROM local_cuentas_por_grupo")
+            .map_err(|e| ErrorRepositorio(format!("Error preparando consulta: {e}")))?;
+
+        let iter = prep
+            .query_map([], |r| {
+                Ok(CuentaPorGrupo {
+                    grupo_id: r.get(0)?,
+                    cuenta_id_personal: r.get(1)?,
+                    moneda: r.get(2)?,
+                    actualizado_en: r.get(3)?,
+                })
+            })
+            .map_err(|e| ErrorRepositorio(format!("Error leyendo cuentas por grupo: {e}")))?;
+
+        let mut res = Vec::new();
+        for item in iter {
+            res.push(item.map_err(|e| ErrorRepositorio(format!("Error mapeando fila: {e}")))?);
+        }
+        Ok(res)
+    }
+
+    // --- Métodos de Partes Pendientes (INV-18) ---
+
+    pub fn listar_partes_pendientes(&self) -> Result<Vec<PartePendienteLocal>, ErrorRepositorio> {
+        let mut prep = self
+            .conexion
+            .prepare(
+                "SELECT id, id_evento_servidor, posicion, grupo_id, nombre_grupo, gasto_id, concepto, monto, moneda, fecha, incluye_redondeo, recibido_en
+                 FROM local_partes_pendientes ORDER BY posicion ASC",
+            )
+            .map_err(|e| ErrorRepositorio(format!("Error preparando consulta de partes pendientes: {e}")))?;
+
+        let iter = prep
+            .query_map([], |r| {
+                let redondeo_int: i32 = r.get(10)?;
+                Ok(PartePendienteLocal {
+                    id: r.get(0)?,
+                    id_evento_servidor: r.get(1)?,
+                    posicion: r.get(2)?,
+                    grupo_id: r.get(3)?,
+                    nombre_grupo: r.get(4)?,
+                    gasto_id: r.get(5)?,
+                    concepto: r.get(6)?,
+                    monto: r.get(7)?,
+                    moneda: r.get(8)?,
+                    fecha: r.get(9)?,
+                    incluye_redondeo: redondeo_int != 0,
+                    recibido_en: r.get(11)?,
+                })
+            })
+            .map_err(|e| ErrorRepositorio(format!("Error consultando partes pendientes: {e}")))?;
+
+        let mut res = Vec::new();
+        for item in iter {
+            res.push(item.map_err(|e| ErrorRepositorio(format!("Error mapeando parte pendiente: {e}")))?);
+        }
+        Ok(res)
+    }
+
+    // --- Métodos de Cursor de Sincronización (INV-14) ---
+
+    pub fn obtener_ultimo_cursor(&self) -> Result<i64, ErrorRepositorio> {
+        let cursor: i64 = self
+            .conexion
+            .query_row(
+                "SELECT ultimo_cursor FROM local_sincronizacion_cursor WHERE id = 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        Ok(cursor)
+    }
+
+    pub fn reiniciar_cursor(&mut self) -> Result<(), ErrorRepositorio> {
+        self.conexion
+            .execute(
+                "UPDATE local_sincronizacion_cursor SET ultimo_cursor = 0 WHERE id = 1",
+                [],
+            )
+            .map_err(|e| ErrorRepositorio(format!("Error reiniciando cursor SQLite: {e}")))?;
+        Ok(())
+    }
+
+    // --- Transacción SQLite Atómica de Sincronización de Lote (Subtarea 3.3 / INV-13, 14, 15) ---
+
+    pub fn aplicar_lote_cambios(
+        &mut self,
+        eventos_servidor: &[EventoServidorRecibido],
+        nuevo_cursor: i64,
+        momento_actual: &str,
+        dispositivo: &str,
+    ) -> Result<ResultadoSincronizacionLocal, ErrorRepositorio> {
+        let tx = self
+            .conexion
+            .transaction()
+            .map_err(|e| ErrorRepositorio(format!("Error iniciando transacción SQLite: {e}")))?;
+
+        let mut eventos_aplicados = 0;
+        let mut partes_pendientes = 0;
+
+        for ev in eventos_servidor {
+            // INV-13 / INV-15: Si el evento del servidor ya fue aplicado, se ignora
+            let ya_aplicado: bool = tx
+                .query_row(
+                    "SELECT 1 FROM local_eventos_servidor_aplicados WHERE id_evento_servidor = ?1",
+                    params![ev.id],
+                    |_| Ok(true),
+                )
+                .optional()
+                .map_err(|e| ErrorRepositorio(format!("Error verificando evento aplicado: {e}")))?
+                .unwrap_or(false);
+
+            if ya_aplicado {
+                continue;
+            }
+
+            // Consultar si hay una cuenta asignada a este grupo
+            let cuenta_asignada: Option<(String, String)> = tx
+                .query_row(
+                    "SELECT cuenta_id_personal, moneda FROM local_cuentas_por_grupo WHERE grupo_id = ?1",
+                    params![ev.grupo_id],
+                    |fila| Ok((fila.get(0)?, fila.get(1)?)),
+                )
+                .optional()
+                .map_err(|e| ErrorRepositorio(format!("Error consultando cuenta de grupo: {e}")))?;
+
+            if let Some((id_cuenta, moneda_cuenta)) = cuenta_asignada {
+                if moneda_cuenta.trim().eq_ignore_ascii_case(ev.moneda.trim()) {
+                    // Hay cuenta y la moneda coincide exactamente (INV-18)
+                    let cod_moneda = CodigoMoneda::parse(&ev.moneda)
+                        .map_err(|e| ErrorRepositorio(format!("Moneda inválida: {e:?}")))?;
+                    let monto_obj = Monto::new(ev.monto_parte, cod_moneda);
+                    let id_evento_local = uuid::Uuid::new_v4().to_string();
+                    let id_movimiento = uuid::Uuid::new_v4().to_string();
+
+                    let datos = DatosGastoDeGrupoAplicado {
+                        id_evento_servidor: ev.id.clone(),
+                        id_movimiento,
+                        id_cuenta,
+                        grupo_id: ev.grupo_id.clone(),
+                        nombre_grupo: ev.nombre_grupo.clone(),
+                        gasto_id: ev.gasto_id.clone(),
+                        concepto: ev.concepto.clone(),
+                        monto: monto_obj,
+                        fecha: ev.fecha.clone(),
+                    };
+
+                    let ev_libro = EventoLibro::nuevo_gasto_de_grupo_aplicado(
+                        &id_evento_local,
+                        momento_actual,
+                        dispositivo,
+                        datos,
+                    );
+
+                    let json = serde_json::to_string(&ev_libro).map_err(|e| {
+                        ErrorRepositorio(format!("Error serializando evento: {e}"))
+                    })?;
+
+                    tx.execute(
+                        "INSERT INTO eventos_libro (id, tipo, momento_registro, dispositivo_origen, evento_json)
+                         VALUES (?1, ?2, ?3, ?4, ?5)",
+                        params![
+                            ev_libro.id(),
+                            ev_libro.tipo(),
+                            ev_libro.momento_registro(),
+                            ev_libro.dispositivo_origen(),
+                            json
+                        ],
+                    )
+                    .map_err(|e| ErrorRepositorio(format!("Error insertando en eventos_libro: {e}")))?;
+
+                    tx.execute(
+                        "INSERT INTO local_eventos_servidor_aplicados (id_evento_servidor, evento_libro_id, aplicado_en)
+                         VALUES (?1, ?2, ?3)",
+                        params![ev.id, id_evento_local, momento_actual],
+                    )
+                    .map_err(|e| ErrorRepositorio(format!("Error registrando evento servidor: {e}")))?;
+
+                    // Si estaba en partes pendientes, eliminarlo
+                    tx.execute(
+                        "DELETE FROM local_partes_pendientes WHERE id_evento_servidor = ?1",
+                        params![ev.id],
+                    )
+                    .map_err(|e| ErrorRepositorio(format!("Error limpiando parte pendiente: {e}")))?;
+
+                    eventos_aplicados += 1;
+                    continue;
+                }
+            }
+
+            // Si no hay cuenta asignada o no coincide la moneda, va a pendientes de aplicar (INV-18)
+            let id_parte = uuid::Uuid::new_v4().to_string();
+            let incluye_redondeo_int = if ev.incluye_redondeo { 1 } else { 0 };
+            tx.execute(
+                "INSERT OR REPLACE INTO local_partes_pendientes
+                    (id, id_evento_servidor, posicion, grupo_id, nombre_grupo, gasto_id, concepto, monto, moneda, fecha, incluye_redondeo, recibido_en)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                params![
+                    id_parte,
+                    ev.id,
+                    ev.posicion,
+                    ev.grupo_id,
+                    ev.nombre_grupo,
+                    ev.gasto_id,
+                    ev.concepto,
+                    ev.monto_parte.to_string(),
+                    ev.moneda,
+                    ev.fecha,
+                    incluye_redondeo_int,
+                    momento_actual
+                ],
+            )
+            .map_err(|e| ErrorRepositorio(format!("Error guardando parte pendiente: {e}")))?;
+
+            partes_pendientes += 1;
+        }
+
+        // Actualizar el cursor dentro de la MISMA transacción atómica (INV-14)
+        tx.execute(
+            "UPDATE local_sincronizacion_cursor SET ultimo_cursor = ?1, fecha_ultima_sincronizacion = ?2 WHERE id = 1",
+            params![nuevo_cursor, momento_actual],
+        )
+        .map_err(|e| ErrorRepositorio(format!("Error actualizando cursor SQLite: {e}")))?;
+
+        tx.commit()
+            .map_err(|e| ErrorRepositorio(format!("Error haciendo commit del lote de sincronización: {e}")))?;
+
+        Ok(ResultadoSincronizacionLocal {
+            eventos_aplicados,
+            partes_pendientes,
+            nuevo_cursor,
+        })
+    }
+
+    // --- Métodos de la Cola Offline (RNF-17, ESC-09) ---
+
+    pub fn encolar_gasto_offline(&mut self, op: &OperacionGastoOffline) -> Result<(), ErrorRepositorio> {
+        let participantes_json = serde_json::to_string(&op.participantes)
+            .map_err(|e| ErrorRepositorio(format!("Error serializando participantes: {e}")))?;
+        let valores_json = op
+            .valores
+            .as_ref()
+            .map(|v| serde_json::to_string(v))
+            .transpose()
+            .map_err(|e| ErrorRepositorio(format!("Error serializando valores: {e}")))?;
+
+        self.conexion
+            .execute(
+                "INSERT INTO local_cola_gastos_offline
+                    (id, idempotency_key, grupo_id, concepto, monto, pagador_id, regla_division, participantes_json, valores_json, creado_en, estado, error_mensaje)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                params![
+                    op.id,
+                    op.idempotency_key,
+                    op.grupo_id,
+                    op.concepto,
+                    op.monto,
+                    op.pagador_id,
+                    op.regla_division,
+                    participantes_json,
+                    valores_json,
+                    op.creado_en,
+                    op.estado,
+                    op.error_mensaje,
+                ],
+            )
+            .map_err(|e| ErrorRepositorio(format!("Error encolando gasto offline: {e}")))?;
+
+        Ok(())
+    }
+
+    pub fn listar_cola_offline(&self) -> Result<Vec<OperacionGastoOffline>, ErrorRepositorio> {
+        let mut prep = self
+            .conexion
+            .prepare(
+                "SELECT id, idempotency_key, grupo_id, concepto, monto, pagador_id, regla_division, participantes_json, valores_json, creado_en, estado, error_mensaje
+                 FROM local_cola_gastos_offline ORDER BY creado_en ASC",
+            )
+            .map_err(|e| ErrorRepositorio(format!("Error preparando consulta de cola offline: {e}")))?;
+
+        let iter = prep
+            .query_map([], |r| {
+                let part_json: String = r.get(7)?;
+                let val_json: Option<String> = r.get(8)?;
+
+                let participantes: Vec<String> = serde_json::from_str(&part_json).unwrap_or_default();
+                let valores: Option<HashMap<String, String>> = val_json
+                    .and_then(|j| serde_json::from_str(&j).ok());
+
+                Ok(OperacionGastoOffline {
+                    id: r.get(0)?,
+                    idempotency_key: r.get(1)?,
+                    grupo_id: r.get(2)?,
+                    concepto: r.get(3)?,
+                    monto: r.get(4)?,
+                    pagador_id: r.get(5)?,
+                    regla_division: r.get(6)?,
+                    participantes,
+                    valores,
+                    creado_en: r.get(9)?,
+                    estado: r.get(10)?,
+                    error_mensaje: r.get(11)?,
+                })
+            })
+            .map_err(|e| ErrorRepositorio(format!("Error consultando cola offline: {e}")))?;
+
+        let mut res = Vec::new();
+        for item in iter {
+            res.push(item.map_err(|e| ErrorRepositorio(format!("Error leyendo elemento de cola: {e}")))?);
+        }
+        Ok(res)
+    }
+
+    pub fn actualizar_estado_cola_offline(
+        &mut self,
+        id: &str,
+        estado: &str,
+        error: Option<&str>,
+    ) -> Result<(), ErrorRepositorio> {
+        self.conexion
+            .execute(
+                "UPDATE local_cola_gastos_offline SET estado = ?1, error_mensaje = ?2 WHERE id = ?3",
+                params![estado, error, id],
+            )
+            .map_err(|e| ErrorRepositorio(format!("Error actualizando estado en cola offline: {e}")))?;
+        Ok(())
+    }
+
+    pub fn eliminar_cola_offline(&mut self, id: &str) -> Result<(), ErrorRepositorio> {
+        self.conexion
+            .execute(
+                "DELETE FROM local_cola_gastos_offline WHERE id = ?1",
+                params![id],
+            )
+            .map_err(|e| ErrorRepositorio(format!("Error eliminando de cola offline: {e}")))?;
+        Ok(())
     }
 }
 
@@ -194,5 +815,81 @@ mod tests {
         }
 
         assert_eq!(repo.listar_eventos().unwrap(), eventos);
+    }
+
+    #[test]
+    fn sincronizacion_atomica_idempotencia_y_partes_pendientes() {
+        let mut repo = RepositorioLibroSqlite::abrir(":memory:").unwrap();
+
+        // 1. Crear un evento servidor
+        let evento_srv = EventoServidorRecibido {
+            id: "ev-srv-001".to_string(),
+            posicion: 1,
+            usuario_id: "user-beto".to_string(),
+            grupo_id: "grupo-viaje".to_string(),
+            nombre_grupo: "Viaje a Mérida".to_string(),
+            gasto_id: "gasto-hotel".to_string(),
+            concepto: "Hotel".to_string(),
+            fecha: "2026-10-07T20:00:00Z".to_string(),
+            moneda: "USD".to_string(),
+            monto_parte: Decimal::new(3333, 2), // 33.33
+            incluye_redondeo: false,
+        };
+
+        // 2. Aplicar lote sin cuenta asignada al grupo -> Va a partes pendientes
+        let res1 = repo
+            .aplicar_lote_cambios(&[evento_srv.clone()], 1, "2026-10-07T20:01:00Z", "disp-1")
+            .unwrap();
+
+        assert_eq!(res1.eventos_aplicados, 0);
+        assert_eq!(res1.partes_pendientes, 1);
+        assert_eq!(res1.nuevo_cursor, 1);
+        assert_eq!(repo.obtener_ultimo_cursor().unwrap(), 1);
+
+        let pendientes = repo.listar_partes_pendientes().unwrap();
+        assert_eq!(pendientes.len(), 1);
+        assert_eq!(pendientes[0].concepto, "Hotel");
+
+        // 3. Re-aplicar el mismo lote (o reiniciar cursor y re-aplicar) -> no duplica pendientes
+        let res_reintento = repo
+            .aplicar_lote_cambios(&[evento_srv.clone()], 1, "2026-10-07T20:02:00Z", "disp-1")
+            .unwrap();
+        assert_eq!(res_reintento.partes_pendientes, 1);
+        let pendientes_reintento = repo.listar_partes_pendientes().unwrap();
+        assert_eq!(pendientes_reintento.len(), 1); // No duplicado
+
+        // 4. Usuario elige cuenta personal para el grupo -> se aplica automáticamente la parte pendiente
+        let aplicadas = repo
+            .asignar_cuenta_grupo("grupo-viaje", "cuenta-efectivo-usd", "USD", "2026-10-07T20:05:00Z", "disp-1")
+            .unwrap();
+        assert_eq!(aplicadas, 1);
+
+        // Ya no hay partes pendientes
+        assert_eq!(repo.listar_partes_pendientes().unwrap().len(), 0);
+
+        // Se creó el evento GastoDeGrupoAplicado en el libro local
+        let eventos_libro = repo.listar_eventos().unwrap();
+        assert_eq!(eventos_libro.len(), 1);
+        if let EventoLibro::GastoDeGrupoAplicado { datos, .. } = &eventos_libro[0] {
+            assert_eq!(datos.id_evento_servidor, "ev-srv-001");
+            assert_eq!(datos.id_cuenta, "cuenta-efectivo-usd");
+            assert_eq!(datos.monto.cantidad, Decimal::new(3333, 2));
+        } else {
+            panic!("Se esperaba GastoDeGrupoAplicado");
+        }
+
+        // 5. Demostración Paso 3: Reiniciar cursor a 0 y re-sincronizar el mismo evento
+        repo.reiniciar_cursor().unwrap();
+        assert_eq!(repo.obtener_ultimo_cursor().unwrap(), 0);
+
+        let res_demo = repo
+            .aplicar_lote_cambios(&[evento_srv], 1, "2026-10-07T20:10:00Z", "disp-1")
+            .unwrap();
+
+        // Como ya fue aplicado (INV-13 / INV-15), no hace nada: 0 aplicados, 0 pendientes
+        assert_eq!(res_demo.eventos_aplicados, 0);
+        assert_eq!(res_demo.partes_pendientes, 0);
+        assert_eq!(repo.listar_eventos().unwrap().len(), 1); // No se duplicó el evento
+        assert_eq!(repo.obtener_ultimo_cursor().unwrap(), 1); // El cursor avanzó normalmente
     }
 }

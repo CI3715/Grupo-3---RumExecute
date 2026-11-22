@@ -42,6 +42,8 @@ pub struct Movimiento {
     pub descripcion: String,
     /// Presente si es un Ajuste (INV-04), referencia al movimiento original.
     pub id_movimiento_referenciado: Option<String>,
+    #[serde(default)]
+    pub es_gasto_grupo: bool,
 }
 
 impl Movimiento {
@@ -93,6 +95,7 @@ impl Movimiento {
             fecha: fecha.trim().to_string(),
             descripcion: descripcion.into().trim().to_string(),
             id_movimiento_referenciado: None,
+            es_gasto_grupo: false,
         })
     }
 
@@ -147,6 +150,7 @@ impl Movimiento {
             fecha: fecha.trim().to_string(),
             descripcion: descripcion.into().trim().to_string(),
             id_movimiento_referenciado: None,
+            es_gasto_grupo: false,
         })
     }
 
@@ -200,7 +204,31 @@ impl Movimiento {
             fecha: fecha.trim().to_string(),
             descripcion: descripcion.into().trim().to_string(),
             id_movimiento_referenciado: Some(id_original),
+            es_gasto_grupo: false,
         })
+    }
+
+    /// Crea un movimiento correspondiente a una parte de gasto de grupo aplicada (RF-COM-10).
+    /// El movimiento se marca con `es_gasto_grupo = true` y concepto "<Grupo> · <Concepto>".
+    pub fn nuevo_gasto_grupo(
+        id: impl Into<String>,
+        id_cuenta: impl Into<String>,
+        monto: Monto,
+        nombre_grupo: &str,
+        concepto: &str,
+        fecha: &str,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            id_cuenta: id_cuenta.into(),
+            tipo: TipoMovimiento::Gasto,
+            monto,
+            categoria: None,
+            fecha: fecha.trim().to_string(),
+            descripcion: format!("{} · {}", nombre_grupo.trim(), concepto.trim()),
+            id_movimiento_referenciado: None,
+            es_gasto_grupo: true,
+        }
     }
 
     /// Crea un movimiento de Ajuste a partir de un movimiento original y el nuevo monto corregido (INV-04).

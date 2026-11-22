@@ -333,3 +333,256 @@ pub fn cerrar_sesion() -> Result<(), String> {
 pub fn obtener_token_sesion() -> Result<Option<String>, String> {
     crate::infraestructura::cliente_auth::obtener_token_keyring()
 }
+
+// ============================================================================
+// Comandos de Sincronización, Elección de Cuentas y Cola Offline (Entrega 7)
+// ============================================================================
+
+use crate::aplicacion::puertos::Reloj;
+
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
+pub struct ResultadoElegirCuentaDto {
+    pub grupo_id: String,
+    pub cuenta_id: String,
+    pub partes_aplicadas: usize,
+}
+
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
+pub struct ResultadoSincronizacionDto {
+    pub eventos_aplicados: usize,
+    pub partes_pendientes: usize,
+    pub nuevo_cursor: i64,
+    pub quedan_mas: bool,
+    pub operaciones_offline_despachadas: usize,
+}
+
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
+pub struct ResultadoDespachoColaDto {
+    pub total_procesadas: usize,
+    pub exitosas: usize,
+    pub con_error: usize,
+}
+
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
+pub struct EntradaEncolarGastoDto {
+    pub grupo_id: String,
+    pub concepto: String,
+    pub monto: String,
+    pub pagador_id: String,
+    pub regla_division: String,
+    pub participantes: Vec<String>,
+    pub valores: Option<std::collections::HashMap<String, String>>,
+}
+
+#[tauri::command]
+pub fn elegir_cuenta_grupo(
+    grupo_id: String,
+    cuenta_id: String,
+    moneda: String,
+    repositorio: State<'_, Mutex<RepositorioLibroSqlite>>,
+) -> Result<ResultadoElegirCuentaDto, String> {
+    let momento_actual = RelojSistema.ahora();
+    let mut repo = repositorio
+        .lock()
+        .map_err(|e| format!("No se pudo acceder a la BD local: {e}"))?;
+
+    let partes_aplicadas = repo
+        .asignar_cuenta_grupo(&grupo_id, &cuenta_id, &moneda, &momento_actual, "app-desktop")
+        .map_err(|e| e.0)?;
+
+    Ok(ResultadoElegirCuentaDto {
+        grupo_id,
+        cuenta_id,
+        partes_aplicadas,
+    })
+}
+
+#[tauri::command]
+pub async fn sincronizar_cambios(
+    repositorio: State<'_, Mutex<RepositorioLibroSqlite>>,
+) -> Result<ResultadoSincronizacionDto, String> {
+    // 1. Despachar primero cualquier elemento pendiente en la cola offline (RNF-17 / ESC-09)
+    let ops_despachadas = despachar_cola_offline_interno(&repositorio).await.unwrap_or(0);
+
+    // 2. Obtener el cursor local actual
+    let cursor_local = {
+        let repo = repositorio
+            .lock()
+            .map_err(|e| format!("No se pudo acceder a la BD local: {e}"))?;
+        repo.obtener_ultimo_cursor().map_err(|e| e.0)?
+    };
+
+    // 3. Consultar cambios al servidor
+    let cambios_servidor =
+        crate::infraestructura::cliente_sync::peticion_obtener_cambios(cursor_local).await?;
+
+    // 4. Aplicar el lote atómicamente en SQLite
+    let momento_actual = RelojSistema.ahora();
+    let resultado = {
+        let mut repo = repositorio
+            .lock()
+            .map_err(|e| format!("No se pudo acceder a la BD local: {e}"))?;
+        repo.aplicar_lote_cambios(
+            &cambios_servidor.eventos,
+            cambios_servidor.nuevo_cursor,
+            &momento_actual,
+            "app-desktop",
+        )
+        .map_err(|e| e.0)?
+    };
+
+    Ok(ResultadoSincronizacionDto {
+        eventos_aplicados: resultado.eventos_aplicados,
+        partes_pendientes: resultado.partes_pendientes,
+        nuevo_cursor: resultado.nuevo_cursor,
+        quedan_mas: cambios_servidor.quedan_mas,
+        operaciones_offline_despachadas: ops_despachadas,
+    })
+}
+
+#[tauri::command]
+pub fn reiniciar_cursor(
+    repositorio: State<'_, Mutex<RepositorioLibroSqlite>>,
+) -> Result<ResultadoOperacionDto, String> {
+    let mut repo = repositorio
+        .lock()
+        .map_err(|e| format!("No se pudo acceder a la BD local: {e}"))?;
+    repo.reiniciar_cursor().map_err(|e| e.0)?;
+    Ok(ResultadoOperacionDto { exito: true })
+}
+
+async fn despachar_cola_offline_interno(
+    repositorio: &State<'_, Mutex<RepositorioLibroSqlite>>,
+) -> Result<usize, String> {
+    let elementos = {
+        let repo = repositorio
+            .lock()
+            .map_err(|e| format!("No se pudo acceder a la BD local: {e}"))?;
+        repo.listar_cola_offline().map_err(|e| e.0)?
+    };
+
+    let mut exitosas = 0;
+    for op in elementos {
+        if op.estado == "ENVIADO" {
+            continue;
+        }
+
+        match crate::infraestructura::cliente_sync::peticion_enviar_gasto_offline(&op).await {
+            Ok(_) => {
+                let mut repo = repositorio
+                    .lock()
+                    .map_err(|e| format!("No se pudo acceder a la BD local: {e}"))?;
+                let _ = repo.eliminar_cola_offline(&op.id);
+                exitosas += 1;
+            }
+            Err(e) => {
+                let mut repo = repositorio
+                    .lock()
+                    .map_err(|e| format!("No se pudo acceder a la BD local: {e}"))?;
+                let _ = repo.actualizar_estado_cola_offline(&op.id, "ERROR", Some(&e));
+            }
+        }
+    }
+
+    Ok(exitosas)
+}
+
+#[tauri::command]
+pub async fn despachar_cola_offline(
+    repositorio: State<'_, Mutex<RepositorioLibroSqlite>>,
+) -> Result<ResultadoDespachoColaDto, String> {
+    let elementos = {
+        let repo = repositorio
+            .lock()
+            .map_err(|e| format!("No se pudo acceder a la BD local: {e}"))?;
+        repo.listar_cola_offline().map_err(|e| e.0)?
+    };
+
+    let total = elementos.len();
+    let mut exitosas = 0;
+    let mut con_error = 0;
+
+    for op in elementos {
+        match crate::infraestructura::cliente_sync::peticion_enviar_gasto_offline(&op).await {
+            Ok(_) => {
+                let mut repo = repositorio
+                    .lock()
+                    .map_err(|e| format!("No se pudo acceder a la BD local: {e}"))?;
+                let _ = repo.eliminar_cola_offline(&op.id);
+                exitosas += 1;
+            }
+            Err(e) => {
+                let mut repo = repositorio
+                    .lock()
+                    .map_err(|e| format!("No se pudo acceder a la BD local: {e}"))?;
+                let _ = repo.actualizar_estado_cola_offline(&op.id, "ERROR", Some(&e));
+                con_error += 1;
+            }
+        }
+    }
+
+    Ok(ResultadoDespachoColaDto {
+        total_procesadas: total,
+        exitosas,
+        con_error,
+    })
+}
+
+#[tauri::command]
+pub fn encolar_gasto_offline(
+    entrada: EntradaEncolarGastoDto,
+    repositorio: State<'_, Mutex<RepositorioLibroSqlite>>,
+) -> Result<crate::infraestructura::sqlite_repo::OperacionGastoOffline, String> {
+    let momento_actual = RelojSistema.ahora();
+    let op = crate::infraestructura::sqlite_repo::OperacionGastoOffline {
+        id: uuid::Uuid::new_v4().to_string(),
+        idempotency_key: uuid::Uuid::new_v4().to_string(),
+        grupo_id: entrada.grupo_id,
+        concepto: entrada.concepto,
+        monto: entrada.monto,
+        pagador_id: entrada.pagador_id,
+        regla_division: entrada.regla_division,
+        participantes: entrada.participantes,
+        valores: entrada.valores,
+        creado_en: momento_actual,
+        estado: "PENDIENTE".to_string(),
+        error_mensaje: None,
+    };
+
+    let mut repo = repositorio
+        .lock()
+        .map_err(|e| format!("No se pudo acceder a la BD local: {e}"))?;
+    repo.encolar_gasto_offline(&op).map_err(|e| e.0)?;
+    Ok(op)
+}
+
+#[tauri::command]
+pub fn listar_cola_offline(
+    repositorio: State<'_, Mutex<RepositorioLibroSqlite>>,
+) -> Result<Vec<crate::infraestructura::sqlite_repo::OperacionGastoOffline>, String> {
+    let repo = repositorio
+        .lock()
+        .map_err(|e| format!("No se pudo acceder a la BD local: {e}"))?;
+    repo.listar_cola_offline().map_err(|e| e.0)
+}
+
+#[tauri::command]
+pub fn listar_partes_pendientes(
+    repositorio: State<'_, Mutex<RepositorioLibroSqlite>>,
+) -> Result<Vec<crate::infraestructura::sqlite_repo::PartePendienteLocal>, String> {
+    let repo = repositorio
+        .lock()
+        .map_err(|e| format!("No se pudo acceder a la BD local: {e}"))?;
+    repo.listar_partes_pendientes().map_err(|e| e.0)
+}
+
+#[tauri::command]
+pub fn obtener_cuenta_grupo(
+    grupo_id: String,
+    repositorio: State<'_, Mutex<RepositorioLibroSqlite>>,
+) -> Result<Option<crate::infraestructura::sqlite_repo::CuentaPorGrupo>, String> {
+    let repo = repositorio
+        .lock()
+        .map_err(|e| format!("No se pudo acceder a la BD local: {e}"))?;
+    repo.obtener_cuenta_grupo(&grupo_id).map_err(|e| e.0)
+}
