@@ -68,7 +68,7 @@ def obtener_cambios(
     try:
         res = caso_uso.ejecutar(
             usuario_id=usuario_autenticado["sub"],
-            desde_cursor=desde_int,
+            desde=desde_int,
             limite=100,
         )
 

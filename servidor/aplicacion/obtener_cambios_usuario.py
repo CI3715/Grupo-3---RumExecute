@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List
+
 from aplicacion.dtos.cambios_respuesta import (
     CambiosRespuesta,
     EventoCambioRespuesta,
@@ -21,7 +22,10 @@ CambiosUsuarioRespuesta = CambiosRespuesta
 class ObtenerCambiosUsuario:
     """
     Caso de uso para consultar los eventos de cambio de un usuario
-    a partir de una posición de cursor específica.
+    a partir de una posición de cursor específica (Subtarea 2.2).
+    Invariantes garantizados:
+    - INV-16: La información solo baja, nunca sube.
+    - INV-17: Aislamiento estricto: solo se devuelven los eventos del usuario autenticado.
     """
 
     def __init__(self, repositorio_eventos: RepositorioEventosCambio):
@@ -29,44 +33,31 @@ class ObtenerCambiosUsuario:
 
     def ejecutar(
         self,
-        usuario_autenticado_id: str | None = None,
-        desde: str | int | None = None,
-        *,
-        usuario_id: str | None = None,
-        desde_cursor: str | int | None = None,
+        usuario_id: str,
+        desde: str | int = 0,
         limite: int = LIMITE_LOTE,
+        *,
+        desde_cursor: str | int | None = None,
     ) -> CambiosRespuesta:
-        # Determinar argumentos recibidos (compatibilidad con ambas firmas)
-        usar_consultar_cambios = usuario_id is not None or desde_cursor is not None
-        uid = usuario_id if usuario_id is not None else usuario_autenticado_id
-        cursor_raw = desde_cursor if desde_cursor is not None else desde
-
-        if uid is None:
+        if not usuario_id:
             raise ErrorDominio("usuario_id", "El identificador del usuario es obligatorio.")
 
+        cursor_raw = desde_cursor if desde_cursor is not None else desde
         cursor = self._validar_desde(cursor_raw)
 
-        if usar_consultar_cambios and hasattr(self.repositorio_eventos, "consultar_cambios_usuario"):
-            eventos_bd, nuevo_cursor, quedan_mas = self.repositorio_eventos.consultar_cambios_usuario(
-                usuario_id=uid,
-                desde_cursor=cursor,
-                limite=limite,
-            )
-            eventos_dto = tuple(self._a_dto(ev) for ev in eventos_bd)
-        else:
-            # Pedimos 1 evento más que el límite para saber si quedan más eventos
-            # sin requerir una consulta extra a la base de datos.
-            eventos_obtenidos = self.repositorio_eventos.listar_posteriores(
-                uid,
-                cursor,
-                limite + 1,
-            )
+        # Algoritmo N+1 de paginación: pedimos 1 evento más que el límite
+        # para saber si quedan más eventos sin requerir una consulta extra.
+        eventos_obtenidos = self.repositorio_eventos.listar_posteriores(
+            usuario_id,
+            cursor,
+            limite + 1,
+        )
 
-            quedan_mas = len(eventos_obtenidos) > limite
-            eventos_lote = eventos_obtenidos[:limite]
+        quedan_mas = len(eventos_obtenidos) > limite
+        eventos_lote = eventos_obtenidos[:limite]
 
-            eventos_dto = tuple(self._a_dto(ev) for ev in eventos_lote)
-            nuevo_cursor = eventos_dto[-1].posicion if eventos_dto else cursor
+        eventos_dto = tuple(self._a_dto(ev) for ev in eventos_lote)
+        nuevo_cursor = eventos_dto[-1].posicion if eventos_dto else cursor
 
         return CambiosRespuesta(
             eventos=eventos_dto,

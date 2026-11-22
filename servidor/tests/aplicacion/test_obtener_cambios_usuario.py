@@ -162,10 +162,10 @@ def test_cursor_negativo_lanza_error_dominio():
     caso_uso = ObtenerCambiosUsuario(repo)
 
     with pytest.raises(ErrorDominio) as exc:
-        caso_uso.ejecutar(usuario_id="u1", desde_cursor=-1)
+        caso_uso.ejecutar(usuario_id="u1", desde=-1)
 
     assert exc.value.campo == "desde"
-    repo.consultar_cambios_usuario.assert_not_called()
+    repo.listar_posteriores.assert_not_called()
 
 
 def test_obtener_cambios_exitoso():
@@ -183,15 +183,15 @@ def test_obtener_cambios_exitoso():
         monto_parte=D("50.00"),
         incluye_redondeo=False,
     )
-    repo.consultar_cambios_usuario.return_value = ([ev], 1, False)
+    repo.listar_posteriores.return_value = [ev]
 
     caso_uso = ObtenerCambiosUsuario(repo)
-    res = caso_uso.ejecutar(usuario_id="u1", desde_cursor=0, limite=100)
+    res = caso_uso.ejecutar(usuario_id="u1", desde=0, limite=100)
 
-    repo.consultar_cambios_usuario.assert_called_once_with(
-        usuario_id="u1",
-        desde_cursor=0,
-        limite=100,
+    repo.listar_posteriores.assert_called_once_with(
+        "u1",
+        0,
+        101,
     )
     assert res.nuevo_cursor == 1
     assert res.quedan_mas is False
