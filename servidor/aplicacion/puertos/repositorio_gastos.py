@@ -43,3 +43,10 @@ class RepositorioGastos(Protocol):
         no tiene gastos registrados.
         """
         ...
+
+    def obtener_por_id(
+        self,
+        gasto_id: str,
+    ) -> Gasto | None:
+        """Devuelve un gasto por su identificador único, o None si no existe."""
+        ...
