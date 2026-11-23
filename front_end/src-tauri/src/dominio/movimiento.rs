@@ -406,6 +406,13 @@ pub fn calcular_diferencia_ajuste(
     movimiento_original: &Movimiento,
     monto_correcto: &Monto,
 ) -> Result<Monto, ErrorDominio> {
+    if movimiento_original.es_gasto_grupo {
+        return Err(ErrorDominio::new(
+            "movimiento",
+            "Los gastos provenientes de grupos compartidos no pueden corregirse desde el libro personal"
+        ))
+    }
+
     if movimiento_original.tipo == TipoMovimiento::Ajuste {
         return Err(ErrorDominio::new(
             "tipo",
@@ -1106,4 +1113,116 @@ mod tests {
         assert!(json.contains("\"campo\":\"categoria\""));
         assert!(json.contains("\"mensaje\":\"Categoría errónea\""));
     }
+
+    #[test]
+    fn test_creacion_gasto_de_grupo() {
+        let monto = Monto::new(
+            Decimal::new(3334, 2),
+            CodigoMoneda::USD,
+        );
+    
+        let movimiento = Movimiento::nuevo_gasto_grupo(
+            "mov-grupo-1",
+            "cuenta-1",
+            monto,
+            "Viaje",
+            "Hotel",
+            "2026-11-22",
+        );
+    
+        assert_eq!(movimiento.tipo, TipoMovimiento::Gasto);
+        assert!(movimiento.es_gasto_grupo);
+        assert_eq!(movimiento.monto.cantidad, Decimal::new(3334, 2));
+        assert_eq!(movimiento.descripcion, "Viaje · Hotel");
+        assert!(movimiento.categoria.is_none());
+    }
+    
+    #[test]
+    fn test_gasto_de_grupo_disminuye_saldo() {
+        let saldo = Monto::new(
+            Decimal::new(10000, 2),
+            CodigoMoneda::USD,
+        );
+    
+        let gasto = Movimiento::nuevo_gasto_grupo(
+            "mov-grupo-1",
+            "cuenta-1",
+            Monto::new(Decimal::new(3334, 2), CodigoMoneda::USD),
+            "Viaje",
+            "Hotel",
+            "2026-11-22",
+        );
+    
+        let resultado = aplicar_movimiento_a_saldo(&saldo, &gasto).unwrap();
+    
+        assert_eq!(
+            resultado.cantidad,
+            Decimal::new(6666, 2)
+        );
+    }
+    
+    #[test]
+    fn test_rechaza_corregir_gasto_de_grupo() {
+        let cuenta = cuenta_ejemplo(CodigoMoneda::USD);
+    
+        let gasto = Movimiento::nuevo_gasto_grupo(
+            "mov-grupo-1",
+            &cuenta.id,
+            Monto::new(Decimal::new(3334, 2), CodigoMoneda::USD),
+            "Viaje",
+            "Hotel",
+            "2026-11-22",
+        );
+    
+        let monto_correcto = Monto::new(
+            Decimal::new(3000, 2),
+            CodigoMoneda::USD,
+        );
+    
+        // No debe permitir calcular la corrección.
+        let error = calcular_diferencia_ajuste(
+            &gasto,
+            &monto_correcto,
+        )
+        .unwrap_err();
+    
+        assert_eq!(error.campo, "movimiento");
+    
+        // Tampoco debe permitir utilizar el constructor
+        // de correcciones que recibe el movimiento original.
+        let resultado = Movimiento::crear_ajuste_por_correccion(
+            "ajuste-1",
+            &cuenta,
+            &gasto,
+            &monto_correcto,
+            "2026-11-22",
+            "Corrección de gasto de grupo",
+            "2026-11-22T15:00:00Z",
+        );
+    
+        assert!(resultado.is_err());
+        assert_eq!(resultado.unwrap_err().campo, "movimiento");
+    }
+    
+    #[test]
+    fn test_gasto_de_grupo_serializa_su_origen() {
+        let gasto = Movimiento::nuevo_gasto_grupo(
+            "mov-grupo-1",
+            "cuenta-1",
+            Monto::new(Decimal::new(1000, 2), CodigoMoneda::USD),
+            "Viaje",
+            "Comida",
+            "2026-11-22",
+        );
+    
+        let json = serde_json::to_string(&gasto).unwrap();
+    
+        assert!(json.contains("\"es_gasto_grupo\":true"));
+    
+        let recuperado: Movimiento = serde_json::from_str(&json).unwrap();
+    
+        assert!(recuperado.es_gasto_grupo);
+        assert_eq!(recuperado, gasto);
+    }
+
 }
