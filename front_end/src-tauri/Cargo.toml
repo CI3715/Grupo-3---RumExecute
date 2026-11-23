@@ -27,7 +27,7 @@ rust_decimal = { version = "1.43", features = ["serde", "serde-str"] }
 thiserror = "2"
 rusqlite = { version = "0.32", features = ["bundled"] }
 uuid = { version = "1", features = ["v4"] }
-keyring = "3"
+keyring = { version = "3", features = ["sync-secret-service"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 
