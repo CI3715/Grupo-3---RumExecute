@@ -18,6 +18,8 @@ export interface MovimientoItem {
   nota?: string;
   estado: "vigente" | "corregido" | "ajuste";
   id_movimiento_referenciado?: string;
+  es_gasto_grupo?: boolean;
+  id_evento_servidor?: string;
 }
 
 export interface EntradaCorreccionForm {

@@ -2,7 +2,23 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { DatosUsuario } from "../services/authService";
 import { MonedaItem } from "../types/tasas";
+import { CuentaItem } from "./ListaCuentas";
 import { formatearMonto } from "../utils/formato";
+import {
+  CuentaPorGrupo,
+  PartePendienteLocal,
+  OperacionGastoOffline,
+  RechazoColaOffline,
+  obtenerCuentaGrupo,
+  elegirCuentaGrupo,
+  listarPartesPendientes,
+  listarColaOffline,
+  encolarGastoOffline,
+  sincronizarCambios,
+  obtenerUltimaSincronizacion,
+  obtenerRechazosColaLocal,
+  descartarRechazoColaLocal,
+} from "../services/syncService";
 import {
   UsuarioPublico,
   ListadoAmistades,
@@ -23,7 +39,10 @@ import {
 interface VistaComunidadProps {
   usuario: DatosUsuario | null;
   monedas: MonedaItem[];
+  cuentasPersonales?: CuentaItem[];
+  servidorOffline?: boolean;
   onSolicitarLogin: () => void;
+  onSesionVencida?: (mensaje: string) => void;
 }
 const cardStyle: React.CSSProperties = {
   backgroundColor: "var(--surface-card)",
@@ -39,7 +58,14 @@ const rowStyle: React.CSSProperties = {
   borderRadius: "10px",
   border: "1px solid var(--border-subtle)",
 };
-export default function VistaComunidad({ usuario, monedas, onSolicitarLogin }: VistaComunidadProps) {
+export default function VistaComunidad({
+  usuario,
+  monedas,
+  cuentasPersonales = [],
+  servidorOffline = false,
+  onSolicitarLogin,
+  onSesionVencida,
+}: VistaComunidadProps) {
   const [subVista, setSubVista] = useState<"grupos" | "amigos" | "solicitudes" | "detalle_grupo">("grupos");
   const [aviso, setAviso] = useState<{ tipo: "exito" | "error"; texto: string } | null>(null);
   const [amistades, setAmistades] = useState<ListadoAmistades>({ amigos: [], invitaciones_recibidas: [], invitaciones_enviadas: [] });
@@ -62,33 +88,176 @@ export default function VistaComunidad({ usuario, monedas, onSolicitarLogin }: V
   const [participantesIds, setParticipantesIds] = useState<string[]>([]);
   const [valoresCustom, setValoresCustom] = useState<Record<string, string>>({});
   const [guardandoGasto, setGuardandoGasto] = useState(false);
+
+  // Estado de Sincronización, Cuenta por Grupo, Pendientes y Cola Offline
+  const [cuentaElegidaGrupo, setCuentaElegidaGrupo] = useState<CuentaPorGrupo | null>(null);
+  const [partesPendientes, setPartesPendientes] = useState<PartePendienteLocal[]>([]);
+  const [colaOffline, setColaOffline] = useState<OperacionGastoOffline[]>([]);
+  const [rechazosCola, setRechazosCola] = useState<RechazoColaOffline[]>([]);
+  const [sincronizando, setSincronizando] = useState(false);
+  const [ultimaSync, setUltimaSync] = useState<string | null>(null);
+
+  const cacheKeySocial = usuario ? `cuentas_claras_cache_social_${usuario.id}` : null;
+
+  const refrescarEstadoLocalSync = useCallback(async (grupoIdActual?: string) => {
+    const [pend, cola] = await Promise.all([listarPartesPendientes(), listarColaOffline()]);
+    setPartesPendientes(pend);
+    setColaOffline(cola);
+    setRechazosCola(obtenerRechazosColaLocal());
+    setUltimaSync(obtenerUltimaSincronizacion());
+    if (grupoIdActual) {
+      const c = await obtenerCuentaGrupo(grupoIdActual);
+      setCuentaElegidaGrupo(c);
+    }
+  }, []);
+
   const cargarDatos = useCallback(async () => {
     if (!usuario) return;
+    refrescarEstadoLocalSync(grupoActivo?.id);
+    if (servidorOffline) return;
     try {
       const [am, gr] = await Promise.all([listarAmistades(), listarGrupos()]);
       setAmistades(am);
       setListadoGrupos(gr);
+      if (cacheKeySocial && typeof window !== "undefined") {
+        sessionStorage.setItem(cacheKeySocial, JSON.stringify({ am, gr }));
+      }
     } catch {}
-  }, [usuario]);
+  }, [usuario, grupoActivo?.id, servidorOffline, refrescarEstadoLocalSync, cacheKeySocial]);
+
+  const guardarCacheDetalleGrupo = useCallback(
+    (det: DetalleGrupo) => {
+      if (typeof window !== "undefined" && usuario) {
+        sessionStorage.setItem(`cuentas_claras_cache_grupo_${usuario.id}_${det.id}`, JSON.stringify(det));
+      }
+    },
+    [usuario]
+  );
+
+  const handleSincronizar = useCallback(
+    async (silencioso = false) => {
+      if (!usuario) return;
+      setSincronizando(true);
+      if (!silencioso) setAviso(null);
+      try {
+        const res = await sincronizarCambios();
+        await refrescarEstadoLocalSync(grupoActivo?.id);
+        if (grupoActivo?.id && (res.operaciones_offline_despachadas > 0 || res.eventos_aplicados > 0)) {
+          try {
+            const nuevoDetalle = await obtenerDetalleGrupo(grupoActivo.id);
+      guardarCacheDetalleGrupo(nuevoDetalle);
+      setGrupoActivo(nuevoDetalle);
+          } catch {}
+        }
+        if (!silencioso) {
+          const detalles: string[] = [];
+          if (res.operaciones_offline_despachadas > 0) {
+            detalles.push(`${res.operaciones_offline_despachadas} gasto(s) pendiente(s) enviado(s)`);
+          }
+          if (res.eventos_aplicados > 0) {
+            detalles.push(`${res.eventos_aplicados} gasto(s) aplicado(s) a tu cuenta`);
+          }
+          if (res.partes_pendientes > 0) {
+            detalles.push(`${res.partes_pendientes} gasto(s) por asignar cuenta`);
+          }
+          setAviso({
+            tipo: "exito",
+            texto:
+              detalles.length > 0
+                ? `Sincronizado: ${detalles.join(" · ")}.`
+                : "Tus cuentas están sincronizadas y al día.",
+          });
+        }
+      } catch (err: any) {
+        const msg = err?.message || "No se pudo sincronizar con el servidor.";
+        if (msg.includes("venció")) {
+          setAviso({ tipo: "error", texto: "Tu sesión venció, inicia sesión de nuevo" });
+          onSesionVencida?.("Tu sesión venció, inicia sesión de nuevo");
+        } else if (!silencioso) {
+          setAviso({
+            tipo: "error",
+            texto: "Sin conexión con el servidor. Los gastos pendientes se enviarán automáticamente al recuperar la conexión.",
+          });
+        }
+      } finally {
+        setSincronizando(false);
+      }
+    },
+    [usuario, grupoActivo?.id, refrescarEstadoLocalSync, onSesionVencida]
+  );
+
   useEffect(() => {
     setSubVista("grupos");
     setGrupoActivo(null);
     setMostrarFormGrupo(false);
     setMostrarFormGasto(false);
     setAviso(null);
+    // Hidratar inmediatamente desde caché de sesión para que abrir la pestaña sea instantáneo
+    if (cacheKeySocial && typeof window !== "undefined") {
+      try {
+        const raw = sessionStorage.getItem(cacheKeySocial);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed.am) setAmistades(parsed.am);
+          if (parsed.gr) setListadoGrupos(parsed.gr);
+        }
+      } catch {}
+    }
     cargarDatos();
-  }, [usuario?.id, cargarDatos]);
+    if (usuario && !servidorOffline) {
+      handleSincronizar(true);
+    }
+  }, [usuario?.id]);
+
+  // Al recuperar la conexión con el servidor, sincronizar, vaciar cola y refrescar el grupo activo automáticamente
+  useEffect(() => {
+    if (usuario && !servidorOffline) {
+      handleSincronizar(true).then(async () => {
+        await cargarDatos();
+        if (grupoActivo?.id) {
+          try {
+            const nuevoDetalle = await obtenerDetalleGrupo(grupoActivo.id);
+      guardarCacheDetalleGrupo(nuevoDetalle);
+      setGrupoActivo(nuevoDetalle);
+          } catch {}
+        }
+      });
+    }
+  }, [servidorOffline]);
+
   const abrirGrupo = async (grupoId: string) => {
     setAviso(null);
+    const cuentaAsig = await obtenerCuentaGrupo(grupoId);
+    setCuentaElegidaGrupo(cuentaAsig);
+
+    if (typeof window !== "undefined" && usuario) {
+      try {
+        const raw = sessionStorage.getItem(`cuentas_claras_cache_grupo_${usuario.id}_${grupoId}`);
+        if (raw) {
+          const cacheado: DetalleGrupo = JSON.parse(raw);
+          setGrupoActivo(cacheado);
+          setPagadorId(usuario?.id || cacheado.miembros[0]?.usuario_id || "");
+          setParticipantesIds(cacheado.miembros.map((m) => m.usuario_id));
+          setValoresCustom({});
+          setSubVista("detalle_grupo");
+        }
+      } catch {}
+    }
+
+    if (servidorOffline) return;
+
     try {
       const det = await obtenerDetalleGrupo(grupoId);
+      guardarCacheDetalleGrupo(det);
       setGrupoActivo(det);
       setPagadorId(usuario?.id || det.miembros[0]?.usuario_id || "");
       setParticipantesIds(det.miembros.map((m) => m.usuario_id));
       setValoresCustom({});
       setSubVista("detalle_grupo");
     } catch (e: any) {
-      setAviso({ tipo: "error", texto: e?.message || "No se pudo abrir el grupo." });
+      if (!grupoActivo) {
+        setAviso({ tipo: "error", texto: e?.message || "No se pudo abrir el grupo." });
+      }
     }
   };
   if (!usuario) {
@@ -117,28 +286,112 @@ export default function VistaComunidad({ usuario, monedas, onSolicitarLogin }: V
     e.preventDefault();
     if (!grupoActivo || !conceptoGasto.trim() || !montoGasto.trim()) return;
     setGuardandoGasto(true);
-    await ejecutarAccion(async () => {
-      const valores: Record<string, number> = {};
-      if (reglaDivision !== "IGUALES") {
-        participantesIds.forEach((uid) => {
-          valores[uid] = parseFloat(String(valoresCustom[uid] || "0").replace(",", ".")) || 0;
-        });
-      }
-      await registrarGastoCompartido(grupoActivo.id, {
-        concepto: conceptoGasto.trim(),
-        monto: parseFloat(montoGasto.replace(",", ".")),
-        pagador_id: pagadorId || usuario.id,
-        regla_division: reglaDivision,
-        participantes: participantesIds,
-        valores: reglaDivision === "IGUALES" ? undefined : valores,
+    setAviso(null);
+
+    const valoresStr: Record<string, string> = {};
+    const valoresNum: Record<string, number> = {};
+    if (reglaDivision !== "IGUALES") {
+      participantesIds.forEach((uid) => {
+        const valLimpio = String(valoresCustom[uid] || "0").replace(",", ".");
+        valoresStr[uid] = valLimpio;
+        valoresNum[uid] = parseFloat(valLimpio) || 0;
       });
-      setGrupoActivo(await obtenerDetalleGrupo(grupoActivo.id));
+    }
+
+    const claveIdempotencia =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `idem-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+    const estaOffline =
+      servidorOffline ||
+      (typeof navigator !== "undefined" && navigator.onLine === false);
+
+    if (estaOffline) {
+      try {
+        await encolarGastoOffline({
+          grupo_id: grupoActivo.id,
+          concepto: conceptoGasto.trim(),
+          monto: montoGasto.replace(",", "."),
+          pagador_id: pagadorId || usuario.id,
+          regla_division: reglaDivision,
+          participantes: participantesIds,
+          valores: reglaDivision === "IGUALES" ? undefined : valoresStr,
+          idempotency_key: claveIdempotencia,
+        });
+        await refrescarEstadoLocalSync(grupoActivo.id);
+        setConceptoGasto("");
+        setMontoGasto("");
+        setValoresCustom({});
+        setMostrarFormGasto(false);
+        setAviso({
+          tipo: "exito",
+          texto: "Gasto guardado como pendiente de envío. Se enviará automáticamente al volver la conexión.",
+        });
+      } catch (err: any) {
+        setAviso({ tipo: "error", texto: err?.message || "No se pudo guardar el gasto." });
+      } finally {
+        setGuardandoGasto(false);
+      }
+      return;
+    }
+
+    try {
+      await registrarGastoCompartido(
+        grupoActivo.id,
+        {
+          concepto: conceptoGasto.trim(),
+          monto: parseFloat(montoGasto.replace(",", ".")),
+          pagador_id: pagadorId || usuario.id,
+          regla_division: reglaDivision,
+          participantes: participantesIds,
+          valores: reglaDivision === "IGUALES" ? undefined : valoresNum,
+        },
+        claveIdempotencia
+      );
+      const nuevoDetalle = await obtenerDetalleGrupo(grupoActivo.id);
+      guardarCacheDetalleGrupo(nuevoDetalle);
+      setGrupoActivo(nuevoDetalle);
       setConceptoGasto("");
       setMontoGasto("");
       setValoresCustom({});
       setMostrarFormGasto(false);
-    }, "Gasto registrado y balances actualizados.");
-    setGuardandoGasto(false);
+      await handleSincronizar(true);
+      setAviso({ tipo: "exito", texto: "Gasto registrado y sincronizado." });
+    } catch (err: any) {
+      const msg = err?.message || "";
+      const esFalloRed =
+        err instanceof TypeError ||
+        msg.toLowerCase().includes("failed to fetch") ||
+        msg.toLowerCase().includes("network") ||
+        msg.toLowerCase().includes("conexión");
+
+      if (esFalloRed) {
+        await encolarGastoOffline({
+          grupo_id: grupoActivo.id,
+          concepto: conceptoGasto.trim(),
+          monto: montoGasto.replace(",", "."),
+          pagador_id: pagadorId || usuario.id,
+          regla_division: reglaDivision,
+          participantes: participantesIds,
+          valores: reglaDivision === "IGUALES" ? undefined : valoresStr,
+          idempotency_key: claveIdempotencia,
+        });
+        await refrescarEstadoLocalSync(grupoActivo.id);
+        setConceptoGasto("");
+        setMontoGasto("");
+        setValoresCustom({});
+        setMostrarFormGasto(false);
+        setAviso({
+          tipo: "exito",
+          texto: "Sin conexión: el gasto quedó como pendiente de envío y se enviará automáticamente al reconectar.",
+        });
+      } else {
+        setAviso({ tipo: "error", texto: msg || "Ocurrió un error al registrar el gasto." });
+      }
+    } finally {
+      setGuardandoGasto(false);
+    }
   };
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
@@ -147,11 +400,40 @@ export default function VistaComunidad({ usuario, monedas, onSolicitarLogin }: V
           <h1 className="hero-title">{subVista === "detalle_grupo" && grupoActivo ? grupoActivo.nombre_grupo : "Finanzas Compartidas"}</h1>
           <p className="hero-subtitle">
             {subVista === "detalle_grupo" && grupoActivo
-              ? `${grupoActivo.descripcion || "Grupo colaborativo"} • Moneda: ${grupoActivo.moneda}`
-              : "Divide gastos con amigos y grupos sin tocar las cuentas de tu libro personal."}
+              ? `${grupoActivo.descripcion ? `${grupoActivo.descripcion} • ` : ""}Moneda: ${grupoActivo.moneda}`
+              : "Divide gastos con amigos y grupos."}
           </p>
         </div>
-        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              padding: "4px 6px 4px 12px",
+              borderRadius: "10px",
+              backgroundColor: "var(--surface-card)",
+              border: "1px solid var(--border-subtle)",
+            }}
+          >
+            <span style={{ fontSize: "11.5px", color: "var(--text-secondary)" }}>
+              {ultimaSync
+                ? `Sincronizado: ${new Date(ultimaSync).toLocaleTimeString("es-VE", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}`
+                : "Sin sincronizar"}
+            </span>
+            <button
+              type="button"
+              onClick={() => handleSincronizar(false)}
+              disabled={sincronizando}
+              className="btn btn-secondary"
+              style={{ fontSize: "12px", padding: "5px 10px" }}
+            >
+              {sincronizando ? "Sincronizando..." : "Sincronizar"}
+            </button>
+          </div>
           {subVista === "detalle_grupo" ? (
             <>
               <button type="button" onClick={() => { setSubVista("grupos"); setGrupoActivo(null); cargarDatos(); }} className="btn btn-secondary">
@@ -194,6 +476,124 @@ export default function VistaComunidad({ usuario, monedas, onSolicitarLogin }: V
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderRadius: "10px", fontSize: "13px", fontWeight: 600, backgroundColor: aviso.tipo === "exito" ? "#ECFDF5" : "#FEF2F2", color: aviso.tipo === "exito" ? "#065F46" : "#991B1B", border: `1px solid ${aviso.tipo === "exito" ? "#A7F3D0" : "#FCA5A5"}` }}>
           <span>{aviso.texto}</span>
           <button type="button" onClick={() => setAviso(null)} style={{ background: "none", border: "none", fontWeight: 700, cursor: "pointer", color: "inherit" }}>✕</button>
+        </div>
+      )}
+      {rechazosCola.length > 0 && (
+        <div
+          style={{
+            ...cardStyle,
+            backgroundColor: "#FEF2F2",
+            borderColor: "#FCA5A5",
+            padding: "12px 16px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "8px",
+          }}
+        >
+          {rechazosCola.map((r) => (
+            <div
+              key={r.id}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                color: "#991B1B",
+                fontSize: "12.5px",
+              }}
+            >
+              <div>
+                No se pudo enviar <strong>{r.concepto}</strong> ({r.monto}): <span>{r.motivo}</span>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ fontSize: "11.5px", padding: "4px 10px" }}
+                onClick={() => {
+                  descartarRechazoColaLocal(r.id);
+                  setRechazosCola(obtenerRechazosColaLocal());
+                }}
+              >
+                Cerrar
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {partesPendientes.length > 0 && (
+        <div
+          style={{
+            ...cardStyle,
+            backgroundColor: "#FFFBEB",
+            borderColor: "#FCD34D",
+            padding: "14px 18px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "10px",
+          }}
+        >
+          <div style={{ fontSize: "13.5px", fontWeight: 700, color: "#92400E" }}>
+            Gastos de grupo pendientes por asignar cuenta ({partesPendientes.length})
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            {partesPendientes.map((p) => {
+              const cuentasCompatibles = cuentasPersonales.filter((c) => c.moneda === p.moneda);
+              return (
+                <div
+                  key={p.id}
+                  style={{
+                    ...rowStyle,
+                    backgroundColor: "#FFFFFF",
+                    borderColor: "#FDE68A",
+                    flexWrap: "wrap",
+                    gap: "10px",
+                  }}
+                >
+                  <div>
+                    <strong style={{ fontSize: "13.5px", color: "var(--text-primary)" }}>
+                      {p.nombre_grupo} · {p.concepto}
+                    </strong>{" "}
+                    <span style={{ fontSize: "12.5px", color: "var(--error-color)", fontWeight: 700 }}>
+                      ({formatearMonto(parseFloat(String(p.monto).replace(",", ".")) || 0, p.moneda)})
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    {cuentasCompatibles.length === 0 ? (
+                      <span style={{ fontSize: "12px", color: "#B45309", fontWeight: 600 }}>
+                        Crea una cuenta en {p.moneda} en Mis Cuentas
+                      </span>
+                    ) : (
+                      <select
+                        className="form-select"
+                        defaultValue=""
+                        style={{ fontSize: "12.5px", minWidth: "200px" }}
+                        onChange={async (e) => {
+                          const cid = e.target.value;
+                          if (!cid) return;
+                          await ejecutarAccion(async () => {
+                            await elegirCuentaGrupo(p.grupo_id, cid, p.moneda);
+                            await refrescarEstadoLocalSync(grupoActivo?.id);
+                            setAviso({
+                              tipo: "exito",
+                              texto: `Cuenta asignada a '${p.nombre_grupo}' y gasto aplicado.`,
+                            });
+                          });
+                        }}
+                      >
+                        <option value="" disabled>
+                          Seleccionar cuenta en {p.moneda}...
+                        </option>
+                        {cuentasCompatibles.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.nombre} ({c.saldo_formateado})
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
       {/* VISTA SOLICITUDES */}
@@ -549,14 +949,111 @@ export default function VistaComunidad({ usuario, monedas, onSolicitarLogin }: V
               </div>
             </form>
           )}
-          <div style={{ display: "flex", gap: "8px" }}>
-            <button type="button" onClick={() => setTabGrupo("gastos")} className={tabGrupo === "gastos" ? "btn btn-primary" : "btn btn-secondary"}>Gastos ({grupoActivo.gastos.length})</button>
-            <button type="button" onClick={() => setTabGrupo("balances")} className={tabGrupo === "balances" ? "btn btn-primary" : "btn btn-secondary"}>Balances</button>
-            <button type="button" onClick={() => setTabGrupo("miembros")} className={tabGrupo === "miembros" ? "btn btn-primary" : "btn btn-secondary"}>Miembros ({grupoActivo.miembros.length})</button>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button type="button" onClick={() => setTabGrupo("gastos")} className={tabGrupo === "gastos" ? "btn btn-primary" : "btn btn-secondary"}>Gastos ({grupoActivo.gastos.length})</button>
+              <button type="button" onClick={() => setTabGrupo("balances")} className={tabGrupo === "balances" ? "btn btn-primary" : "btn btn-secondary"}>Balances</button>
+              <button type="button" onClick={() => setTabGrupo("miembros")} className={tabGrupo === "miembros" ? "btn btn-primary" : "btn btn-secondary"}>Miembros ({grupoActivo.miembros.length})</button>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-secondary)" }}>
+                Cuenta asociada ({grupoActivo.moneda}):
+              </span>
+              {cuentasPersonales.filter((c) => c.moneda === grupoActivo.moneda).length === 0 ? (
+                <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Sin cuentas en {grupoActivo.moneda}
+                </span>
+              ) : (
+                <select
+                  className="form-select"
+                  value={cuentaElegidaGrupo?.cuenta_id_personal || ""}
+                  style={{ fontSize: "12.5px", padding: "6px 10px", minWidth: "200px" }}
+                  onChange={async (e) => {
+                    const nuevaCuentaId = e.target.value;
+                    if (!nuevaCuentaId) return;
+                    await ejecutarAccion(async () => {
+                      const res = await elegirCuentaGrupo(grupoActivo.id, nuevaCuentaId, grupoActivo.moneda);
+                      await refrescarEstadoLocalSync(grupoActivo.id);
+                      const nombreCta =
+                        cuentasPersonales.find((c) => c.id === nuevaCuentaId)?.nombre || nuevaCuentaId;
+                      setAviso({
+                        tipo: "exito",
+                        texto:
+                          res.partes_aplicadas > 0
+                            ? `Cuenta '${nombreCta}' vinculada y ${res.partes_aplicadas} gasto(s) aplicado(s).`
+                            : `Cuenta '${nombreCta}' vinculada a este grupo.`,
+                      });
+                    });
+                  }}
+                >
+                  <option value="" disabled>
+                    Seleccionar cuenta...
+                  </option>
+                  {cuentasPersonales
+                    .filter((c) => c.moneda === grupoActivo.moneda)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nombre} ({c.saldo_formateado})
+                      </option>
+                    ))}
+                </select>
+              )}
+            </div>
           </div>
           {tabGrupo === "gastos" && (
             <div style={cardStyle}>
-              {grupoActivo.gastos.length === 0 ? (
+              {colaOffline.filter((op) => op.grupo_id === grupoActivo.id).length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
+                  {colaOffline
+                    .filter((op) => op.grupo_id === grupoActivo.id)
+                    .map((op) => {
+                      const pagadorCola = grupoActivo.miembros.find((m) => m.usuario_id === op.pagador_id);
+                      return (
+                        <div
+                          key={op.id}
+                          style={{
+                            padding: "14px 18px",
+                            borderRadius: "12px",
+                            border: "1px dashed #F59E0B",
+                            backgroundColor: "#FFFBEB",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            flexWrap: "wrap",
+                            gap: "10px",
+                          }}
+                        >
+                          <div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              <strong style={{ fontSize: "15px", color: "var(--text-primary)" }}>{op.concepto}</strong>
+                              <span
+                                style={{
+                                  fontSize: "11px",
+                                  fontWeight: 700,
+                                  padding: "2px 9px",
+                                  borderRadius: "10px",
+                                  backgroundColor: "#FEF3C7",
+                                  color: "#92400E",
+                                  border: "1px solid #FCD34D",
+                                }}
+                              >
+                                Pendiente de envío
+                              </span>
+                            </div>
+                            <div style={{ fontSize: "12px", color: "#B45309", marginTop: "3px" }}>
+                              Pagado por{" "}
+                              <strong>{pagadorCola?.nombre_visible || `@${pagadorCola?.nombre_usuario || "miembro"}`}</strong>
+                            </div>
+                          </div>
+                          <div style={{ fontSize: "15px", fontWeight: 800, color: "#92400E" }}>
+                            {formatearMonto(parseFloat(String(op.monto).replace(",", ".")) || 0, grupoActivo.moneda)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+              {grupoActivo.gastos.length === 0 && colaOffline.filter((op) => op.grupo_id === grupoActivo.id).length === 0 ? (
                 <p style={{ fontSize: "13px", color: "var(--text-secondary)" }}>No hay gastos registrados en este grupo.</p>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
@@ -787,7 +1284,9 @@ export default function VistaComunidad({ usuario, monedas, onSolicitarLogin }: V
                                 onClick={() =>
                                   ejecutarAccion(async () => {
                                     await invitarMiembroGrupo(grupoActivo.id, a.nombre_usuario);
-                                    setGrupoActivo(await obtenerDetalleGrupo(grupoActivo.id));
+                                    const nuevoDetalle = await obtenerDetalleGrupo(grupoActivo.id);
+      guardarCacheDetalleGrupo(nuevoDetalle);
+      setGrupoActivo(nuevoDetalle);
                                   }, `Invitación enviada a @${a.nombre_usuario}.`)
                                 }
                               >
