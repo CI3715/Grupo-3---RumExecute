@@ -9,7 +9,7 @@ from dominio.division import CuotaDivision
 @dataclass(frozen=True)
 class EventoCambioUsuario:
     id: str
-    posicion: int
+    posicion: int | None
     usuario_id: str
     grupo_id: str
     nombre_grupo: str

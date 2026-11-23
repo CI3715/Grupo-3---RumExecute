@@ -6,6 +6,7 @@ from decimal import Decimal
 from dominio.errores import ErrorConflicto, ErrorDominio
 
 
+
 class ErrorConflictoIdempotencia(ErrorConflicto):
     """Lanzada cuando una misma clave de idempotencia se reutiliza con datos distintos (HTTP 409)."""
 
