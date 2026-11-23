@@ -115,7 +115,7 @@ python -m uvicorn main:app --reload --port 8000
 
 ---
 
-## Endpoints Disponibles (Entregas 1, 5 y 6)
+## Endpoints Disponibles (Entregas 1, 5, 6 y 7)
 
 | Método y Ruta | Autenticación | Descripción |
 | :--- | :---: | :--- |
@@ -134,8 +134,9 @@ python -m uvicorn main:app --reload --port 8000
 | `POST /grupos` | Bearer JWT | Crea un nuevo grupo colaborativo (`nombre`, `moneda`, `descripcion`). |
 | `POST /grupos/{id}/miembros` | Bearer JWT | Invita a un amigo activo al grupo por su `nombre_usuario`. |
 | `POST /grupos/{id}/miembros/yo/respuesta` | Bearer JWT | Acepta o rechaza una invitación pendiente para unirse a un grupo. |
-| `POST /grupos/{id}/gastos` | Bearer JWT | Registra un gasto compartido (`IGUALES`, `PORCENTAJES` o `MONTOS`) y calcula cuotas deterministas (`ESC-10`). |
+| `POST /grupos/{id}/gastos` | Bearer JWT | Registra un gasto compartido (`IGUALES`, `PORCENTAJES` o `MONTOS`) con soporte para encabezado `Idempotency-Key` (`201 Created`, `200 OK` en reintento idéntico, `409 Conflict` si cambia el payload) y emite eventos de cambio para cada participante (`ESC-10`, `RNF-17`). |
 | `GET /grupos/{id}` | Bearer JWT | Obtiene el detalle del grupo, miembros, historial de gastos con cuotas y balances netos (`INV-08`). Retorna `404` si el usuario no es miembro (`INV-17`). |
+| `GET /cambios?desde=<cursor>` | Bearer JWT | Devuelve en orden hasta 100 eventos de cambio del usuario autenticado posteriores al cursor indicado, junto con `nuevo_cursor` y `quedan_mas` (`RF-COM-10`, `INV-16`, `INV-17`). |
 
 ---
 

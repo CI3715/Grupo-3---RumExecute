@@ -147,3 +147,26 @@ npx tsc --noEmit
    * Verificar que el desglose asigna **`$ 33,34`** a `@ana` (primera en orden alfabético por `ESC-10`), **`$ 33,33`** a `@beto` y **`$ 33,33`** a `@carla` (`suma = 100,00 USD`).
    * En la pestaña **Balances**, comprobar que aparecen ordenados alfabéticamente (`@ana`: `+$ 66,66` A favor, `@beto`: `-$ 33,33` Por pagar, `@carla`: `-$ 33,33` Por pagar; suma algebraica = `0,00`).
 6. Verificar finalmente que en **Mis Cuentas** los saldos personales del dispositivo no fueron alterados por los gastos compartidos del grupo (`INV-16`).
+
+---
+
+## Reproducir el Escenario de la Entrega 7 (Traer Cuentas del Grupo al Registro Personal — The Sync Flow)
+
+Partiendo de los usuarios `@ana`, `@beto` y `@carla` y el grupo **"Viaje a Mérida"** (`USD`) de la Entrega 6, con una cuenta personal **"Efectivo USD"** con saldo inicial de **`200,00 USD`**:
+
+1. **Cuenta del Grupo (`INV-18`):**
+   * Iniciar sesión con `@beto`, abrir el grupo **"Viaje a Mérida"** (`USD`) y en el selector **"Cuenta personal donde se aplicarán tus partes de este grupo (USD)"** elegir la cuenta **`Efectivo USD`** (solo se ofrecen cuentas activas en `USD`).
+   * Con `@carla`, aún no elegir cuenta para el grupo.
+2. **Bajada de Partes y Pendientes de Aplicar (`RF-COM-10`, `2.2`):**
+   * Con `@ana`, registrar el gasto **"Hotel"** por **`100,00 USD`** en partes iguales (`33,34` Ana / `33,33` Beto / `33,33` Carla).
+   * Con `@beto`, pulsar **"Sincronizar"**: en su cuenta **`Efectivo USD`** aparece un gasto de **`33,33 USD`** con concepto `"Viaje a Mérida · Hotel"`, marcado como **`Gasto de grupo`** y con la indicación **`Se corrige en el grupo`** (sin opción de corregir en el libro personal). El saldo de **`Efectivo USD`** pasa a **`166,67 USD`**.
+   * Con `@carla`, pulsar **"Sincronizar"**: como aún no eligió cuenta para el grupo, su parte de **`33,33 USD`** aparece en la bandeja **"Partes de Gastos de Grupo Pendientes de Aplicar"** y se aplica en cuanto selecciona una cuenta en `USD`.
+3. **Sin Duplicar y Reinicio de Cursor (`INV-13`, `INV-15`):**
+   * Con `@beto`, pulsar **"Sincronizar"** tres veces seguidas y luego pulsar **"Reiniciar cursor a 0"**: vuelven a descargarse los eventos desde `GET /cambios?desde=0`, pero el núcleo comprueba que ya fueron aplicados (`GastoDeGrupoAplicado`), sigue habiendo **un solo movimiento** y el saldo se mantiene en **`166,67 USD`**.
+4. **Cola de Gastos de Grupo sin Conexión (`RNF-17`, `ESC-09`):**
+   * Con `@beto`, activar **"Simular sin conexión"** (o deshabilitar la red) y registrar el gasto **"Cena"** por **`60,00 USD`** por porcentajes (`50%` Ana / `25%` Beto / `25%` Carla).
+   * El gasto se muestra en el grupo como **`Pendiente de envío`** con su `Idempotency-Key` única y el saldo de **`Efectivo USD`** permanece en **`166,67 USD`** mientras las funciones personales siguen disponibles.
+   * Al pulsar **"Volver a conectar red"**, la cola envía la cena **una sola vez**, aparece en el grupo y baja la parte de `@beto` (**`15,00 USD`**), actualizando el saldo de **`Efectivo USD`** a **`151,67 USD`**.
+   * Si se pulsa nuevamente **"Reiniciar cursor a 0"**, bajan otra vez ambos eventos (`Hotel` y `Cena`), se ignoran por estar ya aplicados y el saldo permanece en **`151,67 USD`**.
+5. **Privacidad (`INV-16`):**
+   * En el registro de peticiones del servidor se comprueba que ninguna petición contiene cuentas personales, movimientos privados, saldos ni tasas del libro local.

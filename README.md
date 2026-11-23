@@ -44,10 +44,16 @@ El sistema se divide estrictamente en dos ámbitos independientes (`INV-16` / `R
 ```text
 Grupo-3---RumExecute/
 |-- docs/                                           # Documentación técnica y decisiones de arquitectura
-|   |-- adr/                                        # Architecture Decision Records (ADR-001 a ADR-008)
+|   |-- adr/                                        # Architecture Decision Records (ADR-001 a ADR-009)
 |   |-- entrega4/                                   # Documentación de soporte de la Entrega 4
+|   |-- diagrama_bd_cliente.dbml                    # Esquema DBML de la base de datos SQLite del cliente
+|   |-- diagrama_bd_servidor.dbml                   # Esquema DBML de la base de datos PostgreSQL del servidor
+|   |-- Documento_Tecnico_Explicativo_Entrega_1.md  # Documento técnico de la Entrega 1
+|   |-- Documento_Tecnico_Explicativo_Entrega_2.md  # Documento técnico de la Entrega 2
+|   |-- Documento_Tecnico_Explicativo_Entrega_3.md  # Documento técnico de la Entrega 3
 |   |-- Documento_Tecnico_Explicativo_Entrega_4.md  # Documento técnico de la Entrega 4
-|   `-- Documento_Tecnico_Explicativo_Entrega_5_y_6.md # Documento técnico de las Entregas 5 y 6
+|   |-- Documento_Tecnico_Explicativo_Entrega_5_y_6.md # Documento técnico de las Entregas 5 y 6
+|   `-- Documento_Tecnico_Explicativo_Entrega_7.md  # Documento técnico de la Entrega 7
 |-- front_end/                                      # Aplicación cliente (Tauri 2 + Next.js)
 |   |-- src/                                        # Interfaz de usuario (componentes, hooks y servicios)
 |   |-- src-tauri/                                  # Núcleo en Rust (dominio, aplicación, SQLite, IPC y keyring)
@@ -81,6 +87,7 @@ Grupo-3---RumExecute/
 | **Entrega 4** | Multimoneda, tasas históricas y patrimonio consolidado | Catálogo con 4 monedas de fábrica (`VES`, `USD`, `EUR`, `USDT`) + monedas propias, tasas por fecha, tasa inversa (`1 / valor`) sin triangulación y consolidación patrimonial. |
 | **Entrega 5** | Registro, autenticación, sesión y autonomía sin cuenta | Registro e inicio de sesión (`Argon2id` + `JWT`), persistencia en PostgreSQL (Docker), llavero seguro del SO (`keyring`) y uso completo del libro personal sin sesión (`INV-16`). |
 | **Entrega 6** | Amigos, grupos, gastos compartidos y balances | Búsqueda exacta por `@usuario`, solicitudes de amistad, grupos colaborativos, división de gastos (`IGUALES`, `PORCENTAJES`, `MONTOS`), residuo determinista (`ESC-10`) y balances (`INV-08`). |
+| **Entrega 7** | Traer cuentas del grupo al registro personal (*The Sync Flow*) | Sincronización unidireccional por cursor (`GET /cambios?desde=<cursor>`), elección local de cuenta por grupo (`INV-18`), aplicación idempotente (`GastoDeGrupoAplicado`, `INV-13`/`INV-15`), bloqueo de corrección en libro (`RF-COM-10`) y cola offline con `Idempotency-Key` (`RNF-17`/`ESC-09`). |
 
 ---
 
@@ -170,17 +177,26 @@ pnpm test
 
 ---
 
-## Documentación Arquitectónica (ADRs)
+## Documentación Arquitectónica (ADRs y Documentos Técnicos por Entrega)
 
+### Architecture Decision Records (`docs/adr/`)
 * [ADR-001: Selección del Stack Tecnológico](docs/adr/ADR-001-seleccion-stack-tecnologico.md)
-* [ADR-002: Arquitectura Hexagonal y Modelado de Dominio](docs/adr/ADR-002-arquitectura-hexagonal-y-modelado-dominio.md)
-* [ADR-003: Almacenamiento Local Inmutable en SQLite](docs/adr/ADR-003-almacenamiento-local-inmutable-sqlite.md)
+* [ADR-002: Arquitectura Hexagonal y Puertos](docs/adr/ADR-002-arquitectura-hexagonal-y-puertos.md)
+* [ADR-003: Almacenamiento Local en SQLite y Event Sourcing](docs/adr/ADR-003-almacenamiento-local-sqlite-y-event-sourcing.md)
+* [ADR-004: Inmutabilidad Contable y Corrección mediante Ajustes](docs/adr/ADR-004-inmutabilidad-y-correccion-por-ajustes.md)
 * [ADR-005: Tasas de Cambio, Tasa Inversa y Tasa Faltante](docs/adr/ADR-005-tasas-de-cambio-inversa-y-tasa-faltante.md)
 * [ADR-006: PostgreSQL y Persistencia Social](docs/adr/ADR-006-postgresql-y-persistencia-social.md)
 * [ADR-007: Autenticación, Hashing Argon2id y Sesiones JWT](docs/adr/ADR-007-autenticacion-hashing-y-sesiones.md)
 * [ADR-008: Reparto Determinista de Gastos y Balances de Suma Cero](docs/adr/ADR-008-reparto-determinista-y-balances.md)
-* [Documento Técnico Explicativo — Entrega 4](docs/Documento_Tecnico_Explicativo_Entrega_4.md)
-* [Documento Técnico Explicativo — Entregas 5 y 6](docs/Documento_Tecnico_Explicativo_Entrega_5_y_6.md)
+* [ADR-009: Sincronización Unidireccional por Cursor, Aplicación Idempotente y Cola Offline](docs/adr/ADR-009-sincronizacion-cursor-e-idempotencia.md)
+
+### Documentos Técnicos Explicativos (`docs/`)
+* [Documento Técnico Explicativo — Entrega 1 (The Full Stack Ping)](docs/Documento_Tecnico_Explicativo_Entrega_1.md)
+* [Documento Técnico Explicativo — Entrega 2 (Cuentas Local-First)](docs/Documento_Tecnico_Explicativo_Entrega_2.md)
+* [Documento Técnico Explicativo — Entrega 3 (Movimientos y Ajustes Inmutables)](docs/Documento_Tecnico_Explicativo_Entrega_3.md)
+* [Documento Técnico Explicativo — Entrega 4 (Tasas de Cambio y Patrimonio)](docs/Documento_Tecnico_Explicativo_Entrega_4.md)
+* [Documento Técnico Explicativo — Entregas 5 y 6 (Autenticación, Amigos y Grupos)](docs/Documento_Tecnico_Explicativo_Entrega_5_y_6.md)
+* [Documento Técnico Explicativo — Entrega 7 (Sincronización y Cola sin Conexión)](docs/Documento_Tecnico_Explicativo_Entrega_7.md)
 
 ---
 
