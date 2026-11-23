@@ -147,6 +147,14 @@ export function useCuentas() {
           saldoActualNum = Number(info.saldo_actual.cantidad ?? saldoIniNum);
         }
         if (info && Array.isArray(info.movimientos)) {
+          const idsCorregidos = new Set<string>();
+          for (const m of info.movimientos) {
+            const tipoNorm = (typeof m.tipo === "string" ? m.tipo : m.tipo?.tipo || "gasto").toLowerCase();
+            if (tipoNorm === "ajuste" && m.id_movimiento_referenciado) {
+              idsCorregidos.add(String(m.id_movimiento_referenciado));
+            }
+          }
+
           const movs: MovimientoItem[] = info.movimientos.map((m: any) => {
             const montoNum = Number(m.monto?.cantidad ?? m.monto ?? 0);
             const tipoNorm = (typeof m.tipo === "string" ? m.tipo : m.tipo?.tipo || "gasto").toLowerCase();
@@ -156,6 +164,12 @@ export function useCuentas() {
               : typeof m.categoria === "object" && m.categoria !== null
               ? (m.categoria.nombre || m.categoria.id || "Varios")
               : (typeof m.categoria === "string" && m.categoria ? m.categoria : "Varios");
+            const estadoMov =
+              tipoNorm === "ajuste"
+                ? "ajuste"
+                : idsCorregidos.has(String(m.id))
+                ? "corregido"
+                : "vigente";
             return {
               id: m.id,
               id_cuenta: m.id_cuenta || c.id,
@@ -165,7 +179,7 @@ export function useCuentas() {
               fecha: (m.fecha || new Date().toISOString()).split("T")[0],
               categoria: catTexto,
               nota: m.descripcion || m.nota || "",
-              estado: (tipoNorm === "ajuste" ? "ajuste" : "vigente") as "vigente" | "corregido" | "ajuste",
+              estado: estadoMov as "vigente" | "corregido" | "ajuste",
               id_movimiento_referenciado: m.id_movimiento_referenciado,
               es_gasto_grupo: esGastoGrupo,
             };
