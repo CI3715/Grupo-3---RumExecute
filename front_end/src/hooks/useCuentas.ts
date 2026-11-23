@@ -43,7 +43,7 @@ export function useCuentas() {
   const [categoriasIngreso, setCategoriasIngreso] = useState<string[]>(CATEGORIAS_INGRESO);
   const [errorValidacion, setErrorValidacion] = useState<ErrorValidacion | null>(null);
   // Hidratación del libro personal local del dispositivo (INV-16 / RES-02: independiente de la sesión de usuario)
-  useEffect(() => {
+  const recargarLibroLocalWeb = useCallback(() => {
     if (enTauri() || typeof window === "undefined") return;
     try {
       const guardado =
@@ -73,6 +73,19 @@ export function useCuentas() {
       setHidratado(true);
     }
   }, []);
+  useEffect(() => {
+    recargarLibroLocalWeb();
+    if (typeof window === "undefined") return;
+    const onLibroActualizado = () => {
+      if (enTauri()) {
+        cargarCuentasTauri();
+      } else {
+        recargarLibroLocalWeb();
+      }
+    };
+    window.addEventListener("cuentas-claras:libro-actualizado", onLibroActualizado);
+    return () => window.removeEventListener("cuentas-claras:libro-actualizado", onLibroActualizado);
+  }, [recargarLibroLocalWeb]);
   // Persistencia automática en el dispositivo y recálculo de subtotales
   useEffect(() => {
     if (enTauri() || !hidratado || typeof window === "undefined") return;
@@ -137,20 +150,24 @@ export function useCuentas() {
           const movs: MovimientoItem[] = info.movimientos.map((m: any) => {
             const montoNum = Number(m.monto?.cantidad ?? m.monto ?? 0);
             const tipoNorm = (typeof m.tipo === "string" ? m.tipo : m.tipo?.tipo || "gasto").toLowerCase();
-            const catTexto = typeof m.categoria === "object" && m.categoria !== null
+            const esGastoGrupo = Boolean(m.es_gasto_grupo);
+            const catTexto = esGastoGrupo
+              ? "Gasto de grupo"
+              : typeof m.categoria === "object" && m.categoria !== null
               ? (m.categoria.nombre || m.categoria.id || "Varios")
-              : (typeof m.categoria === "string" ? m.categoria : "Varios");
+              : (typeof m.categoria === "string" && m.categoria ? m.categoria : "Varios");
             return {
               id: m.id,
               id_cuenta: m.id_cuenta || c.id,
               tipo: tipoNorm as "gasto" | "ingreso" | "ajuste",
               monto_num: montoNum,
               monto_formateado: formatearMontoConSigno(montoNum, c.moneda, tipoNorm),
-              fecha: m.fecha || new Date().toISOString().split("T")[0],
+              fecha: (m.fecha || new Date().toISOString()).split("T")[0],
               categoria: catTexto,
               nota: m.descripcion || m.nota || "",
               estado: (tipoNorm === "ajuste" ? "ajuste" : "vigente") as "vigente" | "corregido" | "ajuste",
               id_movimiento_referenciado: m.id_movimiento_referenciado,
+              es_gasto_grupo: esGastoGrupo,
             };
           });
           mapaMovs[c.id] = movs;
@@ -355,7 +372,15 @@ export function useCuentas() {
     setErrorValidacion(null);
     if (enTauri()) {
       try {
-        await invoke("corregir_movimiento", { entrada });
+        const hoy = new Date().toISOString().split("T")[0];
+        await invoke("corregir_movimiento", {
+          entrada: {
+            id_movimiento_original: entrada.id_movimiento_original,
+            nuevo_monto: entrada.monto_correcto.trim().replace(",", "."),
+            fecha: hoy,
+            descripcion: entrada.motivo?.trim() || "Corrección de monto",
+          },
+        });
         await cargarCuentasTauri();
         return true;
       } catch (err: any) {
@@ -373,6 +398,14 @@ export function useCuentas() {
     const movsActuales = movimientosPorCuenta[cuenta.id] || [];
     const movOriginal = movsActuales.find((m) => m.id === entrada.id_movimiento_original);
     if (!movOriginal) return false;
+    if (movOriginal.es_gasto_grupo) {
+      const errorObj = {
+        campo: "id_movimiento_original",
+        mensaje: "Los gastos originados en grupos compartidos no pueden ser corregidos ni editados desde el libro personal.",
+      };
+      setErrorValidacion(errorObj);
+      throw errorObj;
+    }
     const delta = movOriginal.tipo === "gasto" ? movOriginal.monto_num - montoNuevoNum : montoNuevoNum - movOriginal.monto_num;
     const movCorregido: MovimientoItem = { ...movOriginal, estado: "corregido" };
     const movAjuste: MovimientoItem = {
@@ -404,9 +437,12 @@ export function useCuentas() {
     const saldoIni = saldosIniciales[cuenta.id] ?? 0;
     const movsBrutos = movimientosPorCuenta[cuenta.id] || [];
     const movs: MovimientoItem[] = movsBrutos.map((m: any) => {
-      const catTexto = typeof m.categoria === "object" && m.categoria !== null
+      const esGastoGrupo = Boolean(m.es_gasto_grupo);
+      const catTexto = esGastoGrupo
+        ? "Gasto de grupo"
+        : typeof m.categoria === "object" && m.categoria !== null
         ? (m.categoria.nombre || m.categoria.id || "Varios")
-        : (typeof m.categoria === "string" ? m.categoria : "Varios");
+        : (typeof m.categoria === "string" && m.categoria ? m.categoria : "Varios");
       const tipoNorm = (typeof m.tipo === "string" ? m.tipo : m.tipo?.tipo || "gasto").toLowerCase();
       const montoNum = Number(m.monto_num ?? m.monto?.cantidad ?? m.monto ?? 0);
       return {
@@ -416,11 +452,12 @@ export function useCuentas() {
         tipo: tipoNorm as "gasto" | "ingreso" | "ajuste",
         monto_num: montoNum,
         monto_formateado: m.monto_formateado || formatearMontoConSigno(montoNum, cuenta.moneda, tipoNorm),
-        fecha: String(m.fecha || new Date().toISOString().split("T")[0]),
+        fecha: String(m.fecha || new Date().toISOString()).split("T")[0],
         categoria: String(catTexto),
         nota: String(m.nota || m.descripcion || ""),
         estado: (tipoNorm === "ajuste" ? "ajuste" : m.estado || "vigente") as "vigente" | "corregido" | "ajuste",
         id_movimiento_referenciado: m.id_movimiento_referenciado ? String(m.id_movimiento_referenciado) : undefined,
+        es_gasto_grupo: esGastoGrupo,
       };
     });
     const { totalIngresos, totalGastos, totalAjustes, saldoActual } = calcularTotalesCuenta(saldoIni, movs);

@@ -160,11 +160,16 @@ export async function obtenerDetalleGrupo(grupoId: string): Promise<DetalleGrupo
 }
 export async function registrarGastoCompartido(
   grupoId: string,
-  entrada: EntradaRegistrarGastoGrupo
+  entrada: EntradaRegistrarGastoGrupo,
+  idempotencyKey?: string
 ): Promise<GastoGrupoItem> {
+  const headers = headersAuth();
+  if (idempotencyKey) {
+    headers["Idempotency-Key"] = idempotencyKey;
+  }
   const res = await fetch(`${BACKEND_URL}/grupos/${grupoId}/gastos`, {
     method: "POST",
-    headers: headersAuth(),
+    headers,
     body: JSON.stringify(entrada),
   });
   return procesarRespuesta<GastoGrupoItem>(res, "No se pudo registrar el gasto compartido.");

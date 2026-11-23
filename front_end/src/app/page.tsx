@@ -5,7 +5,6 @@ import Navbar from "../components/Navbar";
 import SubtotalesGrid from "../components/SubtotalesGrid";
 import ListaCuentas from "../components/ListaCuentas";
 import ModalNuevaCuenta from "../components/ModalNuevaCuenta";
-import ModalDiagnostico from "../components/ModalDiagnostico";
 import DetalleCuenta from "../components/DetalleCuenta";
 import VistaPatrimonio from "../components/VistaPatrimonio";
 import VistaTasas from "../components/VistaTasas";
@@ -38,6 +37,7 @@ import {
   cerrarSesion,
   verificarEstadoServidor,
 } from "../services/authService";
+import { sincronizarCambios } from "../services/syncService";
 
 export default function HomePage() {
   const [tabActivo, setTabActivo] = useState<"cuentas" | "patrimonio" | "tasas" | "comunidad">("cuentas");
@@ -82,7 +82,6 @@ export default function HomePage() {
 
   // Modales adicionales
   const [modalNuevaCuenta, setModalNuevaCuenta] = useState(false);
-  const [modalDiagnostico, setModalDiagnostico] = useState(false);
 
   // Carga inicial de catálogo de monedas y tasas
   const cargarMonedasYBase = useCallback(async () => {
@@ -152,17 +151,73 @@ export default function HomePage() {
 
       try {
         const perfil = await obtenerPerfil();
-        if (!cancelado) setUsuario(perfil);
+        if (!cancelado) {
+          setUsuario(perfil);
+          if (perfil && activo) {
+            // Sección 2.4: Sincronizar automáticamente al abrir la aplicación con una sesión vigente
+            sincronizarCambios()
+              .then(() => cargarCuentasTauri())
+              .catch((e: any) => {
+                if (e?.message?.includes("venció")) {
+                  setUsuario(null);
+                  setAvisoSesion("Tu sesión venció, inicia sesión de nuevo");
+                }
+              });
+          }
+        }
       } catch (err: any) {
         if (!cancelado && err?.message?.includes("venció")) {
           setUsuario(null);
-          setAvisoSesion("Tu sesión venció, inicia sesión de nuevo.");
+          setAvisoSesion("Tu sesión venció, inicia sesión de nuevo");
         }
       }
     }
     inicializar();
     return () => { cancelado = true; };
-  }, []);
+  }, [cargarCuentasTauri]);
+
+  // Verificación continua de conectividad y sincronización automática al reconectar o cada 5 minutos (Sección 2.4)
+  useEffect(() => {
+    let enCurso = false;
+
+    const chequearConectividadYSincronizar = async (forzarSync = false) => {
+      if (enCurso) return;
+      enCurso = true;
+      try {
+        const activo = await verificarEstadoServidor();
+        let reconectado = false;
+        setServidorOffline((prevOffline) => {
+          if (prevOffline && activo) reconectado = true;
+          return !activo;
+        });
+
+        if (activo && usuario && (reconectado || forzarSync)) {
+          try {
+            await sincronizarCambios();
+            await cargarCuentasTauri();
+          } catch (err: any) {
+            if (err?.message?.includes("venció")) {
+              setUsuario(null);
+              setAvisoSesion("Tu sesión venció, inicia sesión de nuevo");
+            }
+          }
+        }
+      } finally {
+        enCurso = false;
+      }
+    };
+
+    const intervaloPing = setInterval(() => chequearConectividadYSincronizar(false), 4000);
+    const intervaloSync = setInterval(() => chequearConectividadYSincronizar(true), 5 * 60 * 1000);
+    const alVolverRed = () => chequearConectividadYSincronizar(true);
+    window.addEventListener("online", alVolverRed);
+
+    return () => {
+      clearInterval(intervaloPing);
+      clearInterval(intervaloSync);
+      window.removeEventListener("online", alVolverRed);
+    };
+  }, [usuario, cargarCuentasTauri]);
 
   useEffect(() => {
     if (tabActivo === "patrimonio") {
@@ -372,15 +427,21 @@ export default function HomePage() {
           />
         )}
 
-        {/* TAB 4: GRUPOS, AMIGOS Y GASTOS COMPARTIDOS (ENTREGA 6) */}
+        {/* TAB 4: GRUPOS, AMIGOS Y GASTOS COMPARTIDOS (ENTREGAS 6 Y 7) */}
         {tabActivo === "comunidad" && (
           <VistaComunidad
             key={usuario?.id || "anon"}
             usuario={usuario}
             monedas={monedasDisponibles}
+            cuentasPersonales={cuentas}
+            servidorOffline={servidorOffline}
             onSolicitarLogin={() => {
               setModoAuth("login");
               setModalAuth(true);
+            }}
+            onSesionVencida={(msg) => {
+              setUsuario(null);
+              setAvisoSesion(msg || "Tu sesión venció, inicia sesión de nuevo");
             }}
           />
         )}
@@ -392,15 +453,6 @@ export default function HomePage() {
           <span style={{ color: "var(--border-subtle)" }}>•</span>
           <span style={{ color: "var(--text-muted)" }}>Sin nube. Siempre tuyos.</span>
         </div>
-        <button
-          type="button"
-          onClick={() => setModalDiagnostico(true)}
-          className="btn btn-secondary"
-          style={{ padding: "4px 12px", fontSize: "12px" }}
-          title="Verificar conexión con el servidor"
-        >
-          Diagnóstico de red
-        </button>
       </footer>
 
       {/* Modales */}
@@ -418,11 +470,6 @@ export default function HomePage() {
         errorExterno={errorValidacion}
       />
 
-      <ModalDiagnostico
-        isOpen={modalDiagnostico}
-        onClose={() => setModalDiagnostico(false)}
-      />
-
       <ModalAuth
         isOpen={modalAuth}
         modoInicial={modoAuth}
@@ -434,7 +481,14 @@ export default function HomePage() {
           setCuentaSeleccionadaId(null);
           setFiltroParHistorial(null);
           setAvisoSesion(null);
-          verificarEstadoServidor().then((activo) => setServidorOffline(!activo));
+          verificarEstadoServidor().then((activo) => {
+            setServidorOffline(!activo);
+            if (activo) {
+              sincronizarCambios()
+                .then(() => cargarCuentasTauri())
+                .catch(() => {});
+            }
+          });
         }}
       />
     </div>
