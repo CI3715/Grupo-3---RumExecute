@@ -5,7 +5,6 @@ import Navbar from "../components/Navbar";
 import SubtotalesGrid from "../components/SubtotalesGrid";
 import ListaCuentas from "../components/ListaCuentas";
 import ModalNuevaCuenta from "../components/ModalNuevaCuenta";
-import ModalDiagnostico from "../components/ModalDiagnostico";
 import DetalleCuenta from "../components/DetalleCuenta";
 import VistaPatrimonio from "../components/VistaPatrimonio";
 import VistaTasas from "../components/VistaTasas";
@@ -83,7 +82,6 @@ export default function HomePage() {
 
   // Modales adicionales
   const [modalNuevaCuenta, setModalNuevaCuenta] = useState(false);
-  const [modalDiagnostico, setModalDiagnostico] = useState(false);
 
   // Carga inicial de catálogo de monedas y tasas
   const cargarMonedasYBase = useCallback(async () => {
@@ -178,33 +176,45 @@ export default function HomePage() {
     return () => { cancelado = true; };
   }, [cargarCuentasTauri]);
 
-  // Sincronización periódica (cada 5 minutos) y al volver la conexión mientras haya sesión vigente (Sección 2.4)
+  // Verificación continua de conectividad y sincronización automática al reconectar o cada 5 minutos (Sección 2.4)
   useEffect(() => {
-    if (!usuario) return;
+    let enCurso = false;
 
-    const ejecutarSyncBackground = async () => {
-      const activo = await verificarEstadoServidor();
-      setServidorOffline(!activo);
-      if (!activo) return;
+    const chequearConectividadYSincronizar = async (forzarSync = false) => {
+      if (enCurso) return;
+      enCurso = true;
       try {
-        await sincronizarCambios();
-        await cargarCuentasTauri();
-      } catch (err: any) {
-        if (err?.message?.includes("venció")) {
-          setUsuario(null);
-          setAvisoSesion("Tu sesión venció, inicia sesión de nuevo");
+        const activo = await verificarEstadoServidor();
+        let reconectado = false;
+        setServidorOffline((prevOffline) => {
+          if (prevOffline && activo) reconectado = true;
+          return !activo;
+        });
+
+        if (activo && usuario && (reconectado || forzarSync)) {
+          try {
+            await sincronizarCambios();
+            await cargarCuentasTauri();
+          } catch (err: any) {
+            if (err?.message?.includes("venció")) {
+              setUsuario(null);
+              setAvisoSesion("Tu sesión venció, inicia sesión de nuevo");
+            }
+          }
         }
+      } finally {
+        enCurso = false;
       }
     };
 
-    const intervalo = setInterval(ejecutarSyncBackground, 5 * 60 * 1000);
-    const alVolverRed = () => {
-      ejecutarSyncBackground();
-    };
+    const intervaloPing = setInterval(() => chequearConectividadYSincronizar(false), 4000);
+    const intervaloSync = setInterval(() => chequearConectividadYSincronizar(true), 5 * 60 * 1000);
+    const alVolverRed = () => chequearConectividadYSincronizar(true);
     window.addEventListener("online", alVolverRed);
 
     return () => {
-      clearInterval(intervalo);
+      clearInterval(intervaloPing);
+      clearInterval(intervaloSync);
       window.removeEventListener("online", alVolverRed);
     };
   }, [usuario, cargarCuentasTauri]);
@@ -443,15 +453,6 @@ export default function HomePage() {
           <span style={{ color: "var(--border-subtle)" }}>•</span>
           <span style={{ color: "var(--text-muted)" }}>Sin nube. Siempre tuyos.</span>
         </div>
-        <button
-          type="button"
-          onClick={() => setModalDiagnostico(true)}
-          className="btn btn-secondary"
-          style={{ padding: "4px 12px", fontSize: "12px" }}
-          title="Verificar conexión con el servidor"
-        >
-          Diagnóstico de red
-        </button>
       </footer>
 
       {/* Modales */}
@@ -467,11 +468,6 @@ export default function HomePage() {
           return ok;
         }}
         errorExterno={errorValidacion}
-      />
-
-      <ModalDiagnostico
-        isOpen={modalDiagnostico}
-        onClose={() => setModalDiagnostico(false)}
       />
 
       <ModalAuth

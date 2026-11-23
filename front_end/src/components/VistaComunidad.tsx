@@ -125,25 +125,28 @@ export default function VistaComunidad({
     } catch {}
   }, [usuario, grupoActivo?.id, servidorOffline, refrescarEstadoLocalSync, cacheKeySocial]);
 
+  const guardarCacheDetalleGrupo = useCallback(
+    (det: DetalleGrupo) => {
+      if (typeof window !== "undefined" && usuario) {
+        sessionStorage.setItem(`cuentas_claras_cache_grupo_${usuario.id}_${det.id}`, JSON.stringify(det));
+      }
+    },
+    [usuario]
+  );
+
   const handleSincronizar = useCallback(
     async (silencioso = false) => {
-      if (!usuario || servidorOffline) {
-        if (!silencioso) {
-          setAviso({
-            tipo: "error",
-            texto: "Sin conexión con el servidor. Los gastos pendientes se enviarán automáticamente al recuperar la conexión.",
-          });
-        }
-        return;
-      }
+      if (!usuario) return;
       setSincronizando(true);
       if (!silencioso) setAviso(null);
       try {
         const res = await sincronizarCambios();
         await refrescarEstadoLocalSync(grupoActivo?.id);
-        if (grupoActivo?.id && res.operaciones_offline_despachadas > 0) {
+        if (grupoActivo?.id && (res.operaciones_offline_despachadas > 0 || res.eventos_aplicados > 0)) {
           try {
-            setGrupoActivo(await obtenerDetalleGrupo(grupoActivo.id));
+            const nuevoDetalle = await obtenerDetalleGrupo(grupoActivo.id);
+      guardarCacheDetalleGrupo(nuevoDetalle);
+      setGrupoActivo(nuevoDetalle);
           } catch {}
         }
         if (!silencioso) {
@@ -171,13 +174,16 @@ export default function VistaComunidad({
           setAviso({ tipo: "error", texto: "Tu sesión venció, inicia sesión de nuevo" });
           onSesionVencida?.("Tu sesión venció, inicia sesión de nuevo");
         } else if (!silencioso) {
-          setAviso({ tipo: "error", texto: msg });
+          setAviso({
+            tipo: "error",
+            texto: "Sin conexión con el servidor. Los gastos pendientes se enviarán automáticamente al recuperar la conexión.",
+          });
         }
       } finally {
         setSincronizando(false);
       }
     },
-    [usuario, servidorOffline, grupoActivo?.id, refrescarEstadoLocalSync, onSesionVencida]
+    [usuario, grupoActivo?.id, refrescarEstadoLocalSync, onSesionVencida]
   );
 
   useEffect(() => {
@@ -203,28 +209,55 @@ export default function VistaComunidad({
     }
   }, [usuario?.id]);
 
-  // Al recuperar la conexión con el servidor, sincronizar y vaciar cola automáticamente
+  // Al recuperar la conexión con el servidor, sincronizar, vaciar cola y refrescar el grupo activo automáticamente
   useEffect(() => {
     if (usuario && !servidorOffline) {
-      handleSincronizar(true);
+      handleSincronizar(true).then(async () => {
+        await cargarDatos();
+        if (grupoActivo?.id) {
+          try {
+            const nuevoDetalle = await obtenerDetalleGrupo(grupoActivo.id);
+      guardarCacheDetalleGrupo(nuevoDetalle);
+      setGrupoActivo(nuevoDetalle);
+          } catch {}
+        }
+      });
     }
   }, [servidorOffline]);
 
   const abrirGrupo = async (grupoId: string) => {
     setAviso(null);
+    const cuentaAsig = await obtenerCuentaGrupo(grupoId);
+    setCuentaElegidaGrupo(cuentaAsig);
+
+    if (typeof window !== "undefined" && usuario) {
+      try {
+        const raw = sessionStorage.getItem(`cuentas_claras_cache_grupo_${usuario.id}_${grupoId}`);
+        if (raw) {
+          const cacheado: DetalleGrupo = JSON.parse(raw);
+          setGrupoActivo(cacheado);
+          setPagadorId(usuario?.id || cacheado.miembros[0]?.usuario_id || "");
+          setParticipantesIds(cacheado.miembros.map((m) => m.usuario_id));
+          setValoresCustom({});
+          setSubVista("detalle_grupo");
+        }
+      } catch {}
+    }
+
+    if (servidorOffline) return;
+
     try {
-      const [cuentaAsig, det] = await Promise.all([
-        obtenerCuentaGrupo(grupoId),
-        obtenerDetalleGrupo(grupoId),
-      ]);
-      setCuentaElegidaGrupo(cuentaAsig);
+      const det = await obtenerDetalleGrupo(grupoId);
+      guardarCacheDetalleGrupo(det);
       setGrupoActivo(det);
       setPagadorId(usuario?.id || det.miembros[0]?.usuario_id || "");
       setParticipantesIds(det.miembros.map((m) => m.usuario_id));
       setValoresCustom({});
       setSubVista("detalle_grupo");
     } catch (e: any) {
-      setAviso({ tipo: "error", texto: e?.message || "No se pudo abrir el grupo." });
+      if (!grupoActivo) {
+        setAviso({ tipo: "error", texto: e?.message || "No se pudo abrir el grupo." });
+      }
     }
   };
   if (!usuario) {
@@ -316,7 +349,9 @@ export default function VistaComunidad({
         },
         claveIdempotencia
       );
-      setGrupoActivo(await obtenerDetalleGrupo(grupoActivo.id));
+      const nuevoDetalle = await obtenerDetalleGrupo(grupoActivo.id);
+      guardarCacheDetalleGrupo(nuevoDetalle);
+      setGrupoActivo(nuevoDetalle);
       setConceptoGasto("");
       setMontoGasto("");
       setValoresCustom({});
@@ -392,7 +427,7 @@ export default function VistaComunidad({
             <button
               type="button"
               onClick={() => handleSincronizar(false)}
-              disabled={sincronizando || servidorOffline}
+              disabled={sincronizando}
               className="btn btn-secondary"
               style={{ fontSize: "12px", padding: "5px 10px" }}
             >
@@ -1249,7 +1284,9 @@ export default function VistaComunidad({
                                 onClick={() =>
                                   ejecutarAccion(async () => {
                                     await invitarMiembroGrupo(grupoActivo.id, a.nombre_usuario);
-                                    setGrupoActivo(await obtenerDetalleGrupo(grupoActivo.id));
+                                    const nuevoDetalle = await obtenerDetalleGrupo(grupoActivo.id);
+      guardarCacheDetalleGrupo(nuevoDetalle);
+      setGrupoActivo(nuevoDetalle);
                                   }, `Invitación enviada a @${a.nombre_usuario}.`)
                                 }
                               >

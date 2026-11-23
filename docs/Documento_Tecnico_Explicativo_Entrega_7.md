@@ -45,7 +45,7 @@ En todo momento se preserva el principio rector: **la información solo baja, nu
   - Tablas locales `local_eventos_servidor_aplicados`, `local_cuentas_por_grupo`, `local_partes_pendientes`, `local_sincronizacion_cursor` y `local_cola_gastos_offline`.
   - Transacción atómica en `aplicar_lote_cambios` que inserta los eventos `GastoDeGrupoAplicado` (o partes pendientes) y actualiza el cursor en un único `COMMIT`.
 - **Interfaz de Usuario (`front_end/src/services/syncService.ts`, `VistaComunidad.tsx`, `DetalleCuenta.tsx`, `page.tsx`):**
-  - Selector discreto de cuenta personal por grupo (`Cuenta asociada (<Moneda>):`) filtrado por la moneda del grupo (`INV-18`), aviso de gastos pendientes de asignar, píldora de sincronización con hora de última sincronización exitosa y botón `↺` para volver a verificar el historial desde el inicio (reiniciando el cursor local a cero), cola offline automática con etiqueta `"Pendiente de envío"`, avisos de rechazos de cola sin bloquear las demás operaciones y visualización de gastos de grupo en `DetalleCuenta` sin botón de corrección.
+  - Selector discreto de cuenta personal por grupo (`Cuenta asociada (<Moneda>):`) filtrado por la moneda del grupo (`INV-18`), aviso de gastos pendientes por asignar cuenta, píldora de sincronización con hora de última sincronización exitosa, detección automática de desconexión/reconexión del servidor, cola offline automática con etiqueta `"Pendiente de envío"`, avisos de rechazos de cola sin bloquear las demás operaciones y visualización de gastos de grupo en `DetalleCuenta` sin botón de corrección.
 
 ## 4. Contrato HTTP de la Entrega 7
 
