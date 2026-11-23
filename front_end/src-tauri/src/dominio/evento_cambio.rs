@@ -1,5 +1,6 @@
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use chrono::{DateTime, Utc};
 
 use super::errores::ErrorDominio;
 use super::moneda::CodigoMoneda;
@@ -18,7 +19,7 @@ pub struct EventoCambioUsuario {
     pub nombre_grupo: String,
     pub gasto_id: String,
     pub concepto: String,
-    pub fecha: String,
+    pub fecha: DateTime<Utc>,
     pub moneda: CodigoMoneda,
     #[serde(with = "rust_decimal::serde::str")]
     pub monto_parte: Decimal,
@@ -36,7 +37,7 @@ impl EventoCambioUsuario {
         nombre_grupo: impl Into<String>,
         gasto_id: impl Into<String>,
         concepto: impl Into<String>,
-        fecha: impl Into<String>,
+        fecha: DateTime<Utc>,
         moneda: CodigoMoneda,
         monto_parte: Decimal,
         incluye_redondeo: bool,
@@ -49,7 +50,7 @@ impl EventoCambioUsuario {
             nombre_grupo: nombre_grupo.into(),
             gasto_id: gasto_id.into(),
             concepto: concepto.into(),
-            fecha: fecha.into(),
+            fecha,
             moneda,
             monto_parte,
             incluye_redondeo,
@@ -72,7 +73,6 @@ impl EventoCambioUsuario {
             ("nombre_grupo", self.nombre_grupo.as_str()),
             ("gasto_id", self.gasto_id.as_str()),
             ("concepto", self.concepto.as_str()),
-            ("fecha", self.fecha.as_str()),
         ] {
             if valor.trim().is_empty() {
                 return Err(ErrorDominio::new(
@@ -118,6 +118,10 @@ mod tests {
     use super::*;
 
     fn evento_valido() -> EventoCambioUsuario {
+        let fecha = DateTime::parse_from_rfc3339("2026-11-22T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
         EventoCambioUsuario::nuevo(
             "evento-servidor-1",
             1,
@@ -126,7 +130,7 @@ mod tests {
             "Viaje",
             "gasto-1",
             "Hotel",
-            "2026-11-22T12:00:00Z",
+            fecha,
             CodigoMoneda::USD,
             Decimal::new(3334, 2),
             true,
@@ -249,5 +253,18 @@ mod tests {
             recuperado.validar().unwrap_err().campo,
             "posicion"
         );
+    }
+
+    #[test]
+    fn rechaza_fecha_invalida() {
+        let evento = evento_valido();
+        let mut json = serde_json::to_value(&evento).unwrap();
+
+        json["fecha"] = serde_json::json!("fecha-invalida");
+
+        let resultado =
+            serde_json::from_value::<EventoCambioUsuario>(json);
+
+        assert!(resultado.is_err());
     }
 }
