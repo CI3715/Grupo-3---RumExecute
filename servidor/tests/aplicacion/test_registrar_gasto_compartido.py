@@ -351,7 +351,6 @@ def test_guarda_por_persistencia_y_genera_un_evento_por_participante(
     assert {e.usuario_id for e in eventos} == {
         "usuario-1", "usuario-2", "usuario-3",
     }
-    assert all(e.posicion is None for e in eventos)
     assert sum((e.monto_parte for e in eventos), D("0")) == respuesta.monto
 
 def test_guarda_clave_idempotencia_si_se_proporciona(caso_uso, persistencia):

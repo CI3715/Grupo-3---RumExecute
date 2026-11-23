@@ -105,6 +105,26 @@ impl Cuenta {
     pub fn saldo_actual(&self) -> Monto {
         self.saldo_inicial
     }
+
+    /// Verifica que la cuenta pueda recibir gastos de un grupo
+    /// cuya moneda debe coincidir con la de la cuenta.
+    pub fn validar_moneda_grupo(
+        &self,
+        moneda_grupo: CodigoMoneda,
+    ) -> Result<(), ErrorDominio> {
+        if self.moneda != moneda_grupo {
+            return Err(ErrorDominio::new(
+                "moneda",
+                format!(
+                    "La moneda del grupo ({}) no coincide con la moneda de la cuenta ({}).",
+                    moneda_grupo,
+                    self.moneda,
+                ),
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -189,5 +209,37 @@ mod tests {
 
         let json = serde_json::to_string(&TipoCuenta::BilleteraDigital).unwrap();
         assert_eq!(json, "\"billetera_digital\"");
+    }
+
+    #[test]
+    fn test_cuenta_acepta_grupo_con_misma_moneda() {
+        let cuenta = Cuenta::nueva(
+            "cta-1",
+            "Cuenta USD",
+            TipoCuenta::Banco,
+            CodigoMoneda::USD,
+            Monto::cero(CodigoMoneda::USD),
+        )
+        .unwrap();
+
+        assert!(cuenta.validar_moneda_grupo(CodigoMoneda::USD).is_ok());
+    }
+
+    #[test]
+    fn test_cuenta_rechaza_grupo_con_moneda_distinta() {
+        let cuenta = Cuenta::nueva(
+            "cta-1",
+            "Cuenta USD",
+            TipoCuenta::Banco,
+            CodigoMoneda::USD,
+            Monto::cero(CodigoMoneda::USD),
+        )
+        .unwrap();
+
+        let error = cuenta
+            .validar_moneda_grupo(CodigoMoneda::EUR)
+            .unwrap_err();
+
+        assert_eq!(error.campo, "moneda");
     }
 }

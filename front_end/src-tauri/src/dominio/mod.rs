@@ -1,8 +1,11 @@
+pub mod asociacion_grupo;
 pub mod categoria;
 pub mod conversion;
 pub mod cuenta;
 pub mod errores;
+pub mod evento_cambio;
 pub mod evento;
+pub mod gasto_pendiente;
 pub mod moneda;
 pub mod monto;
 pub mod movimiento;

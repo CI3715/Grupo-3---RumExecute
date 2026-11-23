@@ -14,6 +14,50 @@ class CuotaDivision:
     monto: Decimal
     lleva_residuo: bool
 
+    def __post_init__(self):
+        if not isinstance(self.usuario_id, str) or not self.usuario_id.strip():
+            raise ErrorDominio(
+                "usuario_id",
+                "El identificador del usuario es obligatorio."
+            )
+
+        if not isinstance(self.nombre_usuario, str) or not self.nombre_usuario.strip():
+            raise ErrorDominio(
+                "nombre_usuario",
+                "El nombre de usuario es obligatorio."
+            )
+
+        if not isinstance(self.monto, Decimal):
+            raise ErrorDominio(
+                "monto",
+                "El monto debe ser Decimal."
+            )
+
+        if not self.monto.is_finite():
+            raise ErrorDominio(
+                "monto",
+                "El monto debe ser finito."
+            )
+
+        if self.monto < Decimal("0"):
+            raise ErrorDominio(
+                "monto",
+                "El monto no puede ser negativo."
+            )
+
+        if self.monto != self.monto.quantize(Decimal("0.01")):
+            raise ErrorDominio(
+                "monto",
+                "El monto admite como máximo dos decimales."
+            )
+
+        if not isinstance(self.lleva_residuo, bool):
+            raise ErrorDominio(
+                "lleva_residuo",
+                "La marca de redondeo debe ser booleana."
+            )
+
+
 
 
 def repartir_residuo(

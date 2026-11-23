@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session  # type: ignore
 
 from dominio.balance import Gasto as GastoDominio
 from dominio.division import CuotaDivision
-from dominio.evento_cambio import EventoCambioUsuario
+from dominio.evento_cambio import NuevoEventoCambio
 from dominio.idempotencia import RegistroIdempotenciaGasto
 from aplicacion.puertos.repositorio_gastos import RepositorioGastos
 from aplicacion.puertos.persistencia_gasto_compartido import PersistenciaGastoCompartido
@@ -31,7 +31,7 @@ class RepositorioGastosPostgres(RepositorioGastos, PersistenciaGastoCompartido):
     def guardar_gasto(
         self,
         gasto: GastoDominio,
-        eventos: tuple[EventoCambioUsuario, ...] = (),
+        eventos: tuple[NuevoEventoCambio, ...] = (),
         registro_idempotencia: Optional[RegistroIdempotenciaGasto] = None,
     ) -> None:
         """

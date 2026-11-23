@@ -134,17 +134,6 @@ def test_mapea_todos_los_campos_al_dto_de_respuesta(caso_uso, repo_eventos):
     assert dto.incluye_redondeo is True
 
 
-def test_evento_sin_posicion_es_un_estado_inconsistente(caso_uso, repo_eventos):
-    repo_eventos.listar_posteriores.return_value = [
-        replace(evento(1), posicion=None)
-    ]
-
-    with pytest.raises(ErrorAplicacion) as exc:
-        caso_uso.ejecutar("usuario-1", "0")
-
-    assert exc.value.campo == "posicion"
-
-
 @pytest.mark.parametrize(
     "desde",
     ["-1", "abc", "", "1.5", " 5 ", "1_0", "+5", "٣", None, True, False, -5, 1.5],

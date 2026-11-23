@@ -580,4 +580,50 @@ mod tests {
             serde_json::from_str(&json).expect("Debe deserializar desde JSON");
         assert_eq!(evento, deserializado);
     }
+
+    #[test]
+    fn test_creacion_evento_gasto_de_grupo_aplicado() {
+        let monto = Monto::new(
+            Decimal::new(3334, 2),
+            CodigoMoneda::USD,
+        );
+
+        let datos = DatosGastoDeGrupoAplicado {
+            id_evento_servidor: "evento-servidor-1".into(),
+            id_movimiento: "mov-grupo-1".into(),
+            id_cuenta: "cuenta-usd-1".into(),
+            grupo_id: "grupo-1".into(),
+            nombre_grupo: "Viaje a Mérida".into(),
+            gasto_id: "gasto-1".into(),
+            concepto: "Hotel".into(),
+            monto,
+            fecha: "2026-11-22T12:00:00Z".into(),
+        };
+
+        let evento = EventoLibro::nuevo_gasto_de_grupo_aplicado(
+            "evento-local-1",
+            "2026-11-22T13:00:00Z",
+            "dispositivo-1",
+            datos.clone(),
+        );
+
+        assert_eq!(evento.id(), "evento-local-1");
+        assert_eq!(evento.tipo(), "gasto_de_grupo_aplicado");
+        assert_eq!(evento.id_cuenta(), Some("cuenta-usd-1"));
+
+        let EventoLibro::GastoDeGrupoAplicado {
+            datos: datos_evento,
+            ..
+        } = &evento else {
+            panic!("Tipo de evento incorrecto");
+        };
+
+        assert_eq!(datos_evento, &datos);
+        assert_eq!(
+            datos_evento.id_evento_servidor,
+            "evento-servidor-1"
+        );
+        assert_eq!(datos_evento.monto.cantidad, Decimal::new(3334, 2));
+    }
+
 }

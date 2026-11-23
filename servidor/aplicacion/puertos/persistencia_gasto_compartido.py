@@ -1,7 +1,7 @@
 from typing import Protocol
 
 from dominio.balance import Gasto
-from dominio.evento_cambio import EventoCambioUsuario
+from dominio.evento_cambio import NuevoEventoCambio
 from dominio.idempotencia import RegistroIdempotenciaGasto
 
 
@@ -14,7 +14,7 @@ class PersistenciaGastoCompartido(Protocol):
     def guardar_gasto(
             self,
             gasto: Gasto,
-            eventos: tuple[EventoCambioUsuario, ...],
+            eventos: tuple[NuevoEventoCambio, ...],
             registro_idempotencia: RegistroIdempotenciaGasto | None
     ) -> None:
         """

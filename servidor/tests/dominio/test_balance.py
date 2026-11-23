@@ -1,13 +1,41 @@
-from datetime import datetime, timezone
+from dataclasses import FrozenInstanceError
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal as D
 import pytest
 
 from dominio.balance import Gasto, calcular_balances, validar_balances_suma_cero
-from dominio.division import dividir_partes_iguales, dividir_por_porcentajes
+from dominio.division import CuotaDivision, dividir_partes_iguales, dividir_por_porcentajes
 from dominio.errores import ErrorDominio
 
 AHORA = datetime.now(timezone.utc)
 MIEMBROS = ("ana", "beto", "carla")
+
+def gasto_valido(**cambios):
+    datos = {
+        "id": "gasto-1",
+        "grupo_id": "grupo-1",
+        "concepto": "Hotel",
+        "pagador_id": "usuario-1",
+        "monto": D("30.00"),
+        "cuotas": (
+            CuotaDivision(
+                usuario_id="usuario-1",
+                nombre_usuario="ana",
+                monto=D("15.00"),
+                lleva_residuo=False,
+            ),
+            CuotaDivision(
+                usuario_id="usuario-2",
+                nombre_usuario="beto",
+                monto=D("15.00"),
+                lleva_residuo=False,
+            ),
+        ),
+        "fecha": datetime(2026, 11, 22, tzinfo=timezone.utc),
+    }
+
+    datos.update(cambios)
+    return Gasto(**datos)
 
 def gasto_iguales(pagador="ana", total="100.00", participantes=MIEMBROS, concepto="Cena"):
     nombres = {p: p for p in participantes}
@@ -80,3 +108,138 @@ def test_gasto_monto_invalido(monto):
     with pytest.raises(ErrorDominio) as exc:
         Gasto("gasto-1", "grupo-1", "X", "ana", D(monto), cuotas, AHORA)
     assert exc.value.campo == "monto"
+
+
+def test_crear_gasto_valido():
+    gasto = gasto_valido()
+
+    assert gasto.id == "gasto-1"
+    assert gasto.monto == D("30.00")
+    assert len(gasto.cuotas) == 2
+
+
+def test_gasto_es_inmutable():
+    gasto = gasto_valido()
+
+    with pytest.raises(FrozenInstanceError):
+        gasto.monto = D("50.00")
+
+
+@pytest.mark.parametrize("campo", [
+    "id",
+    "grupo_id",
+    "pagador_id",
+])
+def test_gasto_rechaza_identificadores_vacios(campo):
+    with pytest.raises(ErrorDominio) as exc:
+        gasto_valido(**{campo: "   "})
+
+    assert exc.value.campo == campo
+
+
+def test_gasto_rechaza_concepto_vacio():
+    with pytest.raises(ErrorDominio) as exc:
+        gasto_valido(concepto="   ")
+
+    assert exc.value.campo == "concepto"
+
+
+def test_gasto_normaliza_concepto():
+    gasto = gasto_valido(concepto="  Hotel  ")
+
+    assert gasto.concepto == "Hotel"
+
+
+@pytest.mark.parametrize("monto", [
+    "30.00",
+    30.0,
+    None,
+    D("NaN"),
+    D("Infinity"),
+    D("-Infinity"),
+])
+def test_gasto_rechaza_montos_no_decimales_o_no_finitos(monto):
+    with pytest.raises(ErrorDominio) as exc:
+        gasto_valido(monto=monto)
+
+    assert exc.value.campo == "monto"
+
+
+@pytest.mark.parametrize("monto", [
+    D("0"),
+    D("-1.00"),
+    D("-10.00"),
+])
+def test_gasto_rechaza_montos_no_positivos(monto):
+    with pytest.raises(ErrorDominio) as exc:
+        gasto_valido(monto=monto)
+
+    assert exc.value.campo == "monto"
+
+
+def test_gasto_rechaza_mas_de_dos_decimales():
+    with pytest.raises(ErrorDominio) as exc:
+        gasto_valido(monto=D("30.001"))
+
+    assert exc.value.campo == "monto"
+
+
+def test_gasto_rechaza_cuotas_vacias():
+    with pytest.raises(ErrorDominio) as exc:
+        gasto_valido(cuotas=())
+
+    assert exc.value.campo == "cuotas"
+
+
+def test_gasto_rechaza_cuotas_de_tipo_incorrecto():
+    with pytest.raises(ErrorDominio) as exc:
+        gasto_valido(cuotas=("15.00", "15.00"))
+
+    assert exc.value.campo == "cuotas"
+
+
+def test_gasto_rechaza_participantes_repetidos():
+    cuota = CuotaDivision(
+        usuario_id="usuario-1",
+        nombre_usuario="ana",
+        monto=D("15.00"),
+        lleva_residuo=False,
+    )
+
+    with pytest.raises(ErrorDominio) as exc:
+        gasto_valido(cuotas=(cuota, cuota))
+
+    assert exc.value.campo == "cuotas"
+
+
+def test_gasto_rechaza_suma_incorrecta():
+    cuota = CuotaDivision(
+        usuario_id="usuario-1",
+        nombre_usuario="ana",
+        monto=D("10.00"),
+        lleva_residuo=False,
+    )
+
+    with pytest.raises(ErrorDominio) as exc:
+        gasto_valido(cuotas=(cuota,))
+
+    assert exc.value.campo == "cuotas"
+
+
+def test_gasto_rechaza_fecha_sin_zona_horaria():
+    with pytest.raises(ErrorDominio) as exc:
+        gasto_valido(fecha=datetime(2026, 11, 22))
+
+    assert exc.value.campo == "fecha"
+
+
+def test_gasto_normaliza_fecha_a_utc():
+    fecha = datetime(
+        2026, 11, 22, 12, 0,
+        tzinfo=timezone(timedelta(hours=-4))
+    )
+
+    gasto = gasto_valido(fecha=fecha)
+
+    assert gasto.fecha.utcoffset() == timedelta(0)
+    assert gasto.fecha.hour == 16
