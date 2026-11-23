@@ -1,3 +1,4 @@
+pub mod asociacion_grupo;
 pub mod categoria;
 pub mod conversion;
 pub mod cuenta;
