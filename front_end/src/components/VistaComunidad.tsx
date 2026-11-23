@@ -15,8 +15,6 @@ import {
   listarColaOffline,
   encolarGastoOffline,
   sincronizarCambios,
-  reiniciarCursorSincronizacion,
-  obtenerCursorLocal,
   obtenerUltimaSincronizacion,
   obtenerRechazosColaLocal,
   descartarRechazoColaLocal,
@@ -91,15 +89,15 @@ export default function VistaComunidad({
   const [valoresCustom, setValoresCustom] = useState<Record<string, string>>({});
   const [guardandoGasto, setGuardandoGasto] = useState(false);
 
-  // Estado de Sincronización, Cuenta por Grupo, Pendientes y Cola Offline (Entrega 7)
+  // Estado de Sincronización, Cuenta por Grupo, Pendientes y Cola Offline
   const [cuentaElegidaGrupo, setCuentaElegidaGrupo] = useState<CuentaPorGrupo | null>(null);
   const [partesPendientes, setPartesPendientes] = useState<PartePendienteLocal[]>([]);
   const [colaOffline, setColaOffline] = useState<OperacionGastoOffline[]>([]);
   const [rechazosCola, setRechazosCola] = useState<RechazoColaOffline[]>([]);
   const [sincronizando, setSincronizando] = useState(false);
   const [ultimaSync, setUltimaSync] = useState<string | null>(null);
-  const [cursorActual, setCursorActual] = useState<number>(0);
-  const [modoSinConexionSimulado, setModoSinConexionSimulado] = useState(false);
+
+  const cacheKeySocial = usuario ? `cuentas_claras_cache_social_${usuario.id}` : null;
 
   const refrescarEstadoLocalSync = useCallback(async (grupoIdActual?: string) => {
     const [pend, cola] = await Promise.all([listarPartesPendientes(), listarColaOffline()]);
@@ -107,7 +105,6 @@ export default function VistaComunidad({
     setColaOffline(cola);
     setRechazosCola(obtenerRechazosColaLocal());
     setUltimaSync(obtenerUltimaSincronizacion());
-    setCursorActual(obtenerCursorLocal());
     if (grupoIdActual) {
       const c = await obtenerCuentaGrupo(grupoIdActual);
       setCuentaElegidaGrupo(c);
@@ -116,22 +113,25 @@ export default function VistaComunidad({
 
   const cargarDatos = useCallback(async () => {
     if (!usuario) return;
-    await refrescarEstadoLocalSync(grupoActivo?.id);
-    if (modoSinConexionSimulado || servidorOffline) return;
+    refrescarEstadoLocalSync(grupoActivo?.id);
+    if (servidorOffline) return;
     try {
       const [am, gr] = await Promise.all([listarAmistades(), listarGrupos()]);
       setAmistades(am);
       setListadoGrupos(gr);
+      if (cacheKeySocial && typeof window !== "undefined") {
+        sessionStorage.setItem(cacheKeySocial, JSON.stringify({ am, gr }));
+      }
     } catch {}
-  }, [usuario, grupoActivo?.id, modoSinConexionSimulado, servidorOffline, refrescarEstadoLocalSync]);
+  }, [usuario, grupoActivo?.id, servidorOffline, refrescarEstadoLocalSync, cacheKeySocial]);
 
   const handleSincronizar = useCallback(
     async (silencioso = false) => {
-      if (!usuario || modoSinConexionSimulado || servidorOffline) {
+      if (!usuario || servidorOffline) {
         if (!silencioso) {
           setAviso({
             tipo: "error",
-            texto: "Sin conexión con el servidor. Los gastos en cola se enviarán al recuperar la red.",
+            texto: "Sin conexión con el servidor. Los gastos pendientes se enviarán automáticamente al recuperar la conexión.",
           });
         }
         return;
@@ -141,29 +141,28 @@ export default function VistaComunidad({
       try {
         const res = await sincronizarCambios();
         await refrescarEstadoLocalSync(grupoActivo?.id);
-        if (grupoActivo?.id) {
+        if (grupoActivo?.id && res.operaciones_offline_despachadas > 0) {
           try {
             setGrupoActivo(await obtenerDetalleGrupo(grupoActivo.id));
           } catch {}
         }
-        await cargarDatos();
         if (!silencioso) {
           const detalles: string[] = [];
           if (res.operaciones_offline_despachadas > 0) {
-            detalles.push(`${res.operaciones_offline_despachadas} gasto(s) en cola enviado(s)`);
+            detalles.push(`${res.operaciones_offline_despachadas} gasto(s) pendiente(s) enviado(s)`);
           }
           if (res.eventos_aplicados > 0) {
-            detalles.push(`${res.eventos_aplicados} parte(s) aplicada(s) a tu libro personal`);
+            detalles.push(`${res.eventos_aplicados} gasto(s) aplicado(s) a tu cuenta`);
           }
           if (res.partes_pendientes > 0) {
-            detalles.push(`${res.partes_pendientes} parte(s) pendiente(s) por elegir cuenta`);
+            detalles.push(`${res.partes_pendientes} gasto(s) por asignar cuenta`);
           }
           setAviso({
             tipo: "exito",
             texto:
               detalles.length > 0
-                ? `Sincronización completada: ${detalles.join(" · ")}.`
-                : "Sincronización completada: tu libro personal está al día (sin eventos nuevos).",
+                ? `Sincronizado: ${detalles.join(" · ")}.`
+                : "Tus cuentas están sincronizadas y al día.",
           });
         }
       } catch (err: any) {
@@ -178,7 +177,7 @@ export default function VistaComunidad({
         setSincronizando(false);
       }
     },
-    [usuario, modoSinConexionSimulado, servidorOffline, grupoActivo?.id, refrescarEstadoLocalSync, cargarDatos, onSesionVencida]
+    [usuario, servidorOffline, grupoActivo?.id, refrescarEstadoLocalSync, onSesionVencida]
   );
 
   useEffect(() => {
@@ -187,25 +186,38 @@ export default function VistaComunidad({
     setMostrarFormGrupo(false);
     setMostrarFormGasto(false);
     setAviso(null);
+    // Hidratar inmediatamente desde caché de sesión para que abrir la pestaña sea instantáneo
+    if (cacheKeySocial && typeof window !== "undefined") {
+      try {
+        const raw = sessionStorage.getItem(cacheKeySocial);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed.am) setAmistades(parsed.am);
+          if (parsed.gr) setListadoGrupos(parsed.gr);
+        }
+      } catch {}
+    }
     cargarDatos();
-    if (usuario && !servidorOffline && !modoSinConexionSimulado) {
+    if (usuario && !servidorOffline) {
       handleSincronizar(true);
     }
   }, [usuario?.id]);
 
-  // Al desactivar el modo sin conexión simulado o volver la red, sincronizar y vaciar cola automáticamente (Sección 2.4 y 2.5)
+  // Al recuperar la conexión con el servidor, sincronizar y vaciar cola automáticamente
   useEffect(() => {
-    if (usuario && !modoSinConexionSimulado && !servidorOffline) {
+    if (usuario && !servidorOffline) {
       handleSincronizar(true);
     }
-  }, [modoSinConexionSimulado, servidorOffline]);
+  }, [servidorOffline]);
 
   const abrirGrupo = async (grupoId: string) => {
     setAviso(null);
     try {
-      const cuentaAsig = await obtenerCuentaGrupo(grupoId);
+      const [cuentaAsig, det] = await Promise.all([
+        obtenerCuentaGrupo(grupoId),
+        obtenerDetalleGrupo(grupoId),
+      ]);
       setCuentaElegidaGrupo(cuentaAsig);
-      const det = await obtenerDetalleGrupo(grupoId);
       setGrupoActivo(det);
       setPagadorId(usuario?.id || det.miembros[0]?.usuario_id || "");
       setParticipantesIds(det.miembros.map((m) => m.usuario_id));
@@ -259,7 +271,6 @@ export default function VistaComunidad({
         : `idem-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
     const estaOffline =
-      modoSinConexionSimulado ||
       servidorOffline ||
       (typeof navigator !== "undefined" && navigator.onLine === false);
 
@@ -282,10 +293,10 @@ export default function VistaComunidad({
         setMostrarFormGasto(false);
         setAviso({
           tipo: "exito",
-          texto: "Sin conexión: el gasto se guardó en la cola local como 'Pendiente de envío' y se enviará una sola vez cuando vuelva la red.",
+          texto: "Gasto guardado como pendiente de envío. Se enviará automáticamente al volver la conexión.",
         });
       } catch (err: any) {
-        setAviso({ tipo: "error", texto: err?.message || "No se pudo guardar el gasto en la cola local." });
+        setAviso({ tipo: "error", texto: err?.message || "No se pudo guardar el gasto." });
       } finally {
         setGuardandoGasto(false);
       }
@@ -310,9 +321,8 @@ export default function VistaComunidad({
       setMontoGasto("");
       setValoresCustom({});
       setMostrarFormGasto(false);
-      // Sección 2.4: Sincronizar automáticamente después de registrar un gasto de grupo
       await handleSincronizar(true);
-      setAviso({ tipo: "exito", texto: "Gasto registrado, balances actualizados y sincronizado con tu libro personal." });
+      setAviso({ tipo: "exito", texto: "Gasto registrado y sincronizado." });
     } catch (err: any) {
       const msg = err?.message || "";
       const esFalloRed =
@@ -339,7 +349,7 @@ export default function VistaComunidad({
         setMostrarFormGasto(false);
         setAviso({
           tipo: "exito",
-          texto: "El servidor no respondió: el gasto quedó guardado en la cola local como 'Pendiente de envío'.",
+          texto: "Sin conexión: el gasto quedó como pendiente de envío y se enviará automáticamente al reconectar.",
         });
       } else {
         setAviso({ tipo: "error", texto: msg || "Ocurrió un error al registrar el gasto." });
@@ -355,11 +365,40 @@ export default function VistaComunidad({
           <h1 className="hero-title">{subVista === "detalle_grupo" && grupoActivo ? grupoActivo.nombre_grupo : "Finanzas Compartidas"}</h1>
           <p className="hero-subtitle">
             {subVista === "detalle_grupo" && grupoActivo
-              ? `${grupoActivo.descripcion || "Grupo colaborativo"} • Moneda: ${grupoActivo.moneda}`
-              : "Divide gastos con amigos y grupos sin tocar las cuentas de tu libro personal."}
+              ? `${grupoActivo.descripcion ? `${grupoActivo.descripcion} • ` : ""}Moneda: ${grupoActivo.moneda}`
+              : "Divide gastos con amigos y grupos."}
           </p>
         </div>
-        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              padding: "4px 6px 4px 12px",
+              borderRadius: "10px",
+              backgroundColor: "var(--surface-card)",
+              border: "1px solid var(--border-subtle)",
+            }}
+          >
+            <span style={{ fontSize: "11.5px", color: "var(--text-secondary)" }}>
+              {ultimaSync
+                ? `Sincronizado: ${new Date(ultimaSync).toLocaleTimeString("es-VE", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}`
+                : "Sin sincronizar"}
+            </span>
+            <button
+              type="button"
+              onClick={() => handleSincronizar(false)}
+              disabled={sincronizando || servidorOffline}
+              className="btn btn-secondary"
+              style={{ fontSize: "12px", padding: "5px 10px" }}
+            >
+              {sincronizando ? "Sincronizando..." : "Sincronizar"}
+            </button>
+          </div>
           {subVista === "detalle_grupo" ? (
             <>
               <button type="button" onClick={() => { setSubVista("grupos"); setGrupoActivo(null); cargarDatos(); }} className="btn btn-secondary">
@@ -404,135 +443,31 @@ export default function VistaComunidad({
           <button type="button" onClick={() => setAviso(null)} style={{ background: "none", border: "none", fontWeight: 700, cursor: "pointer", color: "inherit" }}>✕</button>
         </div>
       )}
-      {/* BARRA DE SINCRONIZACIÓN UNIDIRECCIONAL Y COLA SIN CONEXIÓN (ENTREGA 7) */}
-      <div
-        style={{
-          ...cardStyle,
-          padding: "14px 20px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: "12px",
-          backgroundColor: modoSinConexionSimulado || servidorOffline ? "#FFFBEB" : "var(--surface-card)",
-          borderColor: modoSinConexionSimulado || servidorOffline ? "#FCD34D" : "var(--border-subtle)",
-        }}
-      >
-        <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-            <span style={{ fontSize: "13.5px", fontWeight: 800, color: "var(--text-primary)" }}>
-              Sincronización con tu Libro Personal
-            </span>
-            <span
-              style={{
-                fontSize: "11px",
-                fontWeight: 700,
-                padding: "2px 8px",
-                borderRadius: "10px",
-                backgroundColor: modoSinConexionSimulado || servidorOffline ? "#FEF3C7" : "#ECFDF5",
-                color: modoSinConexionSimulado || servidorOffline ? "#92400E" : "#065F46",
-              }}
-            >
-              {modoSinConexionSimulado || servidorOffline ? "Sin conexión (Cola activa)" : `Cursor #${cursorActual}`}
-            </span>
-            {colaOffline.length > 0 && (
-              <span
-                style={{
-                  fontSize: "11px",
-                  fontWeight: 700,
-                  padding: "2px 8px",
-                  borderRadius: "10px",
-                  backgroundColor: "#FEF3C7",
-                  color: "#92400E",
-                }}
-              >
-                {colaOffline.length} gasto(s) pendiente(s) de envío
-              </span>
-            )}
-          </div>
-          <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-            Última sincronización exitosa:{" "}
-            <strong>
-              {ultimaSync
-                ? new Date(ultimaSync).toLocaleString("es-VE", {
-                    dateStyle: "short",
-                    timeStyle: "medium",
-                  })
-                : "Aún no sincronizado"}
-            </strong>{" "}
-            · La información solo baja, nunca sube (INV-16).
-          </span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            style={{
-              fontSize: "12px",
-              padding: "6px 11px",
-              borderColor: modoSinConexionSimulado ? "#D97706" : "var(--border-subtle)",
-              color: modoSinConexionSimulado ? "#B45309" : "var(--text-secondary)",
-              fontWeight: modoSinConexionSimulado ? 700 : 500,
-            }}
-            onClick={() => setModoSinConexionSimulado((prev) => !prev)}
-            title="Permite simular desconexión de red para probar la cola de gastos sin conexión (RNF-17 / ESC-09)"
-          >
-            {modoSinConexionSimulado ? "Volver a conectar red" : "Simular sin conexión"}
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            style={{ fontSize: "12px", padding: "6px 11px" }}
-            disabled={sincronizando}
-            onClick={async () => {
-              await reiniciarCursorSincronizacion();
-              setCursorActual(0);
-              await handleSincronizar(false);
-            }}
-            title="Reinicia el cursor local a 0 y vuelve a descargar todos los eventos para comprobar que no se duplican movimientos (INV-13 / INV-15)"
-          >
-            Reiniciar cursor a 0
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            style={{ fontSize: "12.5px", padding: "7px 14px" }}
-            disabled={sincronizando || modoSinConexionSimulado || servidorOffline}
-            onClick={() => handleSincronizar(false)}
-          >
-            {sincronizando ? "Sincronizando..." : "Sincronizar"}
-          </button>
-        </div>
-      </div>
-      {/* AVISOS DE OPERACIONES DE COLA RECHAZADAS POR EL SERVIDOR (SECCIÓN 2.5) */}
       {rechazosCola.length > 0 && (
         <div
           style={{
             ...cardStyle,
             backgroundColor: "#FEF2F2",
             borderColor: "#FCA5A5",
-            padding: "14px 18px",
+            padding: "12px 16px",
             display: "flex",
             flexDirection: "column",
             gap: "8px",
           }}
         >
-          <div style={{ fontSize: "13.5px", fontWeight: 800, color: "#991B1B" }}>
-            Operaciones en cola rechazadas por el servidor ({rechazosCola.length})
-          </div>
           {rechazosCola.map((r) => (
             <div
               key={r.id}
               style={{
-                ...rowStyle,
-                backgroundColor: "#FFFFFF",
-                borderColor: "#FECACA",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
                 color: "#991B1B",
                 fontSize: "12.5px",
               }}
             >
               <div>
-                <strong>{r.concepto}</strong> ({r.monto}) — Motivo: <span>{r.motivo}</span>
+                No se pudo enviar <strong>{r.concepto}</strong> ({r.monto}): <span>{r.motivo}</span>
               </div>
               <button
                 type="button"
@@ -543,31 +478,26 @@ export default function VistaComunidad({
                   setRechazosCola(obtenerRechazosColaLocal());
                 }}
               >
-                Entendido
+                Cerrar
               </button>
             </div>
           ))}
         </div>
       )}
-      {/* BANDEJA DE PARTES DE GRUPO PENDIENTES DE APLICAR POR FALTA DE CUENTA ELEGIDA (SECCIÓN 2.2) */}
       {partesPendientes.length > 0 && (
         <div
           style={{
             ...cardStyle,
             backgroundColor: "#FFFBEB",
-            borderColor: "#F59E0B",
+            borderColor: "#FCD34D",
+            padding: "14px 18px",
             display: "flex",
             flexDirection: "column",
-            gap: "12px",
+            gap: "10px",
           }}
         >
-          <div>
-            <h3 style={{ fontSize: "15px", fontWeight: 800, color: "#92400E" }}>
-              Partes de Gastos de Grupo Pendientes de Aplicar ({partesPendientes.length})
-            </h3>
-            <p style={{ fontSize: "12.5px", color: "#B45309", marginTop: "2px" }}>
-              Recibiste partes de gastos de grupos donde aún no habías elegido una cuenta personal. Elige una cuenta activa en la moneda del grupo para aplicarlas a tu libro personal (INV-18).
-            </p>
+          <div style={{ fontSize: "13.5px", fontWeight: 700, color: "#92400E" }}>
+            Gastos de grupo pendientes por asignar cuenta ({partesPendientes.length})
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             {partesPendientes.map((p) => {
@@ -584,45 +514,42 @@ export default function VistaComunidad({
                   }}
                 >
                   <div>
-                    <div style={{ fontWeight: 800, fontSize: "13.5px", color: "var(--text-primary)" }}>
+                    <strong style={{ fontSize: "13.5px", color: "var(--text-primary)" }}>
                       {p.nombre_grupo} · {p.concepto}
-                    </div>
-                    <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                      Fecha: {(p.fecha || "").split("T")[0]} · Moneda del grupo: <strong>{p.moneda}</strong> · Tu parte:{" "}
-                      <strong style={{ color: "var(--error-color)" }}>
-                        {formatearMonto(parseFloat(String(p.monto).replace(",", ".")) || 0, p.moneda)}
-                      </strong>
-                    </div>
+                    </strong>{" "}
+                    <span style={{ fontSize: "12.5px", color: "var(--error-color)", fontWeight: 700 }}>
+                      ({formatearMonto(parseFloat(String(p.monto).replace(",", ".")) || 0, p.moneda)})
+                    </span>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     {cuentasCompatibles.length === 0 ? (
                       <span style={{ fontSize: "12px", color: "#B45309", fontWeight: 600 }}>
-                        Crea primero una cuenta personal en {p.moneda} en Mis Cuentas
+                        Crea una cuenta en {p.moneda} en Mis Cuentas
                       </span>
                     ) : (
                       <select
                         className="form-select"
                         defaultValue=""
-                        style={{ fontSize: "12.5px", minWidth: "210px" }}
+                        style={{ fontSize: "12.5px", minWidth: "200px" }}
                         onChange={async (e) => {
                           const cid = e.target.value;
                           if (!cid) return;
                           await ejecutarAccion(async () => {
-                            const res = await elegirCuentaGrupo(p.grupo_id, cid, p.moneda);
+                            await elegirCuentaGrupo(p.grupo_id, cid, p.moneda);
                             await refrescarEstadoLocalSync(grupoActivo?.id);
                             setAviso({
                               tipo: "exito",
-                              texto: `Cuenta asignada al grupo '${p.nombre_grupo}' y ${res.partes_aplicadas} parte(s) aplicada(s) a tu libro personal.`,
+                              texto: `Cuenta asignada a '${p.nombre_grupo}' y gasto aplicado.`,
                             });
                           });
                         }}
                       >
                         <option value="" disabled>
-                          Elegir cuenta en {p.moneda} para aplicar...
+                          Seleccionar cuenta en {p.moneda}...
                         </option>
                         {cuentasCompatibles.map((c) => (
                           <option key={c.id} value={c.id}>
-                            {c.nombre} ({c.moneda} · {c.saldo_formateado})
+                            {c.nombre} ({c.saldo_formateado})
                           </option>
                         ))}
                       </select>
@@ -948,70 +875,6 @@ export default function VistaComunidad({
       {/* DETALLE DE GRUPO */}
       {subVista === "detalle_grupo" && grupoActivo && (
         <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
-          {/* SELECTOR DE CUENTA DEL GRUPO EN EL LIBRO PERSONAL (SECCIÓN 2.2 / INV-18) */}
-          <div
-            style={{
-              ...cardStyle,
-              padding: "16px 20px",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: "12px",
-              backgroundColor: cuentaElegidaGrupo ? "#F8FAFC" : "#FFFBEB",
-              borderColor: cuentaElegidaGrupo ? "var(--border-subtle)" : "#F59E0B",
-            }}
-          >
-            <div style={{ maxWidth: "560px" }}>
-              <div style={{ fontSize: "14px", fontWeight: 800, color: "var(--text-primary)" }}>
-                Cuenta personal donde se aplicarán tus partes de este grupo ({grupoActivo.moneda})
-              </div>
-              <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "3px" }}>
-                Solo se ofrecen tus cuentas personales activas en <strong>{grupoActivo.moneda}</strong> (INV-18). Esta elección se guarda únicamente en este dispositivo y el servidor nunca la conoce (INV-16).
-              </p>
-            </div>
-            <div>
-              {cuentasPersonales.filter((c) => c.moneda === grupoActivo.moneda).length === 0 ? (
-                <span style={{ fontSize: "12.5px", fontWeight: 700, color: "#B45309" }}>
-                  No tienes cuentas personales en {grupoActivo.moneda}. Crea una en Mis Cuentas.
-                </span>
-              ) : (
-                <select
-                  className="form-select"
-                  value={cuentaElegidaGrupo?.cuenta_id_personal || ""}
-                  style={{ minWidth: "240px", fontWeight: 600 }}
-                  onChange={async (e) => {
-                    const nuevaCuentaId = e.target.value;
-                    if (!nuevaCuentaId) return;
-                    await ejecutarAccion(async () => {
-                      const res = await elegirCuentaGrupo(grupoActivo.id, nuevaCuentaId, grupoActivo.moneda);
-                      await refrescarEstadoLocalSync(grupoActivo.id);
-                      const nombreCta =
-                        cuentasPersonales.find((c) => c.id === nuevaCuentaId)?.nombre || nuevaCuentaId;
-                      setAviso({
-                        tipo: "exito",
-                        texto:
-                          res.partes_aplicadas > 0
-                            ? `Cuenta '${nombreCta}' seleccionada para este grupo. Se aplicaron ${res.partes_aplicadas} parte(s) pendiente(s) a tu libro personal.`
-                            : `Cuenta '${nombreCta}' seleccionada en este dispositivo para aplicar tus partes futuras del grupo.`,
-                      });
-                    });
-                  }}
-                >
-                  <option value="" disabled>
-                    -- Selecciona tu cuenta personal en {grupoActivo.moneda} --
-                  </option>
-                  {cuentasPersonales
-                    .filter((c) => c.moneda === grupoActivo.moneda)
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.nombre} ({c.moneda} · Saldo: {c.saldo_formateado})
-                      </option>
-                    ))}
-                </select>
-              )}
-            </div>
-          </div>
           {mostrarFormGasto && (
             <form onSubmit={handleGuardarGasto} style={{ ...cardStyle, border: "2px solid var(--emerald-primary)", display: "flex", flexDirection: "column", gap: "14px" }}>
               <h3 style={{ fontSize: "16px", fontWeight: 800 }}>Registrar Gasto Compartido ({grupoActivo.moneda})</h3>
@@ -1051,14 +914,59 @@ export default function VistaComunidad({
               </div>
             </form>
           )}
-          <div style={{ display: "flex", gap: "8px" }}>
-            <button type="button" onClick={() => setTabGrupo("gastos")} className={tabGrupo === "gastos" ? "btn btn-primary" : "btn btn-secondary"}>Gastos ({grupoActivo.gastos.length})</button>
-            <button type="button" onClick={() => setTabGrupo("balances")} className={tabGrupo === "balances" ? "btn btn-primary" : "btn btn-secondary"}>Balances</button>
-            <button type="button" onClick={() => setTabGrupo("miembros")} className={tabGrupo === "miembros" ? "btn btn-primary" : "btn btn-secondary"}>Miembros ({grupoActivo.miembros.length})</button>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button type="button" onClick={() => setTabGrupo("gastos")} className={tabGrupo === "gastos" ? "btn btn-primary" : "btn btn-secondary"}>Gastos ({grupoActivo.gastos.length})</button>
+              <button type="button" onClick={() => setTabGrupo("balances")} className={tabGrupo === "balances" ? "btn btn-primary" : "btn btn-secondary"}>Balances</button>
+              <button type="button" onClick={() => setTabGrupo("miembros")} className={tabGrupo === "miembros" ? "btn btn-primary" : "btn btn-secondary"}>Miembros ({grupoActivo.miembros.length})</button>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-secondary)" }}>
+                Cuenta asociada ({grupoActivo.moneda}):
+              </span>
+              {cuentasPersonales.filter((c) => c.moneda === grupoActivo.moneda).length === 0 ? (
+                <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Sin cuentas en {grupoActivo.moneda}
+                </span>
+              ) : (
+                <select
+                  className="form-select"
+                  value={cuentaElegidaGrupo?.cuenta_id_personal || ""}
+                  style={{ fontSize: "12.5px", padding: "6px 10px", minWidth: "200px" }}
+                  onChange={async (e) => {
+                    const nuevaCuentaId = e.target.value;
+                    if (!nuevaCuentaId) return;
+                    await ejecutarAccion(async () => {
+                      const res = await elegirCuentaGrupo(grupoActivo.id, nuevaCuentaId, grupoActivo.moneda);
+                      await refrescarEstadoLocalSync(grupoActivo.id);
+                      const nombreCta =
+                        cuentasPersonales.find((c) => c.id === nuevaCuentaId)?.nombre || nuevaCuentaId;
+                      setAviso({
+                        tipo: "exito",
+                        texto:
+                          res.partes_aplicadas > 0
+                            ? `Cuenta '${nombreCta}' vinculada y ${res.partes_aplicadas} gasto(s) aplicado(s).`
+                            : `Cuenta '${nombreCta}' vinculada a este grupo.`,
+                      });
+                    });
+                  }}
+                >
+                  <option value="" disabled>
+                    Seleccionar cuenta...
+                  </option>
+                  {cuentasPersonales
+                    .filter((c) => c.moneda === grupoActivo.moneda)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nombre} ({c.saldo_formateado})
+                      </option>
+                    ))}
+                </select>
+              )}
+            </div>
           </div>
           {tabGrupo === "gastos" && (
             <div style={cardStyle}>
-              {/* GASTOS EN COLA LOCAL SIN CONEXIÓN (SECCIÓN 2.5 / RNF-17 / ESC-09) */}
               {colaOffline.filter((op) => op.grupo_id === grupoActivo.id).length > 0 && (
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
                   {colaOffline
@@ -1086,7 +994,7 @@ export default function VistaComunidad({
                               <span
                                 style={{
                                   fontSize: "11px",
-                                  fontWeight: 800,
+                                  fontWeight: 700,
                                   padding: "2px 9px",
                                   borderRadius: "10px",
                                   backgroundColor: "#FEF3C7",
@@ -1099,8 +1007,7 @@ export default function VistaComunidad({
                             </div>
                             <div style={{ fontSize: "12px", color: "#B45309", marginTop: "3px" }}>
                               Pagado por{" "}
-                              <strong>{pagadorCola?.nombre_visible || `@${pagadorCola?.nombre_usuario || "miembro"}`}</strong> ·
-                              Regla: {op.regla_division} · Idempotency-Key: <code>{op.idempotency_key.slice(0, 12)}...</code>
+                              <strong>{pagadorCola?.nombre_visible || `@${pagadorCola?.nombre_usuario || "miembro"}`}</strong>
                             </div>
                           </div>
                           <div style={{ fontSize: "15px", fontWeight: 800, color: "#92400E" }}>

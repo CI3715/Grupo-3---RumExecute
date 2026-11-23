@@ -310,9 +310,9 @@ export default function DetalleCuenta({
                               fontWeight: 600,
                               color: "var(--text-secondary)",
                             }}
-                            title="Los gastos de grupo no se pueden editar ni corregir desde el libro personal (RF-COM-10)"
+                            title="Los gastos de grupo se gestionan desde el grupo compartido"
                           >
-                            Se corrige en el grupo
+                            Gasto de grupo
                           </span>
                         ) : !esCorregido && !esAjuste ? (
                           <button
