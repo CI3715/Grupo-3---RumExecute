@@ -372,7 +372,15 @@ export function useCuentas() {
     setErrorValidacion(null);
     if (enTauri()) {
       try {
-        await invoke("corregir_movimiento", { entrada });
+        const hoy = new Date().toISOString().split("T")[0];
+        await invoke("corregir_movimiento", {
+          entrada: {
+            id_movimiento_original: entrada.id_movimiento_original,
+            nuevo_monto: entrada.monto_correcto.trim().replace(",", "."),
+            fecha: hoy,
+            descripcion: entrada.motivo?.trim() || "Corrección de monto",
+          },
+        });
         await cargarCuentasTauri();
         return true;
       } catch (err: any) {
