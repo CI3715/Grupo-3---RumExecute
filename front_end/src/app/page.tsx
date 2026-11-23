@@ -38,6 +38,7 @@ import {
   cerrarSesion,
   verificarEstadoServidor,
 } from "../services/authService";
+import { sincronizarCambios } from "../services/syncService";
 
 export default function HomePage() {
   const [tabActivo, setTabActivo] = useState<"cuentas" | "patrimonio" | "tasas" | "comunidad">("cuentas");
@@ -152,17 +153,61 @@ export default function HomePage() {
 
       try {
         const perfil = await obtenerPerfil();
-        if (!cancelado) setUsuario(perfil);
+        if (!cancelado) {
+          setUsuario(perfil);
+          if (perfil && activo) {
+            // Sección 2.4: Sincronizar automáticamente al abrir la aplicación con una sesión vigente
+            sincronizarCambios()
+              .then(() => cargarCuentasTauri())
+              .catch((e: any) => {
+                if (e?.message?.includes("venció")) {
+                  setUsuario(null);
+                  setAvisoSesion("Tu sesión venció, inicia sesión de nuevo");
+                }
+              });
+          }
+        }
       } catch (err: any) {
         if (!cancelado && err?.message?.includes("venció")) {
           setUsuario(null);
-          setAvisoSesion("Tu sesión venció, inicia sesión de nuevo.");
+          setAvisoSesion("Tu sesión venció, inicia sesión de nuevo");
         }
       }
     }
     inicializar();
     return () => { cancelado = true; };
-  }, []);
+  }, [cargarCuentasTauri]);
+
+  // Sincronización periódica (cada 5 minutos) y al volver la conexión mientras haya sesión vigente (Sección 2.4)
+  useEffect(() => {
+    if (!usuario) return;
+
+    const ejecutarSyncBackground = async () => {
+      const activo = await verificarEstadoServidor();
+      setServidorOffline(!activo);
+      if (!activo) return;
+      try {
+        await sincronizarCambios();
+        await cargarCuentasTauri();
+      } catch (err: any) {
+        if (err?.message?.includes("venció")) {
+          setUsuario(null);
+          setAvisoSesion("Tu sesión venció, inicia sesión de nuevo");
+        }
+      }
+    };
+
+    const intervalo = setInterval(ejecutarSyncBackground, 5 * 60 * 1000);
+    const alVolverRed = () => {
+      ejecutarSyncBackground();
+    };
+    window.addEventListener("online", alVolverRed);
+
+    return () => {
+      clearInterval(intervalo);
+      window.removeEventListener("online", alVolverRed);
+    };
+  }, [usuario, cargarCuentasTauri]);
 
   useEffect(() => {
     if (tabActivo === "patrimonio") {
@@ -372,15 +417,21 @@ export default function HomePage() {
           />
         )}
 
-        {/* TAB 4: GRUPOS, AMIGOS Y GASTOS COMPARTIDOS (ENTREGA 6) */}
+        {/* TAB 4: GRUPOS, AMIGOS Y GASTOS COMPARTIDOS (ENTREGAS 6 Y 7) */}
         {tabActivo === "comunidad" && (
           <VistaComunidad
             key={usuario?.id || "anon"}
             usuario={usuario}
             monedas={monedasDisponibles}
+            cuentasPersonales={cuentas}
+            servidorOffline={servidorOffline}
             onSolicitarLogin={() => {
               setModoAuth("login");
               setModalAuth(true);
+            }}
+            onSesionVencida={(msg) => {
+              setUsuario(null);
+              setAvisoSesion(msg || "Tu sesión venció, inicia sesión de nuevo");
             }}
           />
         )}
@@ -434,7 +485,14 @@ export default function HomePage() {
           setCuentaSeleccionadaId(null);
           setFiltroParHistorial(null);
           setAvisoSesion(null);
-          verificarEstadoServidor().then((activo) => setServidorOffline(!activo));
+          verificarEstadoServidor().then((activo) => {
+            setServidorOffline(!activo);
+            if (activo) {
+              sincronizarCambios()
+                .then(() => cargarCuentasTauri())
+                .catch(() => {});
+            }
+          });
         }}
       />
     </div>

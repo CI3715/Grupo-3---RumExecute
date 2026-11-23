@@ -219,7 +219,10 @@ export default function DetalleCuenta({
                 {cuenta.movimientos.map((mov) => {
                   const esAjuste = mov.tipo === "ajuste";
                   const esCorregido = mov.estado === "corregido";
-                  const nombreCat = typeof mov.categoria === "object" && mov.categoria !== null
+                  const esGastoGrupo = Boolean(mov.es_gasto_grupo);
+                  const nombreCat = esGastoGrupo
+                    ? "Gasto de grupo"
+                    : typeof mov.categoria === "object" && mov.categoria !== null
                     ? ((mov.categoria as any).nombre || (mov.categoria as any).id || "Varios")
                     : String(mov.categoria || "Varios");
 
@@ -243,7 +246,13 @@ export default function DetalleCuenta({
                           <div>
                             <div style={{ fontWeight: 600 }}>{nombreCat}</div>
                             <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                              {mov.tipo === "gasto" ? "Gasto" : mov.tipo === "ingreso" ? "Ingreso" : "Ajuste contable"}
+                              {esGastoGrupo
+                                ? "Gasto compartido de grupo"
+                                : mov.tipo === "gasto"
+                                ? "Gasto"
+                                : mov.tipo === "ingreso"
+                                ? "Ingreso"
+                                : "Ajuste contable"}
                             </div>
                           </div>
                         </div>
@@ -273,7 +282,19 @@ export default function DetalleCuenta({
                         </span>
                       </td>
                       <td style={{ textAlign: "center" }}>
-                        {esCorregido ? (
+                        {esGastoGrupo ? (
+                          <span
+                            className="badge-pill"
+                            style={{
+                              backgroundColor: "#EFF6FF",
+                              color: "#1D4ED8",
+                              border: "1px solid #BFDBFE",
+                              fontWeight: 700,
+                            }}
+                          >
+                            Gasto de grupo
+                          </span>
+                        ) : esCorregido ? (
                           <span className="badge-pill badge-corregido">Corregido</span>
                         ) : esAjuste ? (
                           <span className="badge-pill badge-ajuste">Ajuste</span>
@@ -282,7 +303,18 @@ export default function DetalleCuenta({
                         )}
                       </td>
                       <td style={{ textAlign: "right" }}>
-                        {!esCorregido && !esAjuste ? (
+                        {esGastoGrupo ? (
+                          <span
+                            style={{
+                              fontSize: "11.5px",
+                              fontWeight: 600,
+                              color: "var(--text-secondary)",
+                            }}
+                            title="Los gastos de grupo no se pueden editar ni corregir desde el libro personal (RF-COM-10)"
+                          >
+                            Se corrige en el grupo
+                          </span>
+                        ) : !esCorregido && !esAjuste ? (
                           <button
                             onClick={() => {
                               setMovimientoACorregir(mov);
