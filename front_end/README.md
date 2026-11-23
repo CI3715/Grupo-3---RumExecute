@@ -8,7 +8,7 @@ Módulo cliente para la aplicación de finanzas personales y gestión de gastos 
 
 * **Interfaz de Usuario (Frontend):** Construida con Next.js utilizando exportación estática (`output: 'export'`).
 * **Núcleo Nativo (Desktop Core):** Empaquetado de escritorio mediante Tauri 2 en Rust (`src-tauri/`).
-* **Comunicación IPC y HTTP:** La interfaz delega todas las operaciones del libro personal al núcleo local en Rust mediante comandos IPC (`invoke(...)`) sobre SQLite local, y coordina las funciones sociales (Entregas 5 y 6) con el servidor FastAPI, manteniendo un desacoplamiento total entre las finanzas personales del dispositivo y la cuenta social del usuario (`INV-16` / `RES-02`).
+* **Comunicación IPC y HTTP:** La interfaz delega todas las operaciones del libro personal al núcleo local en Rust mediante comandos IPC (`invoke(...)`) sobre SQLite local, y coordina las funciones sociales y la sincronización de gastos compartidos (Entregas 5, 6 y 7) con el servidor FastAPI, manteniendo un desacoplamiento total entre las finanzas personales del dispositivo y la cuenta social del usuario (`INV-16` / `RES-02`).
 
 ### Comandos locales de cuentas y movimientos (Entregas 2 y 3)
 
@@ -34,6 +34,16 @@ El núcleo Tauri expone los comandos `listar_monedas`, `crear_moneda`, `obtener_
 
 * Decisiones de diseño: `docs/adr/ADR-006-postgresql-y-persistencia-social.md`, `ADR-007-autenticacion-hashing-y-sesiones.md` y `ADR-008-reparto-determinista-y-balances.md`.
 * Detalle técnico: `docs/Documento_Tecnico_Explicativo_Entrega_5_y_6.md`.
+
+### Sincronización de gastos de grupo y cola sin conexión (Entrega 7)
+
+* **Servicio y Núcleo de Sincronización (`src/services/syncService.ts` y `src-tauri/src/`):**
+  * **Cuenta asociada por grupo (`INV-18`):** En la barra de pestañas del grupo, el selector **"Cuenta asociada (`<Moneda>`)"** permite vincular una cuenta personal activa en la misma moneda del grupo. La elección se guarda únicamente en el dispositivo (`INV-16`).
+  * **Sincronización e idempotencia (`RF-COM-10`, `INV-13`, `INV-15`):** Al abrir **Grupos y Amigos** o pulsar **"Sincronizar"** (o el botón **`↺`** para volver a verificar todo el historial desde el inicio), la aplicación consulta `GET /cambios?desde=<cursor>` y aplica cada parte como un único movimiento de gasto (`"<Grupo> · <Concepto>"`, marcado como **`Gasto de grupo`** y **`Se corrige en el grupo`**). Si el grupo aún no tiene cuenta asociada, la parte queda en **"Gastos de grupo pendientes de asignar"** y se aplica en cuanto se elige la cuenta.
+  * **Cola automática sin conexión (`RNF-17`, `ESC-09`):** Si se registra un gasto de grupo cuando no hay conexión con el servidor, la operación se guarda automáticamente en la cola local con estado **`Pendiente de envío`** y su `Idempotency-Key` única, y se despacha en orden al restablecerse la conexión.
+
+* Decisiones de diseño: `docs/adr/ADR-009-sincronizacion-cursor-e-idempotencia.md`.
+* Detalle técnico: `docs/Documento_Tecnico_Explicativo_Entrega_7.md`.
 
 ---
 
@@ -155,18 +165,18 @@ npx tsc --noEmit
 Partiendo de los usuarios `@ana`, `@beto` y `@carla` y el grupo **"Viaje a Mérida"** (`USD`) de la Entrega 6, con una cuenta personal **"Efectivo USD"** con saldo inicial de **`200,00 USD`**:
 
 1. **Cuenta del Grupo (`INV-18`):**
-   * Iniciar sesión con `@beto`, abrir el grupo **"Viaje a Mérida"** (`USD`) y en el selector **"Cuenta personal donde se aplicarán tus partes de este grupo (USD)"** elegir la cuenta **`Efectivo USD`** (solo se ofrecen cuentas activas en `USD`).
-   * Con `@carla`, aún no elegir cuenta para el grupo.
-2. **Bajada de Partes y Pendientes de Aplicar (`RF-COM-10`, `2.2`):**
+   * Iniciar sesión con `@beto`, abrir el grupo **"Viaje a Mérida"** (`USD`) y en el selector **"Cuenta asociada (USD):"** (ubicado junto a las pestañas *Gastos / Balances / Miembros*) elegir la cuenta **`Efectivo USD`** (solo se ofrecen cuentas activas en `USD`).
+   * Con `@carla`, dejar el selector en **`Sin cuenta asignada`**.
+2. **Bajada de Partes y Pendientes de Asignar (`RF-COM-10`, `2.2`):**
    * Con `@ana`, registrar el gasto **"Hotel"** por **`100,00 USD`** en partes iguales (`33,34` Ana / `33,33` Beto / `33,33` Carla).
    * Con `@beto`, pulsar **"Sincronizar"**: en su cuenta **`Efectivo USD`** aparece un gasto de **`33,33 USD`** con concepto `"Viaje a Mérida · Hotel"`, marcado como **`Gasto de grupo`** y con la indicación **`Se corrige en el grupo`** (sin opción de corregir en el libro personal). El saldo de **`Efectivo USD`** pasa a **`166,67 USD`**.
-   * Con `@carla`, pulsar **"Sincronizar"**: como aún no eligió cuenta para el grupo, su parte de **`33,33 USD`** aparece en la bandeja **"Partes de Gastos de Grupo Pendientes de Aplicar"** y se aplica en cuanto selecciona una cuenta en `USD`.
-3. **Sin Duplicar y Reinicio de Cursor (`INV-13`, `INV-15`):**
-   * Con `@beto`, pulsar **"Sincronizar"** tres veces seguidas y luego pulsar **"Reiniciar cursor a 0"**: vuelven a descargarse los eventos desde `GET /cambios?desde=0`, pero el núcleo comprueba que ya fueron aplicados (`GastoDeGrupoAplicado`), sigue habiendo **un solo movimiento** y el saldo se mantiene en **`166,67 USD`**.
+   * Con `@carla`, pulsar **"Sincronizar"**: como aún no eligió cuenta para el grupo, su parte de **`33,33 USD`** aparece en el aviso **"Gastos de grupo pendientes de asignar"** y se aplica automáticamente en cuanto selecciona su cuenta en `USD`.
+3. **Sin Duplicar y Reverificación desde el Inicio (`INV-13`, `INV-15`):**
+   * Con `@beto`, pulsar **"Sincronizar"** tres veces seguidas y luego pulsar el botón **`↺`** (*Volver a verificar todo el historial de gastos desde el inicio*, que reinicia el cursor local a `0`): vuelven a descargarse los eventos desde `GET /cambios?desde=0`, pero el núcleo comprueba que ya fueron aplicados (`GastoDeGrupoAplicado`), sigue habiendo **un solo movimiento** y el saldo se mantiene en **`166,67 USD`**.
 4. **Cola de Gastos de Grupo sin Conexión (`RNF-17`, `ESC-09`):**
-   * Con `@beto`, activar **"Simular sin conexión"** (o deshabilitar la red) y registrar el gasto **"Cena"** por **`60,00 USD`** por porcentajes (`50%` Ana / `25%` Beto / `25%` Carla).
-   * El gasto se muestra en el grupo como **`Pendiente de envío`** con su `Idempotency-Key` única y el saldo de **`Efectivo USD`** permanece en **`166,67 USD`** mientras las funciones personales siguen disponibles.
-   * Al pulsar **"Volver a conectar red"**, la cola envía la cena **una sola vez**, aparece en el grupo y baja la parte de `@beto` (**`15,00 USD`**), actualizando el saldo de **`Efectivo USD`** a **`151,67 USD`**.
-   * Si se pulsa nuevamente **"Reiniciar cursor a 0"**, bajan otra vez ambos eventos (`Hotel` y `Cena`), se ignoran por estar ya aplicados y el saldo permanece en **`151,67 USD`**.
+   * Con `@beto`, desconectar la red (por ejemplo, activando `Offline` en la pestaña *Network* de las herramientas de desarrollador o deteniendo temporalmente el servidor) y registrar el gasto **"Cena"** por **`60,00 USD`** por porcentajes (`50%` Ana / `25%` Beto / `25%` Carla).
+   * La aplicación detecta automáticamente la falta de conexión y guarda el gasto en la cola local, mostrándolo en el grupo como **`Pendiente de envío`** mientras el saldo de **`Efectivo USD`** permanece en **`166,67 USD`** y las funciones personales siguen disponibles.
+   * Al restablecer la conexión (o pulsar **"Enviar ahora"** / **"Sincronizar"**), la cola envía la cena **una sola vez** con su `Idempotency-Key`, aparece en el grupo y baja la parte de `@beto` (**`15,00 USD`**), actualizando el saldo de **`Efectivo USD`** a **`151,67 USD`**.
+   * Si se pulsa nuevamente el botón **`↺`**, bajan otra vez ambos eventos (`Hotel` y `Cena`), se ignoran por estar ya aplicados y el saldo permanece en **`151,67 USD`**.
 5. **Privacidad (`INV-16`):**
    * En el registro de peticiones del servidor se comprueba que ninguna petición contiene cuentas personales, movimientos privados, saldos ni tasas del libro local.
