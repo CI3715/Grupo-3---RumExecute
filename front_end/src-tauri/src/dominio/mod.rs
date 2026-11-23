@@ -2,6 +2,7 @@ pub mod categoria;
 pub mod conversion;
 pub mod cuenta;
 pub mod errores;
+pub mod evento_cambio;
 pub mod evento;
 pub mod moneda;
 pub mod monto;
