@@ -21,7 +21,7 @@ from dominio.division import (
 )
 from dominio.errores import ErrorDominio
 from dominio.grupo import es_miembro
-from dominio.evento_cambio import EventoCambioUsuario
+from dominio.evento_cambio import NuevoEventoCambio
 from dominio.idempotencia import (
     RegistroIdempotenciaGasto,
     calcular_huella,
@@ -205,9 +205,8 @@ class RegistrarGastoCompartido:
 
         # 8. Persistir el gasto, sus cuotas, eventos y clave de idempotencia (si aplica).
         eventos = tuple(
-            EventoCambioUsuario(
+            NuevoEventoCambio(
                 id=str(uuid4()),
-                posicion=None,
                 usuario_id=cuota.usuario_id,
                 grupo_id=gasto.grupo_id,
                 nombre_grupo=grupo.nombre_grupo,

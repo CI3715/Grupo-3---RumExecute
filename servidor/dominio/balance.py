@@ -51,8 +51,12 @@ class Gasto:
             raise ErrorDominio("monto", "El monto admite como máximo dos decimales.")
 
         # Validar cuotas.
-        if not isinstance(self.cuotas, tuple) or not self.cuotas:
+        if not isinstance(self.cuotas, (list, tuple)) or not self.cuotas:
             raise ErrorDominio("cuotas", "El gasto debe tener al menos una cuota.")
+
+        # Si las cuotas entran en modo de listas, las convierte a tuplas (Lo tuve que agregar
+        # porque las divisiones se retornan en listas aparentemente jaja q gracioso david)
+        object.__setattr__(self, "cuotas", tuple(self.cuotas))
 
         if not all(isinstance(c, CuotaDivision) for c in self.cuotas):
             raise ErrorDominio("cuotas", "Todas las cuotas deben ser instancias de CuotaDivision.")
