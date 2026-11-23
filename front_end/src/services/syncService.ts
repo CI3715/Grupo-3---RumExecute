@@ -638,12 +638,15 @@ export async function sincronizarCambios(): Promise<ResultadoSincronizacion> {
         rechazos_cola: despacho.rechazos,
         ultima_sincronizacion: ahora,
       };
-    } catch (err: any) {
-      const msg = typeof err === "string" ? err : err?.message || "";
-      if (msg.includes("401") || msg.toLowerCase().includes("venció") || msg.toLowerCase().includes("token")) {
-        throw new Error("Tu sesión venció, inicia sesión de nuevo.");
-      }
-      // Si Tauri no tiene token en keyring pero el navegador sí, continúa por el flujo HTTP directo
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+
+      // Si Tauri no pudo acceder al keyring, utilizar HTTP directamente.
+      // La petición HTTP comprobará si el token realmente sigue siendo válido.
+      console.warn(
+        "Falló la sincronización mediante Tauri; intentando HTTP:",
+        msg
+      );
     }
   }
 
