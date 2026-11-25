@@ -16,27 +16,34 @@ De acuerdo con la arquitectura del sistema, el servidor backend **únicamente** 
 servidor/
 |-- dominio/                  # Reglas de negocio puras, entidades y objetos de valor
 |   |-- modelos.py            # Usuario, Amistad, Grupo, GastoCompartido, Cuota, ReglaDivision
+|   |-- evento_cambio.py      # Eventos de cambio de usuario y validación de cursor (Entrega 7)
+|   |-- idempotencia.py       # Claves de idempotencia y huella SHA-256 de payload (Entrega 7)
 |   |-- servicios.py          # Cálculo determinista de cuotas (ESC-10) y balances (INV-08)
 |   `-- excepciones.py        # Errores de dominio tipados por campo y código semántico
 |-- aplicacion/               # Casos de uso y puertos (interfaces abstractas)
 |   |-- puertos.py            # Contratos de repositorios, hashing y proveedor de tokens
 |   |-- casos_uso_usuarios.py # Registro, inicio de sesión, perfil y búsqueda exacta
 |   |-- casos_uso_amistades.py# Invitaciones, aceptación/rechazo, listado y eliminación
-|   `-- casos_uso_grupos.py   # Creación de grupos, miembros, gastos compartidos y balances
+|   |-- casos_uso_grupos.py   # Creación de grupos, miembros, gastos compartidos y balances
+|   |-- registrar_gasto_compartido.py # Registro idempotente de gasto y emisión de eventos (Entrega 7)
+|   `-- obtener_cambios_usuario.py    # Consulta paginada por cursor de eventos de cambio (Entrega 7)
 |-- infraestructura/          # Adaptadores concretos de persistencia y seguridad
 |   |-- base_datos.py         # Configuración de motor SQLAlchemy y sesiones PostgreSQL
-|   |-- modelos_db.py         # Tablas relacionales (usuarios, amistades, grupos, gastos, cuotas)
+|   |-- modelos_db.py         # Tablas relacionales (usuarios, amistades, grupos, gastos, cuotas, eventos_cambio, idempotencia)
 |   |-- repo_usuarios_pg.py   # Repositorio PostgreSQL de usuarios
 |   |-- repo_amistades_pg.py  # Repositorio PostgreSQL de amistades
 |   |-- repo_grupos_pg.py     # Repositorio PostgreSQL de grupos y miembros
 |   |-- repo_gastos_pg.py     # Repositorio PostgreSQL de gastos compartidos y cuotas
+|   |-- repositorio_cambios_pg.py      # Repositorio PostgreSQL de eventos de cambio por cursor (Entrega 7)
+|   |-- repositorio_idempotencia_pg.py # Repositorio PostgreSQL de claves de idempotencia (Entrega 7)
 |   `-- seguridad.py          # Hashing Argon2id y emisión/verificación de tokens JWT (HS256)
 |-- api/                      # Capa de transporte HTTP (FastAPI)
 |   |-- esquemas.py           # Modelos Pydantic de entrada/salida y errores estructurados
 |   |-- dependencias.py       # Inyección de casos de uso y extracción de Bearer token
 |   |-- rutas_auth.py         # Endpoints de usuarios, sesiones, perfil y búsqueda
 |   |-- rutas_amistades.py    # Endpoints de solicitudes y lista de amigos
-|   `-- rutas_grupos.py       # Endpoints de grupos, invitaciones, gastos y balances
+|   |-- rutas_grupos.py       # Endpoints de grupos, invitaciones, gastos (Idempotency-Key) y balances
+|   `-- rutas_cambios.py      # Endpoint GET /cambios?desde=<cursor> (Entrega 7)
 |-- tests/                    # Suite de pruebas automatizadas (Pytest + Hypothesis)
 |-- main.py                   # Aplicación FastAPI, CORS, ciclo de vida y /ping, /salud
 |-- generar_openapi.py        # Script para exportar el esquema formal a ../openapi.yaml
@@ -115,7 +122,7 @@ python -m uvicorn main:app --reload --port 8000
 
 ---
 
-## Endpoints Disponibles (Entregas 1, 5 y 6)
+## Endpoints Disponibles (Entregas 1, 5, 6 y 7)
 
 | Método y Ruta | Autenticación | Descripción |
 | :--- | :---: | :--- |
@@ -134,8 +141,9 @@ python -m uvicorn main:app --reload --port 8000
 | `POST /grupos` | Bearer JWT | Crea un nuevo grupo colaborativo (`nombre`, `moneda`, `descripcion`). |
 | `POST /grupos/{id}/miembros` | Bearer JWT | Invita a un amigo activo al grupo por su `nombre_usuario`. |
 | `POST /grupos/{id}/miembros/yo/respuesta` | Bearer JWT | Acepta o rechaza una invitación pendiente para unirse a un grupo. |
-| `POST /grupos/{id}/gastos` | Bearer JWT | Registra un gasto compartido (`IGUALES`, `PORCENTAJES` o `MONTOS`) y calcula cuotas deterministas (`ESC-10`). |
+| `POST /grupos/{id}/gastos` | Bearer JWT | Registra un gasto compartido (`IGUALES`, `PORCENTAJES` o `MONTOS`) con soporte para encabezado `Idempotency-Key` (`201 Created`, `200 OK` en reintento idéntico, `409 Conflict` si cambia el payload) y emite eventos de cambio para cada participante (`ESC-10`, `RNF-17`). |
 | `GET /grupos/{id}` | Bearer JWT | Obtiene el detalle del grupo, miembros, historial de gastos con cuotas y balances netos (`INV-08`). Retorna `404` si el usuario no es miembro (`INV-17`). |
+| `GET /cambios?desde=<cursor>` | Bearer JWT | Devuelve en orden hasta 100 eventos de cambio del usuario autenticado posteriores al cursor indicado, junto con `nuevo_cursor` y `quedan_mas` (`RF-COM-10`, `INV-16`, `INV-17`). |
 
 ---
 
@@ -153,6 +161,7 @@ Esta suite verifica:
 * Validaciones de registro, unicidad de correo y `nombre_usuario`, hashing `Argon2id` y rechazo de tokens inválidos o expirados.
 * Pruebas basadas en propiedades con **Hypothesis**: conservación exacta de centavos (`suma(cuotas) == monto_total`), asignación determinista del residuo por orden lexicográfico (`ESC-10`) e invariante de suma cero de balances grupales (`INV-08`).
 * Aislamiento de grupos (`ESC-08` / `INV-17`: un usuario no miembro recibe `404` idéntico al de un grupo inexistente).
+* Sincronización unidireccional por cursor (`GET /cambios?desde=<cursor>`) e idempotencia HTTP (`Idempotency-Key` en `POST /grupos/{id}/gastos` con respuestas `201`, `200` y `409`).
 * Integración completa contra **PostgreSQL** en Docker.
 
 ### 2. Prueba de Contrato OpenAPI (`/ping`)
