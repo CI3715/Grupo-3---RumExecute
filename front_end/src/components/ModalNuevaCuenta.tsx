@@ -76,6 +76,7 @@ export default function ModalNuevaCuenta({
   if (!isOpen) return null;
 
   const tieneError = (campo: string) => errorActivo?.campo === campo;
+  const decimalesMoneda = listaMonedas.find((m) => m.codigo === moneda)?.decimales ?? 2;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,7 +88,7 @@ export default function ModalNuevaCuenta({
         nombre: nombre.trim(),
         tipo,
         moneda,
-        saldo_inicial: completarDecimalesOnBlur(saldoInicial.trim() || "0"),
+        saldo_inicial: completarDecimalesOnBlur(saldoInicial.trim() || "0", decimalesMoneda),
       });
       if (exito) onClose();
     } finally {
@@ -184,7 +185,7 @@ export default function ModalNuevaCuenta({
                 onFocus={(e) => e.target.select()}
                 onBlur={() => {
                   if (saldoInicial.trim()) {
-                    setSaldoInicial((prev) => completarDecimalesOnBlur(prev));
+                    setSaldoInicial((prev) => completarDecimalesOnBlur(prev, decimalesMoneda));
                   }
                 }}
                 placeholder="0,00"

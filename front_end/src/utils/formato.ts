@@ -68,7 +68,7 @@ export function formatearMontoConSigno(
   return `${signo} ${simbolo} ${entero},${decimal}`;
 }
 
-export function normalizarMontoInput(valor: string): string {
+export function normalizarMontoInput(valor: string, maxDecimales?: number): string {
   if (!valor) return "";
   let limpio = valor.replace(/[^0-9,\.]/g, "").replace(/\./g, ",");
   if (limpio.startsWith(",")) limpio = "0" + limpio;
@@ -80,16 +80,27 @@ export function normalizarMontoInput(valor: string): string {
   const enterosNorm =
     enteros.length > 1 && enteros.startsWith("0") ? enteros.replace(/^0+/, "") || "0" : enteros;
 
-  return decimales !== undefined ? `${enterosNorm},${decimales.slice(0, 2)}` : enterosNorm;
+  if (decimales === undefined) return enterosNorm;
+  const decNorm = maxDecimales !== undefined ? decimales.slice(0, maxDecimales) : decimales;
+  return `${enterosNorm},${decNorm}`;
 }
 
-export function completarDecimalesOnBlur(valor: string): string {
+export function completarDecimalesOnBlur(valor: string, decimalesPermitidos: number = 2): string {
   const normal = normalizarMontoInput(valor);
-  if (!normal || normal === "0" || normal === "0,") return "0,00";
-  if (!normal.includes(",")) return `${normal},00`;
+  if (decimalesPermitidos <= 0) {
+    if (!normal || normal === "0" || normal === "0,") return "0";
+    return normal;
+  }
+  const ceros = "0".repeat(decimalesPermitidos);
+  if (!normal || normal === "0" || normal === "0,") return `0,${ceros}`;
+  if (!normal.includes(",")) return `${normal},${ceros}`;
 
   const [enteros, decimales] = normal.split(",");
-  return `${enteros || "0"},${(decimales + "00").slice(0, 2)}`;
+  const decFinal =
+    decimales.length < decimalesPermitidos
+      ? decimales.padEnd(decimalesPermitidos, "0")
+      : decimales;
+  return `${enteros || "0"},${decFinal}`;
 }
 
 export function calcularTotalesCuenta(
