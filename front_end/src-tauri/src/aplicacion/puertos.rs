@@ -79,4 +79,6 @@ pub trait ServicioPerfilPropio {
     ) -> Result<UsuarioRegistradoDto, ErrorAutenticacion>;
 }
 
+pub mod sincronizacion;
+
 pub mod servicio_social;
