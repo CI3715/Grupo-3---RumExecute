@@ -140,6 +140,48 @@ impl ErrorDominio {
             ),
         )
     }
+
+    // Entrega 8: respaldo, formato y sincronización (RNF-18)
+    pub fn version_formato_no_soportada(version: &str) -> Self {
+        Self::new(
+            "version_formato",
+            format!(
+                "La versión de formato '{}' no es soportada por esta versión de la aplicación.",
+                version
+            ),
+        )
+    }
+
+    pub fn evento_mal_formado(detalle: impl Into<String>) -> Self {
+        Self::new("evento", detalle)
+    }
+
+    pub fn evento_repetido_contenido_distinto(id_evento: &str) -> Self {
+        Self::new(
+            "id_evento",
+            format!(
+                "El evento '{}' ya existe en el libro con un contenido diferente y fue rechazado.",
+                id_evento
+            ),
+        )
+    }
+
+    pub fn frase_paso_invalida() -> Self {
+        Self::new(
+            "frase_paso",
+            "La frase de paso debe tener al menos 12 caracteres.",
+        )
+    }
+}
+
+pub const LONGITUD_MINIMA_FRASE_PASO: usize = 12;
+
+/// Valida la regla pura de longitud mínima de la frase de paso (12 caracteres).
+pub fn validar_frase_paso(frase: &str) -> Result<(), ErrorDominio> {
+    if frase.chars().count() < LONGITUD_MINIMA_FRASE_PASO {
+        return Err(ErrorDominio::frase_paso_invalida());
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -157,6 +199,10 @@ mod tests {
             ErrorDominio::monedas_iguales("USD"),
             ErrorDominio::tasa_no_existente("USD", "EUR", "2026-11-25"),
             ErrorDominio::cuenta_no_encontrada("cta-1"),
+            ErrorDominio::version_formato_no_soportada("99"),
+            ErrorDominio::evento_mal_formado("La línea del evento no tiene el formato esperado."),
+            ErrorDominio::evento_repetido_contenido_distinto("evt-dup-1"),
+            ErrorDominio::frase_paso_invalida(),
         ];
 
         for err in muestras {
@@ -167,5 +213,12 @@ mod tests {
             assert!(!err.mensaje.contains("RNF-"));
             assert_eq!(err.to_string(), format!("{} (campo: {})", err.mensaje, err.campo));
         }
+    }
+
+    #[test]
+    fn valida_longitud_minima_de_frase_paso() {
+        assert!(validar_frase_paso("corta123456").is_err()); // 11 caracteres
+        assert!(validar_frase_paso("clave-segura").is_ok()); // 12 caracteres
+        assert!(validar_frase_paso("contraseña_larga").is_ok());
     }
 }

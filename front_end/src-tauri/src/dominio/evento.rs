@@ -178,6 +178,31 @@ pub enum EventoLibro {
     },
 }
 
+/// Detalle de un evento rechazado durante la fusión o importación.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EventoRechazado {
+    pub id_evento: String,
+    pub motivo: String,
+}
+
+/// Resumen del resultado de fusionar o importar un lote de eventos (INV-13, INV-14).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResultadoFusion {
+    pub eventos_resultantes: Vec<EventoLibro>,
+    pub eventos_nuevos: usize,
+    pub eventos_existentes: usize,
+    pub eventos_rechazados: Vec<EventoRechazado>,
+}
+
+/// Informe consolidado tras ejecutar una sincronización entre dispositivos.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InformeSincronizacion {
+    pub enviados: usize,
+    pub recibidos: usize,
+    pub rechazados: Vec<EventoRechazado>,
+    pub fecha_ultima_sincronizacion: String,
+}
+
 impl EventoLibro {
     /// Constructor para un evento de creación de cuenta inmutable.
     pub fn nuevo_cuenta_creada(
@@ -484,23 +509,84 @@ impl EventoLibro {
         ordenados
     }
 
-    /// Fusiona dos conjuntos de eventos de forma determinista, idempotente (INV-13)
-    /// y conmutativa (INV-14).
-    ///
-    /// - Deduplica por `id` conservando la primera aparición.
-    /// - Ordena el resultado por `(momento_registro, dispositivo_origen, id)`.
-    pub fn fusionar(locales: &[EventoLibro], remotos: &[EventoLibro]) -> Vec<EventoLibro> {
-        let mut ids_vistos = std::collections::HashSet::with_capacity(locales.len() + remotos.len());
-        let mut fusionados = Vec::with_capacity(locales.len() + remotos.len());
+    /// Compara si dos eventos representan exactamente el mismo hecho de negocio.
+    /// En `GastoDeGrupoAplicado` (derivado determinísticamente del servidor),
+    /// dos dispositivos pueden registrar distinto `momento_registro` o `dispositivo_origen`
+    /// al descargarlo, manteniendo idénticos `id` y `datos`.
+    pub fn tiene_mismo_contenido(&self, otro: &Self) -> bool {
+        match (self, otro) {
+            (
+                EventoLibro::GastoDeGrupoAplicado {
+                    id: id_a,
+                    datos: datos_a,
+                    ..
+                },
+                EventoLibro::GastoDeGrupoAplicado {
+                    id: id_b,
+                    datos: datos_b,
+                    ..
+                },
+            ) => id_a == id_b && datos_a == datos_b,
+            _ => self == otro,
+        }
+    }
 
-        for evento in locales.iter().chain(remotos.iter()) {
-            if ids_vistos.insert(evento.id().to_string()) {
-                fusionados.push(evento.clone());
+    /// Regla pura de fusión de libros como unión de conjuntos por `id` (INV-13, INV-14):
+    /// - Evento nuevo -> se agrega.
+    /// - Evento existente con mismo `id` y mismo contenido -> se ignora (idempotencia).
+    /// - Evento existente con mismo `id` y contenido distinto -> se rechaza con motivo
+    ///   sin modificar el libro ni detener el procesamiento de los demás.
+    pub fn fusionar_con_reporte(
+        locales: &[EventoLibro],
+        entrantes: &[EventoLibro],
+    ) -> ResultadoFusion {
+        let mut por_id: std::collections::HashMap<String, EventoLibro> =
+            std::collections::HashMap::with_capacity(locales.len() + entrantes.len());
+
+        for evento in Self::ordenar_determinista(locales) {
+            por_id
+                .entry(evento.id().to_string())
+                .or_insert_with(|| evento.clone());
+        }
+
+        let mut eventos_nuevos = 0usize;
+        let mut eventos_existentes = 0usize;
+        let mut eventos_rechazados = Vec::new();
+
+        for evento in entrantes {
+            match por_id.get(evento.id()) {
+                None => {
+                    por_id.insert(evento.id().to_string(), evento.clone());
+                    eventos_nuevos += 1;
+                }
+                Some(existente) => {
+                    if existente.tiene_mismo_contenido(evento) {
+                        eventos_existentes += 1;
+                    } else {
+                        let error = ErrorDominio::evento_repetido_contenido_distinto(evento.id());
+                        eventos_rechazados.push(EventoRechazado {
+                            id_evento: evento.id().to_string(),
+                            motivo: error.mensaje,
+                        });
+                    }
+                }
             }
         }
 
-        Self::ordenar_en_sitio(&mut fusionados);
-        fusionados
+        let mut eventos_resultantes: Vec<EventoLibro> = por_id.into_values().collect();
+        Self::ordenar_en_sitio(&mut eventos_resultantes);
+
+        ResultadoFusion {
+            eventos_resultantes,
+            eventos_nuevos,
+            eventos_existentes,
+            eventos_rechazados,
+        }
+    }
+
+    /// Fusión pura y conmutativa (INV-14) que devuelve directamente los eventos resultantes.
+    pub fn fusionar(locales: &[EventoLibro], remotos: &[EventoLibro]) -> Vec<EventoLibro> {
+        Self::fusionar_con_reporte(locales, remotos).eventos_resultantes
     }
 }
 
@@ -809,6 +895,52 @@ mod tests {
         let bc = EventoLibro::fusionar(&conj_b, &conj_c);
         let a_bc = EventoLibro::fusionar(&conj_a, &bc);
         assert_eq!(ab_c, a_bc);
+    }
+
+    #[test]
+    fn fusionar_con_reporte_rechaza_conflicto_sin_detener_los_demas() {
+        let ev_local = EventoLibro::nuevo_categoria_creada(
+            "evt-1",
+            "2026-11-25T10:00:00Z",
+            "disp-a",
+            DatosCategoriaCreada {
+                id_categoria: "cat-1".to_string(),
+                nombre: "Transporte".to_string(),
+                tipo: crate::dominio::categoria::TipoCategoria::Gasto,
+            },
+        );
+        let ev_conflicto = EventoLibro::nuevo_categoria_creada(
+            "evt-1",
+            "2026-11-25T10:05:00Z",
+            "disp-b",
+            DatosCategoriaCreada {
+                id_categoria: "cat-1".to_string(),
+                nombre: "Nombre Alterado".to_string(),
+                tipo: crate::dominio::categoria::TipoCategoria::Gasto,
+            },
+        );
+        let ev_valido = EventoLibro::nuevo_categoria_creada(
+            "evt-2",
+            "2026-11-25T10:06:00Z",
+            "disp-b",
+            DatosCategoriaCreada {
+                id_categoria: "cat-2".to_string(),
+                nombre: "Salud".to_string(),
+                tipo: crate::dominio::categoria::TipoCategoria::Gasto,
+            },
+        );
+
+        let resultado = EventoLibro::fusionar_con_reporte(
+            std::slice::from_ref(&ev_local),
+            &[ev_local.clone(), ev_conflicto, ev_valido.clone()],
+        );
+
+        assert_eq!(resultado.eventos_nuevos, 1);
+        assert_eq!(resultado.eventos_existentes, 1);
+        assert_eq!(resultado.eventos_rechazados.len(), 1);
+        assert_eq!(resultado.eventos_rechazados[0].id_evento, "evt-1");
+        assert!(!resultado.eventos_rechazados[0].motivo.contains("INV-"));
+        assert_eq!(resultado.eventos_resultantes, vec![ev_local, ev_valido]);
     }
 
 }
