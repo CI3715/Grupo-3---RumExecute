@@ -50,7 +50,9 @@ pub fn corregir_movimiento(
     let mut movimiento_original_opt: Option<Movimiento> = None;
     let mut cuentas: Vec<Cuenta> = Vec::new();
 
-    for evento in repo.listar_eventos()? {
+    let mut eventos = repo.listar_eventos()?;
+    EventoLibro::ordenar_en_sitio(&mut eventos);
+    for evento in eventos {
         match evento {
             EventoLibro::MonedaCreada { datos, .. } => {
                 if let Ok(moneda) = Moneda::nueva_propia(

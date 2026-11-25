@@ -38,7 +38,9 @@ pub fn listar_cuentas(repo: &dyn RepositorioLibro) -> Result<ResumenCuentas, Err
     let mut cuentas: Vec<Cuenta> = Vec::new();
     let mut subtotales: Vec<Monto> = Vec::new();
 
-    for evento in repo.listar_eventos()? {
+    let mut eventos = repo.listar_eventos()?;
+    EventoLibro::ordenar_en_sitio(&mut eventos);
+    for evento in eventos {
         // INV-13: si este evento ya se aplicó, se ignora (aplicarlo dos veces = una vez)
         if !vistos.insert(evento.id().to_string()) {
             continue;

@@ -15,7 +15,7 @@ pub(crate) fn catalogo_desde_eventos(
     eventos: &[EventoLibro],
 ) -> Result<CatalogoMonedas, ErrorDominio> {
     let mut catalogo = CatalogoMonedas::nuevo();
-    for evento in eventos {
+    for evento in EventoLibro::ordenar_determinista(eventos) {
         if let EventoLibro::MonedaCreada { datos, .. } = evento {
             let moneda = Moneda::nueva_propia(
                 datos.codigo.as_str(),
@@ -42,7 +42,7 @@ pub(crate) fn historial_tasas_desde_eventos(
     eventos: &[EventoLibro],
 ) -> Result<Vec<TasaIdentificada>, ErrorDominio> {
     let mut tasas: Vec<TasaIdentificada> = Vec::new();
-    for (orden, evento) in eventos.iter().enumerate() {
+    for (orden, evento) in EventoLibro::ordenar_determinista(eventos).into_iter().enumerate() {
         match evento {
             EventoLibro::TasaRegistrada { id, datos, .. } => {
                 tasas.push(TasaIdentificada {
@@ -93,8 +93,8 @@ pub(crate) fn tasas_activas_desde_eventos(
 }
 
 pub(crate) fn moneda_base_desde_eventos(eventos: &[EventoLibro]) -> CodigoMoneda {
-    eventos
-        .iter()
+    EventoLibro::ordenar_determinista(eventos)
+        .into_iter()
         .filter_map(|evento| match evento {
             EventoLibro::MonedaBaseCambiada { datos, .. } => Some(datos.nueva_moneda),
             _ => None,

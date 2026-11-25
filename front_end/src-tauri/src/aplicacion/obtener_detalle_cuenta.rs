@@ -51,9 +51,11 @@ pub fn obtener_detalle_cuenta(
 
     let mut cuenta_opt: Option<Cuenta> = None;
     let mut movimientos: Vec<Movimiento> = Vec::new();
+    let mut eventos = repo.listar_eventos()?;
+    EventoLibro::ordenar_en_sitio(&mut eventos);
 
     // Recorrer los eventos inmutables para recuperar la cuenta y sus movimientos
-    for evento in repo.listar_eventos()? {
+    for evento in eventos {
         match evento {
             EventoLibro::CuentaCreada { datos, .. } => {
                 if datos.id_cuenta == clean_id {

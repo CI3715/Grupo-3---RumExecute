@@ -459,6 +459,30 @@ impl EventoLibro {
 
         Ok(())
     }
+
+    /// Compara dos eventos según el orden determinista del libro:
+    /// `(momento_registro, dispositivo_origen, id)`.
+    pub fn comparar_determinista(&self, otro: &Self) -> std::cmp::Ordering {
+        (self.momento_registro(), self.dispositivo_origen(), self.id()).cmp(&(
+            otro.momento_registro(),
+            otro.dispositivo_origen(),
+            otro.id(),
+        ))
+    }
+
+    /// Ordena un slice mutable de eventos en sitio siguiendo el orden determinista:
+    /// `(momento_registro, dispositivo_origen, id)`.
+    pub fn ordenar_en_sitio(eventos: &mut [EventoLibro]) {
+        eventos.sort_by(Self::comparar_determinista);
+    }
+
+    /// Devuelve las referencias a los eventos ordenadas de forma determinista:
+    /// `(momento_registro, dispositivo_origen, id)`.
+    pub fn ordenar_determinista<'a>(eventos: &'a [EventoLibro]) -> Vec<&'a EventoLibro> {
+        let mut ordenados: Vec<&'a EventoLibro> = eventos.iter().collect();
+        ordenados.sort_by(|a, b| a.comparar_determinista(b));
+        ordenados
+    }
 }
 
 #[cfg(test)]
@@ -651,6 +675,64 @@ mod tests {
             "evento-servidor-1"
         );
         assert_eq!(datos_evento.monto.cantidad, Decimal::new(3334, 2));
+    }
+
+    #[test]
+    fn ordenar_determinista_respeta_tupla_momento_dispositivo_id() {
+        let cat_a = EventoLibro::nuevo_categoria_creada(
+            "evt-b",
+            "2026-10-14T10:00:00Z",
+            "disp-2",
+            DatosCategoriaCreada {
+                id_categoria: "c1".into(),
+                nombre: "Cat 1".into(),
+                tipo: crate::dominio::categoria::TipoCategoria::Gasto,
+            },
+        );
+
+        let cat_b = EventoLibro::nuevo_categoria_creada(
+            "evt-a",
+            "2026-10-14T10:00:00Z",
+            "disp-2",
+            DatosCategoriaCreada {
+                id_categoria: "c2".into(),
+                nombre: "Cat 2".into(),
+                tipo: crate::dominio::categoria::TipoCategoria::Gasto,
+            },
+        );
+
+        let cat_c = EventoLibro::nuevo_categoria_creada(
+            "evt-z",
+            "2026-10-14T10:00:00Z",
+            "disp-1",
+            DatosCategoriaCreada {
+                id_categoria: "c3".into(),
+                nombre: "Cat 3".into(),
+                tipo: crate::dominio::categoria::TipoCategoria::Gasto,
+            },
+        );
+
+        let cat_d = EventoLibro::nuevo_categoria_creada(
+            "evt-0",
+            "2026-10-14T09:59:59Z",
+            "disp-9",
+            DatosCategoriaCreada {
+                id_categoria: "c4".into(),
+                nombre: "Cat 4".into(),
+                tipo: crate::dominio::categoria::TipoCategoria::Gasto,
+            },
+        );
+
+        // Orden esperado:
+        // 1. evt-0 (momento más antiguo: 09:59:59Z)
+        // 2. evt-z (10:00:00Z, disp-1 < disp-2)
+        // 3. evt-a (10:00:00Z, disp-2, id evt-a < evt-b)
+        // 4. evt-b (10:00:00Z, disp-2, id evt-b)
+        let desordenados = vec![cat_a, cat_b, cat_c, cat_d];
+        let ordenados = EventoLibro::ordenar_determinista(&desordenados);
+        let ids: Vec<&str> = ordenados.iter().map(|e| e.id()).collect();
+
+        assert_eq!(ids, vec!["evt-0", "evt-z", "evt-a", "evt-b"]);
     }
 
 }

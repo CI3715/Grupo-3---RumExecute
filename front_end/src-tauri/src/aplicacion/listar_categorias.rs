@@ -19,7 +19,9 @@ pub fn listar_categorias(
 ) -> Result<Vec<Categoria>, ErrorListarCategorias> {
     let mut categorias = catalogo_categorias();
 
-    for evento in repo.listar_eventos()? {
+    let mut eventos = repo.listar_eventos()?;
+    EventoLibro::ordenar_en_sitio(&mut eventos);
+    for evento in eventos {
         if let EventoLibro::CategoriaCreada { datos, .. } = evento {
             categorias.push(Categoria {
                 id: datos.id_categoria,
