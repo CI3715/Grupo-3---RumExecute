@@ -66,11 +66,7 @@ fn construir_catalogo_monedas(
                 return Err(ErrorFormatoLibro::ArchivoMalformado);
             }
 
-            if let Some(existente) = catalogo.obtener(&moneda.codigo) {
-                if existente != &moneda {
-                    return Err(ErrorFormatoLibro::ArchivoMalformado);
-                }
-            } else {
+            if catalogo.obtener(&moneda.codigo).is_none() {
                 catalogo.registrar_moneda(moneda);
             }
         }
@@ -93,14 +89,10 @@ fn construir_catalogo_categorias(
             if categoria.id != datos.id_categoria || categoria.nombre != datos.nombre {
                 return Err(ErrorFormatoLibro::ArchivoMalformado);
             }
-            if let Some(existente) = categorias
+            if !categorias
                 .iter()
-                .find(|existente| existente.id == categoria.id)
+                .any(|existente| existente.id == categoria.id)
             {
-                if existente != &categoria {
-                    return Err(ErrorFormatoLibro::ArchivoMalformado);
-                }
-            } else {
                 categorias.push(categoria);
             }
         }
@@ -138,13 +130,7 @@ fn construir_cuentas(
             if cuenta.nombre != datos.nombre {
                 return Err(ErrorFormatoLibro::ArchivoMalformado);
             }
-            if let Some(existente) = cuentas.get(&cuenta.id) {
-                if existente != &cuenta {
-                    return Err(ErrorFormatoLibro::ArchivoMalformado);
-                }
-            } else {
-                cuentas.insert(cuenta.id.clone(), cuenta);
-            }
+            cuentas.entry(cuenta.id.clone()).or_insert(cuenta);
         }
     }
     Ok(cuentas)
