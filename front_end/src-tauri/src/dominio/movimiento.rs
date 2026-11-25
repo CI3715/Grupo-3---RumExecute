@@ -409,8 +409,8 @@ pub fn calcular_diferencia_ajuste(
     if movimiento_original.es_gasto_grupo {
         return Err(ErrorDominio::new(
             "movimiento",
-            "Los gastos provenientes de grupos compartidos no pueden corregirse desde el libro personal"
-        ))
+            "Los gastos provenientes de grupos compartidos no pueden corregirse desde el libro personal.",
+        ));
     }
 
     if movimiento_original.tipo == TipoMovimiento::Ajuste {
@@ -469,7 +469,7 @@ pub fn aplicar_movimiento_a_saldo(
         return Err(ErrorDominio::new(
             "moneda",
             format!(
-                "Invariante INV-02 violado: No se puede aplicar un movimiento en {} a un saldo en {}.",
+                "No se puede aplicar un movimiento en {} a un saldo en {}.",
                 movimiento.monto.moneda, saldo_actual.moneda
             ),
         ));

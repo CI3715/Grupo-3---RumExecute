@@ -114,7 +114,7 @@ impl ErrorDominio {
         Self::new(
             "tasa_no_existente",
             format!(
-                "Falta una tasa de {} a {} con fecha igual o anterior al {}",
+                "Falta una tasa de {} a {} con fecha igual o anterior al {}.",
                 origen, destino, fecha
             ),
         )
@@ -128,5 +128,44 @@ impl ErrorDominio {
     // evento.rs
     pub fn evento_invalido(mensaje: impl Into<String>) -> Self {
         Self::new("evento", mensaje)
+    }
+
+    // cuenta.rs / aplicacion
+    pub fn cuenta_no_encontrada(id_cuenta: &str) -> Self {
+        Self::new(
+            "id_cuenta",
+            format!(
+                "No existe ninguna cuenta registrada con el id '{}'.",
+                id_cuenta
+            ),
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn errores_dominio_son_legibles_y_sin_codigos_internos() {
+        let muestras = vec![
+            ErrorDominio::moneda_no_encontrada("XYZ"),
+            ErrorDominio::codigo_moneda_invalido(),
+            ErrorDominio::nombre_moneda_invalido(),
+            ErrorDominio::simbolo_moneda_invalido(),
+            ErrorDominio::decimales_moneda_invalido(),
+            ErrorDominio::monedas_iguales("USD"),
+            ErrorDominio::tasa_no_existente("USD", "EUR", "2026-11-25"),
+            ErrorDominio::cuenta_no_encontrada("cta-1"),
+        ];
+
+        for err in muestras {
+            assert!(!err.campo.trim().is_empty());
+            assert!(err.mensaje.ends_with('.'));
+            assert!(!err.mensaje.contains("INV-"));
+            assert!(!err.mensaje.contains("RF-"));
+            assert!(!err.mensaje.contains("RNF-"));
+            assert_eq!(err.to_string(), format!("{} (campo: {})", err.mensaje, err.campo));
+        }
     }
 }

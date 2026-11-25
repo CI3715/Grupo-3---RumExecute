@@ -123,10 +123,7 @@ pub fn obtener_detalle_cuenta(
 
     // Validar que la cuenta existe
     let cuenta = cuenta_opt.ok_or_else(|| {
-        ErrorDominio::new(
-            "id_cuenta",
-            format!("No existe ninguna cuenta registrada con el id '{clean_id}'."),
-        )
+        ErrorDominio::cuenta_no_encontrada(&clean_id)
     })?;
 
     // Proyectar acumulados por tipo de movimiento y calcular el saldo actual exacto (INV-05)
