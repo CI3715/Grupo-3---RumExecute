@@ -7,6 +7,8 @@ use super::moneda::CodigoMoneda;
 use super::monto::Monto;
 use super::movimiento::TipoMovimiento;
 use super::tasa_cambio::ParMonedas;
+use super::dispositivo::DispositivoId;
+use super::errores::ErrorDominio;
 
 /// Datos específicos asociados a la creación de una cuenta en el libro.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -307,18 +309,24 @@ impl EventoLibro {
 
     /// Constructor para un evento inmutable de parte de gasto de grupo aplicada (RF-COM-10, INV-13, INV-15).
     pub fn nuevo_gasto_de_grupo_aplicado(
-        id: impl Into<String>,
         momento_registro: impl Into<String>,
         dispositivo_origen: impl Into<String>,
         datos: DatosGastoDeGrupoAplicado,
-    ) -> Self {
-        Self::GastoDeGrupoAplicado {
-            id: id.into(),
+    ) -> Result<Self, ErrorDominio> {
+        let id_servidor = datos.id_evento_servidor.trim();
+        if id_servidor.is_empty() {
+            return Err(ErrorDominio::evento_invalido(
+                "El id_evento_servidor no puede estar vacío.",
+            ));
+        }
+
+        Ok(Self::GastoDeGrupoAplicado {
+            id: format!("gasto_grupo:{}", id_servidor),
             tipo: "gasto_de_grupo_aplicado".to_string(),
             momento_registro: momento_registro.into(),
             dispositivo_origen: dispositivo_origen.into(),
             datos,
-        }
+        })
     }
 
     /// Retorna el ID único del evento.
@@ -430,6 +438,26 @@ impl EventoLibro {
             | EventoLibro::MonedaBaseCambiada { .. }
             | EventoLibro::MonedaCreada { .. } => None,
         }
+    }
+
+
+    /// Valida los metadatos obligatorios de integridad del evento.
+    pub fn validar(&self) -> Result<(), ErrorDominio> {
+        if self.id().trim().is_empty() {
+            return Err(ErrorDominio::evento_invalido(
+                "El id del evento no puede estar vacío.",
+            ));
+        }
+
+        if self.momento_registro().trim().is_empty() {
+            return Err(ErrorDominio::evento_invalido(
+                "El momento de registro del evento no puede estar vacío.",
+            ));
+        }
+        // Reutiliza exactamente las reglas de validación de DispositivoId
+        DispositivoId::nuevo(self.dispositivo_origen())?;
+
+        Ok(())
     }
 }
 
@@ -601,13 +629,12 @@ mod tests {
         };
 
         let evento = EventoLibro::nuevo_gasto_de_grupo_aplicado(
-            "evento-local-1",
             "2026-11-22T13:00:00Z",
             "dispositivo-1",
             datos.clone(),
-        );
+        ).unwrap();
 
-        assert_eq!(evento.id(), "evento-local-1");
+        assert_eq!(evento.id(), "gasto_grupo:evento-servidor-1");
         assert_eq!(evento.tipo(), "gasto_de_grupo_aplicado");
         assert_eq!(evento.id_cuenta(), Some("cuenta-usd-1"));
 

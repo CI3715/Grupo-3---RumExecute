@@ -10,3 +10,4 @@ pub mod moneda;
 pub mod monto;
 pub mod movimiento;
 pub mod tasa_cambio;
+pub mod dispositivo;

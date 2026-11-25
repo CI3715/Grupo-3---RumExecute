@@ -119,4 +119,14 @@ impl ErrorDominio {
             ),
         )
     }
+
+    // dispositivo.rs
+    pub fn dispositivo_id_invalido(mensaje: impl Into<String>) -> Self {
+        Self::new("dispositivo_origen", mensaje)
+    }
+
+    // evento.rs
+    pub fn evento_invalido(mensaje: impl Into<String>) -> Self {
+        Self::new("evento", mensaje)
+    }
 }

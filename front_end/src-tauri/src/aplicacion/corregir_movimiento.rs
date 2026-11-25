@@ -328,11 +328,10 @@ mod tests {
         };
         p.repo
             .guardar(EventoLibro::nuevo_gasto_de_grupo_aplicado(
-                "evt-grp-1",
                 "2026-10-21T12:00:00Z",
                 "disp-test",
                 datos_gasto,
-            ))
+            ).unwrap())
             .unwrap();
 
         let entrada = EntradaCorregirMovimiento {
