@@ -244,7 +244,7 @@ impl RepositorioLibroSqlite {
                 let monto_obj = Monto::new(monto_dec, cod_moneda);
 
                 let id_evento_local = uuid::Uuid::new_v4().to_string();
-                let id_movimiento = uuid::Uuid::new_v4().to_string();
+                let id_movimiento = EventoLibro::id_movimiento_gasto_grupo(&id_ev_servidor);
 
                 let datos = DatosGastoDeGrupoAplicado {
                     id_evento_servidor: id_ev_servidor.clone(),
@@ -259,11 +259,11 @@ impl RepositorioLibroSqlite {
                 };
 
                 let ev_libro = EventoLibro::nuevo_gasto_de_grupo_aplicado(
-                    &id_evento_local,
                     momento_actual,
                     dispositivo,
                     datos,
-                );
+                )
+                .map_err(|e| ErrorRepositorio(e.to_string()))?;
 
                 let json = serde_json::to_string(&ev_libro)
                     .map_err(|e| ErrorRepositorio(format!("Error serializando evento: {e}")))?;
@@ -460,8 +460,7 @@ impl RepositorioLibroSqlite {
                     let cod_moneda = CodigoMoneda::parse(&ev.moneda)
                         .map_err(|e| ErrorRepositorio(format!("Moneda inválida: {e:?}")))?;
                     let monto_obj = Monto::new(ev.monto_parte, cod_moneda);
-                    let id_evento_local = uuid::Uuid::new_v4().to_string();
-                    let id_movimiento = uuid::Uuid::new_v4().to_string();
+                    let id_movimiento = EventoLibro::id_movimiento_gasto_grupo(&ev.id);
 
                     let datos = DatosGastoDeGrupoAplicado {
                         id_evento_servidor: ev.id.clone(),
@@ -476,11 +475,11 @@ impl RepositorioLibroSqlite {
                     };
 
                     let ev_libro = EventoLibro::nuevo_gasto_de_grupo_aplicado(
-                        &id_evento_local,
                         momento_actual,
                         dispositivo,
                         datos,
-                    );
+                    )
+                    .map_err(|e| ErrorRepositorio(e.to_string()))?;
 
                     let json = serde_json::to_string(&ev_libro).map_err(|e| {
                         ErrorRepositorio(format!("Error serializando evento: {e}"))
@@ -502,10 +501,10 @@ impl RepositorioLibroSqlite {
                     tx.execute(
                         "INSERT INTO local_eventos_servidor_aplicados (id_evento_servidor, evento_libro_id, aplicado_en)
                          VALUES (?1, ?2, ?3)",
-                        params![ev.id, id_evento_local, momento_actual],
+                        params![ev.id, ev_libro.id(), momento_actual],
                     )
                     .map_err(|e| ErrorRepositorio(format!("Error registrando evento servidor: {e}")))?;
-
+                    
                     // Si estaba en partes pendientes, eliminarlo
                     tx.execute(
                         "DELETE FROM local_partes_pendientes WHERE id_evento_servidor = ?1",

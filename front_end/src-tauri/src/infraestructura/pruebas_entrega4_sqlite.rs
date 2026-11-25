@@ -25,7 +25,7 @@ struct Ids(u32);
 impl GeneradorId for Ids {
     fn nuevo_id(&mut self) -> String {
         self.0 += 1;
-        format!("id-{}", self.0)
+        format!("id-{:04}", self.0)
     }
 }
 

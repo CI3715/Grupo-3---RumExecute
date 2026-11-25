@@ -18,14 +18,22 @@ pub fn listar_categorias(
     repo: &dyn RepositorioLibro,
 ) -> Result<Vec<Categoria>, ErrorListarCategorias> {
     let mut categorias = catalogo_categorias();
+    let mut ids_eventos_vistos = std::collections::HashSet::new();
 
-    for evento in repo.listar_eventos()? {
+    let mut eventos = repo.listar_eventos()?;
+    EventoLibro::ordenar_en_sitio(&mut eventos);
+    for evento in eventos {
+        if !ids_eventos_vistos.insert(evento.id().to_string()) {
+            continue;
+        }
         if let EventoLibro::CategoriaCreada { datos, .. } = evento {
-            categorias.push(Categoria {
-                id: datos.id_categoria,
-                nombre: datos.nombre,
-                tipo: datos.tipo,
-            });
+            if !categorias.iter().any(|c| c.id == datos.id_categoria) {
+                categorias.push(Categoria {
+                    id: datos.id_categoria,
+                    nombre: datos.nombre,
+                    tipo: datos.tipo,
+                });
+            }
         }
     }
 

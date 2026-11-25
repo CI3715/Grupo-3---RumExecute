@@ -107,7 +107,7 @@ fn reconstruir_cuentas(
 ) -> Result<Vec<CuentaProyectada>, ErrorDominio> {
     let mut cuentas: Vec<CuentaProyectada> = Vec::new();
     let mut eventos_vistos = HashSet::new();
-    for evento in eventos {
+    for evento in EventoLibro::ordenar_determinista(eventos) {
         if !eventos_vistos.insert(evento.id().to_string()) {
             continue;
         }
@@ -514,5 +514,104 @@ fn error_validacion(campo: &str, mensaje: &str) -> ErrorValidacionDto {
     ErrorValidacionDto {
         campo: campo.to_string(),
         mensaje: mensaje.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::aplicacion::puertos::Reloj;
+    use crate::dominio::cuenta::TipoCuenta;
+    use crate::dominio::evento::{
+        DatosCuentaCreada, DatosMovimientoCorregido, DatosMovimientoRegistrado,
+    };
+    use crate::dominio::moneda::CodigoMoneda;
+    use crate::dominio::monto::Monto;
+    use crate::dominio::movimiento::TipoMovimiento;
+    use crate::infraestructura::memoria_repo::RepositorioLibroEnMemoria;
+
+    struct RelojFijo(&'static str);
+    impl Reloj for RelojFijo {
+        fn ahora(&self) -> String {
+            self.0.to_string()
+        }
+    }
+
+    #[test]
+    fn saldos_convergen_sin_importar_el_orden_de_llegada_de_eventos() {
+        let reloj = RelojFijo("2026-10-20T12:00:00Z");
+
+        let ev_cuenta = EventoLibro::nuevo_cuenta_creada(
+            "evt-1",
+            "2026-10-10T08:00:00Z",
+            "disp-a",
+            DatosCuentaCreada {
+                id_cuenta: "cta-1".into(),
+                nombre: "Principal".into(),
+                tipo: TipoCuenta::Banco,
+                moneda: CodigoMoneda::USD,
+                saldo_inicial: Monto::new(Decimal::new(100000, 2), CodigoMoneda::USD),
+            },
+        );
+        let ev_ingreso = EventoLibro::nuevo_movimiento_registrado(
+            "evt-2",
+            "2026-10-11T09:00:00Z",
+            "disp-b",
+            DatosMovimientoRegistrado {
+                id_movimiento: "mov-1".into(),
+                id_cuenta: "cta-1".into(),
+                tipo: TipoMovimiento::Ingreso,
+                monto: Monto::new(Decimal::new(50000, 2), CodigoMoneda::USD),
+                categoria: None,
+                fecha: "2026-10-11".into(),
+                descripcion: "Ingreso".into(),
+            },
+        );
+        let ev_ajuste = EventoLibro::nuevo_movimiento_corregido(
+            "evt-3",
+            "2026-10-12T10:00:00Z",
+            "disp-a",
+            DatosMovimientoCorregido {
+                id_ajuste: "aju-1".into(),
+                id_movimiento_original: "mov-1".into(),
+                id_cuenta: "cta-1".into(),
+                monto_original: Monto::new(Decimal::new(50000, 2), CodigoMoneda::USD),
+                monto_nuevo: Monto::new(Decimal::new(35000, 2), CodigoMoneda::USD),
+                monto_ajuste: Monto::new(Decimal::new(-15000, 2), CodigoMoneda::USD),
+                fecha: "2026-10-12".into(),
+                descripcion: "Corrección".into(),
+            },
+        );
+
+        let mut repo_directo = RepositorioLibroEnMemoria::nuevo();
+        repo_directo.guardar(ev_cuenta.clone()).unwrap();
+        repo_directo.guardar(ev_ingreso.clone()).unwrap();
+        repo_directo.guardar(ev_ajuste.clone()).unwrap();
+
+        let mut repo_inverso = RepositorioLibroEnMemoria::nuevo();
+        repo_inverso.guardar(ev_ajuste).unwrap();
+        repo_inverso.guardar(ev_ingreso).unwrap();
+        repo_inverso.guardar(ev_cuenta).unwrap();
+
+        let pat_directo = consultar_patrimonio(
+            &repo_directo,
+            &reloj,
+            ConsultarPatrimonioEntrada {
+                fecha_consulta: Some("2026-10-20".into()),
+            },
+        )
+        .unwrap();
+
+        let pat_inverso = consultar_patrimonio(
+            &repo_inverso,
+            &reloj,
+            ConsultarPatrimonioEntrada {
+                fecha_consulta: Some("2026-10-20".into()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(pat_directo.total_consolidado.as_deref(), Some("1350.00"));
+        assert_eq!(pat_directo.total_consolidado, pat_inverso.total_consolidado);
     }
 }
