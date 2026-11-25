@@ -15,7 +15,12 @@ pub(crate) fn catalogo_desde_eventos(
     eventos: &[EventoLibro],
 ) -> Result<CatalogoMonedas, ErrorDominio> {
     let mut catalogo = CatalogoMonedas::nuevo();
+    let mut ids_vistos = std::collections::HashSet::new();
+
     for evento in EventoLibro::ordenar_determinista(eventos) {
+        if !ids_vistos.insert(evento.id()) {
+            continue;
+        }
         if let EventoLibro::MonedaCreada { datos, .. } = evento {
             let moneda = Moneda::nueva_propia(
                 datos.codigo.as_str(),
@@ -23,16 +28,11 @@ pub(crate) fn catalogo_desde_eventos(
                 datos.simbolo.clone(),
                 datos.decimales,
             )?;
-            if catalogo.obtener(&moneda.codigo).is_some() {
-                return Err(ErrorDominio::new(
-                    "codigo",
-                    format!(
-                        "Ya existe una moneda registrada con el código '{}'.",
-                        moneda.codigo
-                    ),
-                ));
+            // INV-14: Si dos dispositivos crearon el mismo código offline,
+            // prevalece el primero según el orden determinista.
+            if catalogo.obtener(&moneda.codigo).is_none() {
+                catalogo.registrar_moneda(moneda);
             }
-            catalogo.registrar_moneda(moneda);
         }
     }
     Ok(catalogo)
@@ -42,7 +42,12 @@ pub(crate) fn historial_tasas_desde_eventos(
     eventos: &[EventoLibro],
 ) -> Result<Vec<TasaIdentificada>, ErrorDominio> {
     let mut tasas: Vec<TasaIdentificada> = Vec::new();
+    let mut ids_vistos = std::collections::HashSet::new();
+
     for (orden, evento) in EventoLibro::ordenar_determinista(eventos).into_iter().enumerate() {
+        if !ids_vistos.insert(evento.id()) {
+            continue;
+        }
         match evento {
             EventoLibro::TasaRegistrada { id, datos, .. } => {
                 tasas.push(TasaIdentificada {
@@ -59,22 +64,20 @@ pub(crate) fn historial_tasas_desde_eventos(
             }
             EventoLibro::TasaEliminada { datos, .. } => {
                 let indice = match datos.id_tasa.as_deref() {
-                    Some(id_tasa) => tasas
-                        .iter()
-                        .position(|tasa| tasa.id == id_tasa && !tasa.eliminada),
+                    Some(id_tasa) => tasas.iter().position(|tasa| tasa.id == id_tasa),
                     None => tasas.iter().rposition(|tasa| {
                         tasa.tasa.par == datos.par_monedas
                             && tasa.tasa.fecha == datos.fecha
                             && tasa.tasa.fuente == datos.fuente
-                            && !tasa.eliminada
                     }),
                 };
                 let indice = indice.ok_or_else(|| {
                     ErrorDominio::new(
                         "id_tasa",
-                        "El evento de eliminación referencia una tasa inexistente o ya eliminada.",
+                        "El evento de eliminación referencia una tasa inexistente.",
                     )
                 })?;
+                // INV-13 / INV-14: Si ya estaba eliminada por otro evento concurrente, es idempotente.
                 tasas[indice].eliminada = true;
             }
             _ => {}

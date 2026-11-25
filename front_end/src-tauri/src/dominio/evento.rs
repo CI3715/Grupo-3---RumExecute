@@ -483,6 +483,25 @@ impl EventoLibro {
         ordenados.sort_by(|a, b| a.comparar_determinista(b));
         ordenados
     }
+
+    /// Fusiona dos conjuntos de eventos de forma determinista, idempotente (INV-13)
+    /// y conmutativa (INV-14).
+    ///
+    /// - Deduplica por `id` conservando la primera aparición.
+    /// - Ordena el resultado por `(momento_registro, dispositivo_origen, id)`.
+    pub fn fusionar(locales: &[EventoLibro], remotos: &[EventoLibro]) -> Vec<EventoLibro> {
+        let mut ids_vistos = std::collections::HashSet::with_capacity(locales.len() + remotos.len());
+        let mut fusionados = Vec::with_capacity(locales.len() + remotos.len());
+
+        for evento in locales.iter().chain(remotos.iter()) {
+            if ids_vistos.insert(evento.id().to_string()) {
+                fusionados.push(evento.clone());
+            }
+        }
+
+        Self::ordenar_en_sitio(&mut fusionados);
+        fusionados
+    }
 }
 
 #[cfg(test)]
@@ -733,6 +752,63 @@ mod tests {
         let ids: Vec<&str> = ordenados.iter().map(|e| e.id()).collect();
 
         assert_eq!(ids, vec!["evt-0", "evt-z", "evt-a", "evt-b"]);
+    }
+
+    #[test]
+    fn fusionar_es_idempotente_conmutativo_y_asociativo() {
+        let ev1 = EventoLibro::nuevo_categoria_creada(
+            "evt-1",
+            "2026-10-14T10:00:00Z",
+            "disp-a",
+            DatosCategoriaCreada {
+                id_categoria: "c1".into(),
+                nombre: "Comida".into(),
+                tipo: crate::dominio::categoria::TipoCategoria::Gasto,
+            },
+        );
+        let ev2 = EventoLibro::nuevo_categoria_creada(
+            "evt-2",
+            "2026-10-14T10:00:00Z",
+            "disp-b",
+            DatosCategoriaCreada {
+                id_categoria: "c2".into(),
+                nombre: "Transporte".into(),
+                tipo: crate::dominio::categoria::TipoCategoria::Gasto,
+            },
+        );
+        let ev3 = EventoLibro::nuevo_categoria_creada(
+            "evt-3",
+            "2026-10-14T10:05:00Z",
+            "disp-a",
+            DatosCategoriaCreada {
+                id_categoria: "c3".into(),
+                nombre: "Salud".into(),
+                tipo: crate::dominio::categoria::TipoCategoria::Gasto,
+            },
+        );
+
+        let conj_a = vec![ev1.clone(), ev2.clone()];
+        let conj_b = vec![ev2.clone(), ev3.clone()];
+        let conj_c = vec![ev3, ev1];
+
+        // INV-13: Idempotencia
+        let esperado_a: Vec<EventoLibro> = EventoLibro::ordenar_determinista(&conj_a)
+            .into_iter()
+            .cloned()
+            .collect();
+        assert_eq!(EventoLibro::fusionar(&conj_a, &conj_a), esperado_a);
+        let ab = EventoLibro::fusionar(&conj_a, &conj_b);
+        assert_eq!(EventoLibro::fusionar(&ab, &conj_b), ab);
+
+        // INV-14: Conmutatividad (A ∪ B == B ∪ A)
+        let ba = EventoLibro::fusionar(&conj_b, &conj_a);
+        assert_eq!(ab, ba);
+
+        // Asociatividad ((A ∪ B) ∪ C == A ∪ (B ∪ C))
+        let ab_c = EventoLibro::fusionar(&ab, &conj_c);
+        let bc = EventoLibro::fusionar(&conj_b, &conj_c);
+        let a_bc = EventoLibro::fusionar(&conj_a, &bc);
+        assert_eq!(ab_c, a_bc);
     }
 
 }
