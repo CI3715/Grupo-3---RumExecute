@@ -354,6 +354,13 @@ impl EventoLibro {
         })
     }
 
+    /// Deriva de forma determinista el `id_movimiento` local a partir del `id_evento_servidor`,
+    /// garantizando que dos dispositivos que descargan la misma parte de gasto de grupo
+    /// produzcan exactamente el mismo contenido (INV-13, INV-14).
+    pub fn id_movimiento_gasto_grupo(id_evento_servidor: &str) -> String {
+        format!("mov_grupo:{}", id_evento_servidor.trim())
+    }
+
     /// Retorna el ID único del evento.
     pub fn id(&self) -> &str {
         match self {
@@ -466,6 +473,12 @@ impl EventoLibro {
     }
 
 
+    fn parsear_instante_utc(valor: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+        chrono::DateTime::parse_from_rfc3339(valor.trim())
+            .ok()
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+    }
+
     /// Valida los metadatos obligatorios de integridad del evento.
     pub fn validar(&self) -> Result<(), ErrorDominio> {
         if self.id().trim().is_empty() {
@@ -474,25 +487,42 @@ impl EventoLibro {
             ));
         }
 
-        if self.momento_registro().trim().is_empty() {
+        let momento = self.momento_registro();
+        if momento.trim().is_empty() {
             return Err(ErrorDominio::evento_invalido(
                 "El momento de registro del evento no puede estar vacío.",
             ));
         }
+
+        if !momento.ends_with('Z') || chrono::DateTime::parse_from_rfc3339(momento).is_err() {
+            return Err(ErrorDominio::evento_invalido(
+                "El momento de registro del evento debe estar en formato RFC 3339 en UTC terminado en 'Z'.",
+            ));
+        }
+
         // Reutiliza exactamente las reglas de validación de DispositivoId
         DispositivoId::nuevo(self.dispositivo_origen())?;
 
         Ok(())
     }
 
-    /// Compara dos eventos según el orden determinista del libro:
-    /// `(momento_registro, dispositivo_origen, id)`.
+    /// Compara dos eventos según un orden total determinista:
+    /// instante UTC parseado, `dispositivo_origen`, `id` y representación textual de respaldo.
     pub fn comparar_determinista(&self, otro: &Self) -> std::cmp::Ordering {
-        (self.momento_registro(), self.dispositivo_origen(), self.id()).cmp(&(
-            otro.momento_registro(),
-            otro.dispositivo_origen(),
-            otro.id(),
-        ))
+        let ord_instante = match (
+            Self::parsear_instante_utc(self.momento_registro()),
+            Self::parsear_instante_utc(otro.momento_registro()),
+        ) {
+            (Some(a), Some(b)) => a.cmp(&b),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => self.momento_registro().cmp(otro.momento_registro()),
+        };
+
+        ord_instante
+            .then_with(|| self.dispositivo_origen().cmp(otro.dispositivo_origen()))
+            .then_with(|| self.id().cmp(otro.id()))
+            .then_with(|| self.momento_registro().cmp(otro.momento_registro()))
     }
 
     /// Ordena un slice mutable de eventos en sitio siguiendo el orden determinista:
@@ -503,8 +533,8 @@ impl EventoLibro {
 
     /// Devuelve las referencias a los eventos ordenadas de forma determinista:
     /// `(momento_registro, dispositivo_origen, id)`.
-    pub fn ordenar_determinista<'a>(eventos: &'a [EventoLibro]) -> Vec<&'a EventoLibro> {
-        let mut ordenados: Vec<&'a EventoLibro> = eventos.iter().collect();
+    pub fn ordenar_determinista(eventos: &[EventoLibro]) -> Vec<&EventoLibro> {
+        let mut ordenados: Vec<&EventoLibro> = eventos.iter().collect();
         ordenados.sort_by(|a, b| a.comparar_determinista(b));
         ordenados
     }
@@ -536,6 +566,9 @@ impl EventoLibro {
     /// - Evento existente con mismo `id` y mismo contenido -> se ignora (idempotencia).
     /// - Evento existente con mismo `id` y contenido distinto -> se rechaza con motivo
     ///   sin modificar el libro ni detener el procesamiento de los demás.
+    ///
+    /// Los eventos entrantes se ordenan de forma totalmente determinista (desempatando
+    /// por contenido serializado ante claves iguales) antes de procesarse.
     pub fn fusionar_con_reporte(
         locales: &[EventoLibro],
         entrantes: &[EventoLibro],
@@ -549,11 +582,20 @@ impl EventoLibro {
                 .or_insert_with(|| evento.clone());
         }
 
+        let mut entrantes_ordenados: Vec<&EventoLibro> = entrantes.iter().collect();
+        entrantes_ordenados.sort_by(|a, b| {
+            a.comparar_determinista(b).then_with(|| {
+                let json_a = serde_json::to_string(a).unwrap_or_default();
+                let json_b = serde_json::to_string(b).unwrap_or_default();
+                json_a.cmp(&json_b)
+            })
+        });
+
         let mut eventos_nuevos = 0usize;
         let mut eventos_existentes = 0usize;
         let mut eventos_rechazados = Vec::new();
 
-        for evento in entrantes {
+        for evento in entrantes_ordenados {
             match por_id.get(evento.id()) {
                 None => {
                     por_id.insert(evento.id().to_string(), evento.clone());
@@ -584,7 +626,15 @@ impl EventoLibro {
         }
     }
 
-    /// Fusión pura y conmutativa (INV-14) que devuelve directamente los eventos resultantes.
+    /// Fusión pura de conjuntos de eventos por `id` que devuelve únicamente los eventos resultantes.
+    ///
+    /// Aclaraciones:
+    /// - Solo es estrictamente conmutativa cuando no existen conflictos (eventos con mismo `id`
+    ///   y distinto contenido); ante un conflicto, prevalece el evento del primer conjunto (`locales`).
+    /// - Descarta silenciosamente los eventos rechazados sin reportar su motivo.
+    ///
+    /// Para obtener el conteo de eventos nuevos, existentes y el detalle de rechazos,
+    /// utilice [`EventoLibro::fusionar_con_reporte`].
     pub fn fusionar(locales: &[EventoLibro], remotos: &[EventoLibro]) -> Vec<EventoLibro> {
         Self::fusionar_con_reporte(locales, remotos).eventos_resultantes
     }
@@ -941,6 +991,190 @@ mod tests {
         assert_eq!(resultado.eventos_rechazados[0].id_evento, "evt-1");
         assert!(!resultado.eventos_rechazados[0].motivo.contains("INV-"));
         assert_eq!(resultado.eventos_resultantes, vec![ev_local, ev_valido]);
+    }
+
+    #[test]
+    fn ordenar_determinista_compara_instante_con_decimales_frente_a_exacto() {
+        let cat = DatosCategoriaCreada {
+            id_categoria: "cat-1".to_string(),
+            nombre: "Comida".to_string(),
+            tipo: crate::dominio::categoria::TipoCategoria::Gasto,
+        };
+
+        let exacto = EventoLibro::nuevo_categoria_creada(
+            "evt-1",
+            "2026-11-25T10:00:00Z",
+            "disp-a",
+            cat.clone(),
+        );
+        let con_decimales = EventoLibro::nuevo_categoria_creada(
+            "evt-2",
+            "2026-11-25T10:00:00.042Z",
+            "disp-a",
+            cat.clone(),
+        );
+        let siguiente = EventoLibro::nuevo_categoria_creada(
+            "evt-3",
+            "2026-11-25T10:00:01Z",
+            "disp-a",
+            cat,
+        );
+
+        let desordenados = [
+            siguiente.clone(),
+            con_decimales.clone(),
+            exacto.clone(),
+        ];
+        let ordenados = EventoLibro::ordenar_determinista(&desordenados);
+
+        assert_eq!(ordenados, vec![&exacto, &con_decimales, &siguiente]);
+    }
+
+    #[test]
+    fn fusionar_entrantes_conflictivos_da_mismo_resultado_en_cualquier_orden() {
+        let ev_a = EventoLibro::nuevo_categoria_creada(
+            "evt-conflicto",
+            "2026-11-25T10:00:00Z",
+            "disp-a",
+            DatosCategoriaCreada {
+                id_categoria: "cat-1".to_string(),
+                nombre: "Opcion A".to_string(),
+                tipo: crate::dominio::categoria::TipoCategoria::Gasto,
+            },
+        );
+        let ev_b = EventoLibro::nuevo_categoria_creada(
+            "evt-conflicto",
+            "2026-11-25T10:00:00Z",
+            "disp-a",
+            DatosCategoriaCreada {
+                id_categoria: "cat-1".to_string(),
+                nombre: "Opcion B".to_string(),
+                tipo: crate::dominio::categoria::TipoCategoria::Gasto,
+            },
+        );
+
+        let res_ab = EventoLibro::fusionar_con_reporte(&[], &[ev_a.clone(), ev_b.clone()]);
+        let res_ba = EventoLibro::fusionar_con_reporte(&[], &[ev_b, ev_a]);
+
+        assert_eq!(res_ab, res_ba);
+        assert_eq!(res_ab.eventos_nuevos, 1);
+        assert_eq!(res_ab.eventos_rechazados.len(), 1);
+    }
+
+    #[test]
+    fn fusionar_nunca_pierde_ni_modifica_eventos_locales_ante_rechazos() {
+        let local_1 = EventoLibro::nuevo_categoria_creada(
+            "evt-1",
+            "2026-11-25T10:00:00Z",
+            "disp-local",
+            DatosCategoriaCreada {
+                id_categoria: "cat-1".to_string(),
+                nombre: "Original Local".to_string(),
+                tipo: crate::dominio::categoria::TipoCategoria::Gasto,
+            },
+        );
+        let local_2 = EventoLibro::nuevo_categoria_creada(
+            "evt-2",
+            "2026-11-25T10:01:00Z",
+            "disp-local",
+            DatosCategoriaCreada {
+                id_categoria: "cat-2".to_string(),
+                nombre: "Hogar".to_string(),
+                tipo: crate::dominio::categoria::TipoCategoria::Gasto,
+            },
+        );
+        let remoto_alterado = EventoLibro::nuevo_categoria_creada(
+            "evt-1",
+            "2026-11-25T10:05:00Z",
+            "disp-remoto",
+            DatosCategoriaCreada {
+                id_categoria: "cat-1".to_string(),
+                nombre: "Alterado Remoto".to_string(),
+                tipo: crate::dominio::categoria::TipoCategoria::Gasto,
+            },
+        );
+
+        let locales = vec![local_1.clone(), local_2.clone()];
+        let resultado = EventoLibro::fusionar_con_reporte(&locales, &[remoto_alterado]);
+
+        assert_eq!(resultado.eventos_rechazados.len(), 1);
+        assert_eq!(resultado.eventos_resultantes, locales);
+    }
+
+    #[test]
+    fn validar_exige_instante_rfc3339_en_utc_terminado_en_z() {
+        let cat = DatosCategoriaCreada {
+            id_categoria: "cat-1".to_string(),
+            nombre: "Servicios".to_string(),
+            tipo: crate::dominio::categoria::TipoCategoria::Gasto,
+        };
+
+        let valido_exacto =
+            EventoLibro::nuevo_categoria_creada("evt-1", "2026-11-25T10:00:00Z", "disp-1", cat.clone());
+        let valido_milis = EventoLibro::nuevo_categoria_creada(
+            "evt-2",
+            "2026-11-25T10:00:00.042Z",
+            "disp-1",
+            cat.clone(),
+        );
+        assert!(valido_exacto.validar().is_ok());
+        assert!(valido_milis.validar().is_ok());
+
+        for instante_invalido in [
+            "",
+            "   ",
+            "2026-11-25",
+            "2026-11-25T10:00:00",
+            "2026-11-25T10:00:00+00:00",
+            "2026-11-25T10:00:00-04:00",
+            "2026-11-25T10:00:00z",
+            "fecha-invalida",
+        ] {
+            let ev = EventoLibro::nuevo_categoria_creada("evt-x", instante_invalido, "disp-1", cat.clone());
+            assert!(
+                ev.validar().is_err(),
+                "Debió rechazar instante inválido: {instante_invalido}"
+            );
+        }
+    }
+
+    #[test]
+    fn misma_parte_de_grupo_bajada_por_dos_dispositivos_se_fusiona_sin_rechazos() {
+        let id_servidor = "srv-evt-77";
+        let id_mov = EventoLibro::id_movimiento_gasto_grupo(id_servidor);
+        let monto = Monto::new(Decimal::new(2500, 2), CodigoMoneda::USD);
+
+        let construir_datos = || DatosGastoDeGrupoAplicado {
+            id_evento_servidor: id_servidor.to_string(),
+            id_movimiento: id_mov.clone(),
+            id_cuenta: "cta-compartida".to_string(),
+            grupo_id: "grp-1".to_string(),
+            nombre_grupo: "Viaje".to_string(),
+            gasto_id: "gst-1".to_string(),
+            concepto: "Cena".to_string(),
+            monto: monto.clone(),
+            fecha: "2026-11-25".to_string(),
+        };
+
+        let ev_disp_a = EventoLibro::nuevo_gasto_de_grupo_aplicado(
+            "2026-11-25T10:00:00.010Z",
+            "disp-a",
+            construir_datos(),
+        )
+        .unwrap();
+        let ev_disp_b = EventoLibro::nuevo_gasto_de_grupo_aplicado(
+            "2026-11-25T10:02:15.500Z",
+            "disp-b",
+            construir_datos(),
+        )
+        .unwrap();
+
+        let resultado = EventoLibro::fusionar_con_reporte(&[ev_disp_a.clone()], &[ev_disp_b]);
+
+        assert_eq!(resultado.eventos_nuevos, 0);
+        assert_eq!(resultado.eventos_existentes, 1);
+        assert!(resultado.eventos_rechazados.is_empty());
+        assert_eq!(resultado.eventos_resultantes, vec![ev_disp_a]);
     }
 
 }

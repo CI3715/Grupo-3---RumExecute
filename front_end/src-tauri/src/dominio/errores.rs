@@ -120,17 +120,14 @@ impl ErrorDominio {
         )
     }
 
-    // dispositivo.rs
     pub fn dispositivo_id_invalido(mensaje: impl Into<String>) -> Self {
         Self::new("dispositivo_origen", mensaje)
     }
 
-    // evento.rs
     pub fn evento_invalido(mensaje: impl Into<String>) -> Self {
         Self::new("evento", mensaje)
     }
 
-    // cuenta.rs / aplicacion
     pub fn cuenta_no_encontrada(id_cuenta: &str) -> Self {
         Self::new(
             "id_cuenta",
@@ -141,21 +138,23 @@ impl ErrorDominio {
         )
     }
 
-    // Entrega 8: respaldo, formato y sincronización (RNF-18)
-    pub fn version_formato_no_soportada(version: &str) -> Self {
+    /// Error legible cuando la versión del archivo respaldado no coincide con la soportada.
+    pub fn version_formato_no_soportada(version_archivo: &str, version_soportada: &str) -> Self {
         Self::new(
             "version_formato",
             format!(
-                "La versión de formato '{}' no es soportada por esta versión de la aplicación.",
-                version
+                "La versión de formato '{}' del archivo no es compatible; esta aplicación soporta la versión '{}'.",
+                version_archivo, version_soportada
             ),
         )
     }
 
+    /// Error legible cuando una línea o estructura de evento del respaldo no cumple el formato esperado.
     pub fn evento_mal_formado(detalle: impl Into<String>) -> Self {
         Self::new("evento", detalle)
     }
 
+    /// Error legible cuando un evento entrante tiene el mismo identificador que uno existente pero distinto contenido.
     pub fn evento_repetido_contenido_distinto(id_evento: &str) -> Self {
         Self::new(
             "id_evento",
@@ -166,19 +165,24 @@ impl ErrorDominio {
         )
     }
 
+    /// Error legible cuando la frase de paso no cumple la longitud mínima exigida o está en blanco.
     pub fn frase_paso_invalida() -> Self {
         Self::new(
             "frase_paso",
-            "La frase de paso debe tener al menos 12 caracteres.",
+            format!(
+                "La frase de paso debe tener al menos {} caracteres y no puede estar en blanco.",
+                LONGITUD_MINIMA_FRASE_PASO
+            ),
         )
     }
 }
 
 pub const LONGITUD_MINIMA_FRASE_PASO: usize = 12;
 
-/// Valida la regla pura de longitud mínima de la frase de paso (12 caracteres).
+/// Valida que la frase de paso no esté compuesta únicamente por espacios en blanco
+/// y tenga al menos `LONGITUD_MINIMA_FRASE_PASO` caracteres (contando caracteres Unicode, no bytes).
 pub fn validar_frase_paso(frase: &str) -> Result<(), ErrorDominio> {
-    if frase.chars().count() < LONGITUD_MINIMA_FRASE_PASO {
+    if frase.trim().is_empty() || frase.chars().count() < LONGITUD_MINIMA_FRASE_PASO {
         return Err(ErrorDominio::frase_paso_invalida());
     }
     Ok(())
@@ -199,7 +203,7 @@ mod tests {
             ErrorDominio::monedas_iguales("USD"),
             ErrorDominio::tasa_no_existente("USD", "EUR", "2026-11-25"),
             ErrorDominio::cuenta_no_encontrada("cta-1"),
-            ErrorDominio::version_formato_no_soportada("99"),
+            ErrorDominio::version_formato_no_soportada("99", "1"),
             ErrorDominio::evento_mal_formado("La línea del evento no tiene el formato esperado."),
             ErrorDominio::evento_repetido_contenido_distinto("evt-dup-1"),
             ErrorDominio::frase_paso_invalida(),
@@ -216,9 +220,11 @@ mod tests {
     }
 
     #[test]
-    fn valida_longitud_minima_de_frase_paso() {
-        assert!(validar_frase_paso("corta123456").is_err()); // 11 caracteres
-        assert!(validar_frase_paso("clave-segura").is_ok()); // 12 caracteres
-        assert!(validar_frase_paso("contraseña_larga").is_ok());
+    fn valida_longitud_minima_y_contenido_de_frase_paso() {
+        assert!(validar_frase_paso("corta123456").is_err()); // 11 caracteres ASCII
+        assert!(validar_frase_paso("ñññññññññññ").is_err()); // 11 caracteres Unicode (22 bytes)
+        assert!(validar_frase_paso("            ").is_err()); // 12 espacios en blanco
+        assert!(validar_frase_paso("ññññññññññññ").is_ok()); // 12 caracteres Unicode (24 bytes)
+        assert!(validar_frase_paso("clave-segura").is_ok()); // 12 caracteres ASCII
     }
 }

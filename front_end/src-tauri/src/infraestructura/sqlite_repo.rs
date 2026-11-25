@@ -244,7 +244,7 @@ impl RepositorioLibroSqlite {
                 let monto_obj = Monto::new(monto_dec, cod_moneda);
 
                 let id_evento_local = uuid::Uuid::new_v4().to_string();
-                let id_movimiento = uuid::Uuid::new_v4().to_string();
+                let id_movimiento = EventoLibro::id_movimiento_gasto_grupo(&id_ev_servidor);
 
                 let datos = DatosGastoDeGrupoAplicado {
                     id_evento_servidor: id_ev_servidor.clone(),
@@ -460,7 +460,7 @@ impl RepositorioLibroSqlite {
                     let cod_moneda = CodigoMoneda::parse(&ev.moneda)
                         .map_err(|e| ErrorRepositorio(format!("Moneda inválida: {e:?}")))?;
                     let monto_obj = Monto::new(ev.monto_parte, cod_moneda);
-                    let id_movimiento = uuid::Uuid::new_v4().to_string();
+                    let id_movimiento = EventoLibro::id_movimiento_gasto_grupo(&ev.id);
 
                     let datos = DatosGastoDeGrupoAplicado {
                         id_evento_servidor: ev.id.clone(),
