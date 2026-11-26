@@ -7,17 +7,14 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
 
-use crate::aplicacion::exportar_libro::{
-    exportar_libro, EntradaExportarLibro, ErrorExportarLibro,
-};
+use crate::aplicacion::exportar_libro::{exportar_libro, EntradaExportarLibro, ErrorExportarLibro};
 use crate::aplicacion::importar_copia::{importar_copia, ErrorImportarCopia};
 use crate::aplicacion::puertos::sincronizacion::{
-    AlmacenSecretosSincronizacion, CredencialesGit, ErrorAlmacenSecretos,
-    TransporteSincronizacion,
+    AlmacenSecretosSincronizacion, CredencialesGit, ErrorAlmacenSecretos, TransporteSincronizacion,
 };
 use crate::aplicacion::sincronizar_libro::{sincronizar_libro, ErrorSincronizarLibro};
 use crate::dominio::errores::validar_frase_paso;
-use crate::dominio::evento::{EventoRechazado, ResultadoFusion, InformeSincronizacion};
+use crate::dominio::evento::{EventoRechazado, InformeSincronizacion, ResultadoFusion};
 use crate::infraestructura::almacen_secretos_keyring::AlmacenSecretosKeyring;
 use crate::infraestructura::cifrador_libro::CifradorArgon2XChaCha20;
 use crate::infraestructura::serializador_libro::SerializadorTextoLibro;
@@ -85,8 +82,8 @@ pub fn importar_copia_seguridad(
     frase_paso: Option<String>,
     repositorio: State<'_, Mutex<RepositorioLibroSqlite>>,
 ) -> Result<ResultadoImportacionDto, String> {
-    let contenido =
-        fs::read(&ruta).map_err(|_| "No se pudo leer el archivo de copia de seguridad.".to_string())?;
+    let contenido = fs::read(&ruta)
+        .map_err(|_| "No se pudo leer el archivo de copia de seguridad.".to_string())?;
     let mut repositorio = repositorio
         .lock()
         .map_err(|_| "No se pudo acceder al libro local.".to_string())?;
@@ -129,8 +126,7 @@ pub fn configurar_destino_sincronizacion(
                 "carpeta" => {
                     if !Path::new(&ubicacion).is_dir() {
                         return Err(
-                            "La carpeta de sincronización no existe o no es accesible."
-                                .to_string(),
+                            "La carpeta de sincronización no existe o no es accesible.".to_string()
                         );
                     }
                     TipoDestinoSincronizacion::Carpeta
@@ -210,12 +206,9 @@ pub fn sincronizar_libro_personal(
             let credenciales = secretos
                 .obtener_credenciales_git()
                 .map_err(error_almacen_secretos)?;
-            let directorio_app = app
-                .path()
-                .app_data_dir()
-                .map_err(|_| {
-                    "No se pudo acceder al almacenamiento local de la aplicación.".to_string()
-                })?;
+            let directorio_app = app.path().app_data_dir().map_err(|_| {
+                "No se pudo acceder al almacenamiento local de la aplicación.".to_string()
+            })?;
             let mut transporte = TransporteGit::nuevo(
                 destino.ubicacion,
                 directorio_app.join("sincronizacion_git"),
@@ -361,8 +354,6 @@ mod tests {
         assert!(!remoto_git_valido(
             "https://git.example.org/grupo/libro.git?token=secreto"
         ));
-        assert!(!remoto_git_valido(
-            "http://git.example.org/grupo/libro.git"
-        ));
+        assert!(!remoto_git_valido("http://git.example.org/grupo/libro.git"));
     }
 }

@@ -43,7 +43,10 @@ impl TransporteCarpeta {
             .is_file()
     }
 
-    fn escribir_atomico(ruta: &Path, contenido: &[u8]) -> Result<(), ErrorTransporteSincronizacion> {
+    fn escribir_atomico(
+        ruta: &Path,
+        contenido: &[u8],
+    ) -> Result<(), ErrorTransporteSincronizacion> {
         let directorio = ruta
             .parent()
             .ok_or(ErrorTransporteSincronizacion::OperacionFallida)?;
@@ -96,8 +99,8 @@ impl TransporteCarpeta {
         let directorios = fs::read_dir(&self.raiz)
             .map_err(|_| ErrorTransporteSincronizacion::DestinoNoDisponible)?;
         for directorio in directorios {
-            let directorio = directorio
-                .map_err(|_| ErrorTransporteSincronizacion::DestinoNoDisponible)?;
+            let directorio =
+                directorio.map_err(|_| ErrorTransporteSincronizacion::DestinoNoDisponible)?;
             if !directorio
                 .file_type()
                 .map_err(|_| ErrorTransporteSincronizacion::DestinoNoDisponible)?
@@ -129,8 +132,8 @@ impl TransporteSincronizacion for TransporteCarpeta {
         let directorios = fs::read_dir(&self.raiz)
             .map_err(|_| ErrorTransporteSincronizacion::DestinoNoDisponible)?;
         for directorio in directorios {
-            let directorio = directorio
-                .map_err(|_| ErrorTransporteSincronizacion::DestinoNoDisponible)?;
+            let directorio =
+                directorio.map_err(|_| ErrorTransporteSincronizacion::DestinoNoDisponible)?;
             let origen = directorio.file_name().to_string_lossy().into_owned();
             if origen == dispositivo_id
                 || !Self::validar_id(&origen)
@@ -184,7 +187,10 @@ impl TransporteSincronizacion for TransporteCarpeta {
         {
             return Err(ErrorTransporteSincronizacion::OperacionFallida);
         }
-        let pendientes = self.pendientes.entry(dispositivo_id.to_string()).or_default();
+        let pendientes = self
+            .pendientes
+            .entry(dispositivo_id.to_string())
+            .or_default();
         if let Some(existente) = pendientes.iter().find(|actual| actual.id == lote.id) {
             return if existente == &lote {
                 Ok(())
@@ -282,7 +288,9 @@ mod tests {
             dispositivo_origen: "dispositivo-a".to_string(),
             contenido: b"uno".to_vec(),
         };
-        transporte.enviar_lote("dispositivo-a", lote.clone()).unwrap();
+        transporte
+            .enviar_lote("dispositivo-a", lote.clone())
+            .unwrap();
         transporte.publicar_cambios("dispositivo-a").unwrap();
         let mut distinto = lote;
         distinto.contenido = b"dos".to_vec();

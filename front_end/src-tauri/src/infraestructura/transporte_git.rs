@@ -9,8 +9,7 @@ use base64::Engine;
 use uuid::Uuid;
 
 use crate::aplicacion::puertos::sincronizacion::{
-    CredencialesGit, ErrorTransporteSincronizacion, LoteSincronizacion,
-    TransporteSincronizacion,
+    CredencialesGit, ErrorTransporteSincronizacion, LoteSincronizacion, TransporteSincronizacion,
 };
 
 const EXTENSION_LOTE: &str = "ccbatch";
@@ -125,14 +124,12 @@ impl TransporteGit {
 
     fn actualizar_checkout(&self) -> Result<String, ErrorTransporteSincronizacion> {
         self.asegurar_checkout()?;
-        let salida = self.ejecutar_git(&self.checkout, &["fetch".to_string(), "origin".to_string()])?;
+        let salida =
+            self.ejecutar_git(&self.checkout, &["fetch".to_string(), "origin".to_string()])?;
         self.validar_salida(salida, false)?;
         let salida = self.ejecutar_git(
             &self.checkout,
-            &[
-                "branch".to_string(),
-                "--show-current".to_string(),
-            ],
+            &["branch".to_string(), "--show-current".to_string()],
         )?;
         let rama_salida = salida.stdout.clone();
         self.validar_salida(salida, false)?;
@@ -144,17 +141,11 @@ impl TransporteGit {
         let referencia = format!("origin/{rama}");
         let salida = self.ejecutar_git(
             &self.checkout,
-            &[
-                "reset".to_string(),
-                "--hard".to_string(),
-                referencia,
-            ],
+            &["reset".to_string(), "--hard".to_string(), referencia],
         )?;
         self.validar_salida(salida, false)?;
-        let salida = self.ejecutar_git(
-            &self.checkout,
-            &["clean".to_string(), "-fd".to_string()],
-        )?;
+        let salida =
+            self.ejecutar_git(&self.checkout, &["clean".to_string(), "-fd".to_string()])?;
         self.validar_salida(salida, false)?;
         Ok(rama)
     }
@@ -348,7 +339,10 @@ impl TransporteSincronizacion for TransporteGit {
         {
             return Err(ErrorTransporteSincronizacion::OperacionFallida);
         }
-        let pendientes = self.pendientes.entry(dispositivo_id.to_string()).or_default();
+        let pendientes = self
+            .pendientes
+            .entry(dispositivo_id.to_string())
+            .or_default();
         if let Some(existente) = pendientes.iter().find(|actual| actual.id == lote.id) {
             return if existente == &lote {
                 Ok(())
@@ -368,19 +362,18 @@ impl TransporteSincronizacion for TransporteGit {
             return Err(ErrorTransporteSincronizacion::OperacionFallida);
         }
         self.asegurar_checkout()?;
-        let pendientes = self.pendientes.get(dispositivo_id).cloned().unwrap_or_default();
+        let pendientes = self
+            .pendientes
+            .get(dispositivo_id)
+            .cloned()
+            .unwrap_or_default();
         for lote in &pendientes {
-            self.escribir_atomico(
-                &self.ruta_lote(dispositivo_id, &lote.id),
-                &lote.contenido,
-            )?;
+            self.escribir_atomico(&self.ruta_lote(dispositivo_id, &lote.id), &lote.contenido)?;
         }
 
         let rama = self.actualizar_rama_local()?;
-        let salida = self.ejecutar_git(
-            &self.checkout,
-            &["add".to_string(), "--all".to_string()],
-        )?;
+        let salida =
+            self.ejecutar_git(&self.checkout, &["add".to_string(), "--all".to_string()])?;
         self.validar_salida(salida, false)?;
         let cambios = self.ejecutar_git(
             &self.checkout,
@@ -454,7 +447,8 @@ impl TransporteSincronizacion for TransporteGit {
         if !self.es_repositorio() {
             return Ok(());
         }
-        let salida = self.ejecutar_git(&self.checkout, &["fetch".to_string(), "origin".to_string()])?;
+        let salida =
+            self.ejecutar_git(&self.checkout, &["fetch".to_string(), "origin".to_string()])?;
         self.validar_salida(salida, false)?;
         let rama = self.actualizar_rama_local()?;
         let salida = self.ejecutar_git(
@@ -466,10 +460,8 @@ impl TransporteSincronizacion for TransporteGit {
             ],
         )?;
         self.validar_salida(salida, false)?;
-        let salida = self.ejecutar_git(
-            &self.checkout,
-            &["clean".to_string(), "-fd".to_string()],
-        )?;
+        let salida =
+            self.ejecutar_git(&self.checkout, &["clean".to_string(), "-fd".to_string()])?;
         self.validar_salida(salida, false)
     }
 }
