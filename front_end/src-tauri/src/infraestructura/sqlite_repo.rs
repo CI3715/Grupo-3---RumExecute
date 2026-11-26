@@ -1,13 +1,16 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::str::FromStr;
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
+use crate::aplicacion::puertos::sincronizacion::{
+    DireccionLoteSincronizacion, RepositorioLibroSincronizable,
+};
 use crate::aplicacion::puertos::{ErrorRepositorio, RepositorioLibro};
-use crate::dominio::evento::{DatosGastoDeGrupoAplicado, EventoLibro};
+use crate::dominio::evento::{DatosGastoDeGrupoAplicado, EventoLibro, ResultadoFusion};
 use crate::dominio::moneda::CodigoMoneda;
 use crate::dominio::monto::Monto;
 
@@ -75,6 +78,26 @@ pub struct ResultadoSincronizacionLocal {
     pub eventos_aplicados: usize,
     pub partes_pendientes: usize,
     pub nuevo_cursor: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TipoDestinoSincronizacion {
+    Carpeta,
+    Git,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DestinoSincronizacion {
+    pub tipo: TipoDestinoSincronizacion,
+    pub ubicacion: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EstadoSincronizacionPersonal {
+    pub dispositivo_id: String,
+    pub destino: Option<DestinoSincronizacion>,
+    pub fecha_ultima_sincronizacion: Option<String>,
 }
 
 // ============================================================================
@@ -170,6 +193,29 @@ impl RepositorioLibroSqlite {
                     estado TEXT NOT NULL DEFAULT 'PENDIENTE',
                     error_mensaje TEXT
                 );
+
+                CREATE TABLE IF NOT EXISTS local_e8_configuracion (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    dispositivo_id TEXT NOT NULL,
+                    tipo_destino TEXT,
+                    ubicacion_destino TEXT,
+                    fecha_ultima_sincronizacion TEXT
+                );
+                INSERT OR IGNORE INTO local_e8_configuracion (id, dispositivo_id)
+                VALUES (1, lower(hex(randomblob(16))));
+
+                CREATE TABLE IF NOT EXISTS local_e8_eventos_remotos (
+                    id_evento TEXT PRIMARY KEY,
+                    conocido_en TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS local_e8_lotes_sincronizacion (
+                    id_lote TEXT NOT NULL,
+                    dispositivo_origen TEXT NOT NULL,
+                    direccion TEXT NOT NULL CHECK (direccion IN ('recibido', 'enviado')),
+                    registrado_en TEXT NOT NULL,
+                    PRIMARY KEY (id_lote, direccion)
+                );
                 ",
             )
             .map_err(|error| {
@@ -177,6 +223,115 @@ impl RepositorioLibroSqlite {
             })?;
 
         Ok(Self { conexion })
+    }
+
+    pub fn estado_sincronizacion_personal(
+        &self,
+    ) -> Result<EstadoSincronizacionPersonal, ErrorRepositorio> {
+        let (dispositivo_id, tipo, ubicacion, fecha): (
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        ) = self
+            .conexion
+            .query_row(
+                "SELECT dispositivo_id, tipo_destino, ubicacion_destino, fecha_ultima_sincronizacion
+                 FROM local_e8_configuracion WHERE id = 1",
+                [],
+                |fila| Ok((fila.get(0)?, fila.get(1)?, fila.get(2)?, fila.get(3)?)),
+            )
+            .map_err(|error| {
+                ErrorRepositorio(format!("No se pudo leer la configuración E8: {error}"))
+            })?;
+        let destino = match (tipo, ubicacion) {
+            (Some(tipo), Some(ubicacion)) => Some(DestinoSincronizacion {
+                tipo: match tipo.as_str() {
+                    "carpeta" => TipoDestinoSincronizacion::Carpeta,
+                    "git" => TipoDestinoSincronizacion::Git,
+                    _ => {
+                        return Err(ErrorRepositorio(
+                            "El tipo de destino persistido no es válido.".to_string(),
+                        ))
+                    }
+                },
+                ubicacion,
+            }),
+            (None, None) => None,
+            _ => {
+                return Err(ErrorRepositorio(
+                    "La configuración persistida del destino está incompleta.".to_string(),
+                ))
+            }
+        };
+        Ok(EstadoSincronizacionPersonal {
+            dispositivo_id,
+            destino,
+            fecha_ultima_sincronizacion: fecha,
+        })
+    }
+
+    pub fn configurar_destino_sincronizacion(
+        &mut self,
+        destino: Option<&DestinoSincronizacion>,
+    ) -> Result<(), ErrorRepositorio> {
+        let (tipo, ubicacion) = match destino {
+            Some(destino) if !destino.ubicacion.trim().is_empty() => (
+                Some(match &destino.tipo {
+                    TipoDestinoSincronizacion::Carpeta => "carpeta",
+                    TipoDestinoSincronizacion::Git => "git",
+                }),
+                Some(destino.ubicacion.as_str()),
+            ),
+            Some(_) => {
+                return Err(ErrorRepositorio(
+                    "La ubicación del destino no puede estar vacía.".to_string(),
+                ))
+            }
+            None => (None, None),
+        };
+        let tx = self
+            .conexion
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| {
+                ErrorRepositorio(format!("No se pudo iniciar el cambio de destino: {error}"))
+            })?;
+        let previo: (Option<String>, Option<String>) = tx
+            .query_row(
+                "SELECT tipo_destino, ubicacion_destino
+                 FROM local_e8_configuracion WHERE id = 1",
+                [],
+                |fila| Ok((fila.get(0)?, fila.get(1)?)),
+            )
+            .map_err(|error| {
+                ErrorRepositorio(format!("No se pudo leer el destino anterior: {error}"))
+            })?;
+        if previo != (tipo.map(str::to_string), ubicacion.map(str::to_string)) {
+            tx.execute("DELETE FROM local_e8_eventos_remotos", [])
+                .map_err(|error| {
+                    ErrorRepositorio(format!("No se pudo reiniciar el estado del destino: {error}"))
+                })?;
+        }
+        tx.execute(
+                "UPDATE local_e8_configuracion
+                 SET tipo_destino = ?1, ubicacion_destino = ?2 WHERE id = 1",
+                params![tipo, ubicacion],
+            )
+            .map_err(|error| {
+                ErrorRepositorio(format!("No se pudo guardar la configuración E8: {error}"))
+            })?;
+        if previo != (tipo.map(str::to_string), ubicacion.map(str::to_string)) {
+            tx.execute(
+                "UPDATE local_e8_configuracion
+                 SET fecha_ultima_sincronizacion = NULL WHERE id = 1",
+                [],
+            )
+            .map_err(|error| {
+                ErrorRepositorio(format!("No se pudo reiniciar la fecha de sincronización: {error}"))
+            })?;
+        }
+        tx.commit()
+            .map_err(|error| ErrorRepositorio(format!("No se pudo confirmar el destino: {error}")))
     }
 
     // --- Métodos de Asignación de Cuenta por Grupo (INV-18) ---
@@ -716,6 +871,173 @@ impl RepositorioLibro for RepositorioLibroSqlite {
             })
             .collect()
     }
+
+    fn dispositivo_id(&self) -> Result<String, ErrorRepositorio> {
+        self.conexion
+            .query_row(
+                "SELECT dispositivo_id FROM local_e8_configuracion WHERE id = 1",
+                [],
+                |fila| fila.get(0),
+            )
+            .map_err(|error| {
+                ErrorRepositorio(format!("No se pudo leer el identificador local: {error}"))
+            })
+    }
+}
+
+impl RepositorioLibroSincronizable for RepositorioLibroSqlite {
+    fn fusionar_eventos_atomico(
+        &mut self,
+        entrantes: &[EventoLibro],
+    ) -> Result<ResultadoFusion, ErrorRepositorio> {
+        let locales = self.listar_eventos()?;
+        let ids_locales = locales
+            .iter()
+            .map(|evento| evento.id().to_string())
+            .collect::<HashSet<_>>();
+        let resultado = EventoLibro::fusionar_con_reporte(&locales, entrantes);
+
+        let tx = self
+            .conexion
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| {
+                ErrorRepositorio(format!("No se pudo iniciar la fusión SQLite: {error}"))
+            })?;
+        for evento in &resultado.eventos_resultantes {
+            if ids_locales.contains(evento.id()) {
+                continue;
+            }
+            let json = serde_json::to_string(evento).map_err(|error| {
+                ErrorRepositorio(format!("No se pudo serializar un evento: {error}"))
+            })?;
+            tx.execute(
+                "INSERT INTO eventos_libro
+                    (id, tipo, momento_registro, dispositivo_origen, evento_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![
+                    evento.id(),
+                    evento.tipo(),
+                    evento.momento_registro(),
+                    evento.dispositivo_origen(),
+                    json,
+                ],
+            )
+            .map_err(|error| {
+                ErrorRepositorio(format!("No se pudo fusionar el libro en SQLite: {error}"))
+            })?;
+        }
+        tx.commit()
+            .map_err(|error| ErrorRepositorio(format!("No se pudo confirmar la fusión: {error}")))?;
+        Ok(resultado)
+    }
+
+    fn ids_eventos_remotos_conocidos(&self) -> Result<HashSet<String>, ErrorRepositorio> {
+        let mut consulta = self
+            .conexion
+            .prepare("SELECT id_evento FROM local_e8_eventos_remotos")
+            .map_err(|error| {
+                ErrorRepositorio(format!("No se pudieron consultar eventos remotos: {error}"))
+            })?;
+        let filas = consulta
+            .query_map([], |fila| fila.get::<_, String>(0))
+            .map_err(|error| {
+                ErrorRepositorio(format!("No se pudieron consultar eventos remotos: {error}"))
+            })?;
+        filas
+            .map(|fila| {
+                fila.map_err(|error| {
+                    ErrorRepositorio(format!("No se pudo leer un evento remoto: {error}"))
+                })
+            })
+            .collect()
+    }
+
+    fn registrar_ids_eventos_remotos(
+        &mut self,
+        ids: &[String],
+    ) -> Result<(), ErrorRepositorio> {
+        let tx = self
+            .conexion
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| {
+                ErrorRepositorio(format!("No se pudo registrar estado remoto: {error}"))
+            })?;
+        let fecha = chrono::Utc::now().to_rfc3339();
+        for id in ids {
+            tx.execute(
+                "INSERT OR IGNORE INTO local_e8_eventos_remotos (id_evento, conocido_en)
+                 VALUES (?1, ?2)",
+                params![id, fecha],
+            )
+            .map_err(|error| {
+                ErrorRepositorio(format!("No se pudo registrar un evento remoto: {error}"))
+            })?;
+        }
+        tx.commit().map_err(|error| {
+            ErrorRepositorio(format!("No se pudo confirmar el estado remoto: {error}"))
+        })
+    }
+
+    fn registrar_lote_sincronizacion(
+        &mut self,
+        id_lote: &str,
+        dispositivo_origen: &str,
+        direccion: DireccionLoteSincronizacion,
+        fecha: &str,
+    ) -> Result<(), ErrorRepositorio> {
+        let direccion = match direccion {
+            DireccionLoteSincronizacion::Recibido => "recibido",
+            DireccionLoteSincronizacion::Enviado => "enviado",
+        };
+        self.conexion
+            .execute(
+                "INSERT INTO local_e8_lotes_sincronizacion
+                    (id_lote, dispositivo_origen, direccion, registrado_en)
+                 VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(id_lote, direccion) DO UPDATE SET
+                    dispositivo_origen = excluded.dispositivo_origen,
+                    registrado_en = excluded.registrado_en",
+                params![id_lote, dispositivo_origen, direccion, fecha],
+            )
+            .map_err(|error| {
+                ErrorRepositorio(format!("No se pudo guardar el lote sincronizado: {error}"))
+            })?;
+        Ok(())
+    }
+
+    fn registrar_sincronizacion_exitosa(
+        &mut self,
+        ids_eventos_remotos: &[String],
+        fecha: &str,
+    ) -> Result<(), ErrorRepositorio> {
+        let tx = self
+            .conexion
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| {
+                ErrorRepositorio(format!("No se pudo registrar la sincronización: {error}"))
+            })?;
+        for id in ids_eventos_remotos {
+            tx.execute(
+                "INSERT OR IGNORE INTO local_e8_eventos_remotos (id_evento, conocido_en)
+                 VALUES (?1, ?2)",
+                params![id, fecha],
+            )
+            .map_err(|error| {
+                ErrorRepositorio(format!("No se pudo registrar un evento remoto: {error}"))
+            })?;
+        }
+        tx.execute(
+            "UPDATE local_e8_configuracion
+             SET fecha_ultima_sincronizacion = ?1 WHERE id = 1",
+            params![fecha],
+        )
+        .map_err(|error| {
+            ErrorRepositorio(format!("No se pudo guardar la fecha de sincronización: {error}"))
+        })?;
+        tx.commit().map_err(|error| {
+            ErrorRepositorio(format!("No se pudo confirmar la sincronización: {error}"))
+        })
+    }
 }
 
 #[cfg(test)]
@@ -890,5 +1212,121 @@ mod tests {
         assert_eq!(res_demo.partes_pendientes, 0);
         assert_eq!(repo.listar_eventos().unwrap().len(), 1); // No se duplicó el evento
         assert_eq!(repo.obtener_ultimo_cursor().unwrap(), 1); // El cursor avanzó normalmente
+    }
+
+    #[test]
+    fn identidad_de_dispositivo_se_mantiene_al_reabrir_sqlite() {
+        let ruta = std::env::temp_dir().join(format!(
+            "cuentas_claras_e8_identidad_{}.db",
+            uuid::Uuid::new_v4()
+        ));
+        let id_inicial = {
+            let repo = RepositorioLibroSqlite::abrir(&ruta).unwrap();
+            repo.dispositivo_id().unwrap()
+        };
+        let repo = RepositorioLibroSqlite::abrir(&ruta).unwrap();
+        assert_eq!(repo.dispositivo_id().unwrap(), id_inicial);
+        assert!(!id_inicial.is_empty());
+        drop(repo);
+        std::fs::remove_file(ruta).unwrap();
+    }
+
+    #[test]
+    fn fusion_sqlite_es_idempotente_y_rechaza_colisiones_sin_modificar_eventos() {
+        let mut repo = RepositorioLibroSqlite::abrir(":memory:").unwrap();
+        let evento = EventoLibro::nuevo_cuenta_creada(
+            "evento-fusion",
+            "2026-10-15T00:00:00.000Z",
+            "dispositivo-prueba",
+            DatosCuentaCreada {
+                id_cuenta: "cuenta-fusion".to_string(),
+                nombre: "Cuenta".to_string(),
+                tipo: TipoCuenta::Banco,
+                moneda: CodigoMoneda::USD,
+                saldo_inicial: Monto::cero(CodigoMoneda::USD),
+            },
+        );
+        assert_eq!(
+            repo.fusionar_eventos_atomico(&[evento.clone()])
+                .unwrap()
+                .eventos_nuevos,
+            1
+        );
+        assert_eq!(
+            repo.fusionar_eventos_atomico(&[evento.clone()])
+                .unwrap()
+                .eventos_existentes,
+            1
+        );
+
+        let conflicto = EventoLibro::nuevo_cuenta_creada(
+            "evento-fusion",
+            "2026-10-15T00:00:00.000Z",
+            "dispositivo-prueba",
+            DatosCuentaCreada {
+                id_cuenta: "cuenta-distinta".to_string(),
+                nombre: "Otra cuenta".to_string(),
+                tipo: TipoCuenta::Banco,
+                moneda: CodigoMoneda::USD,
+                saldo_inicial: Monto::cero(CodigoMoneda::USD),
+            },
+        );
+        let resultado = repo.fusionar_eventos_atomico(&[conflicto]).unwrap();
+        assert_eq!(resultado.eventos_rechazados.len(), 1);
+        assert_eq!(repo.listar_eventos().unwrap(), vec![evento]);
+    }
+
+    #[test]
+    fn persiste_destino_ultimo_sync_y_registro_de_lotes() {
+        let mut repo = RepositorioLibroSqlite::abrir(":memory:").unwrap();
+        repo.configurar_destino_sincronizacion(Some(&DestinoSincronizacion {
+            tipo: TipoDestinoSincronizacion::Carpeta,
+            ubicacion: "C:\\copias\\cuentas".to_string(),
+        }))
+        .unwrap();
+        repo.registrar_lote_sincronizacion(
+            "lote-1",
+            "dispositivo-remoto",
+            DireccionLoteSincronizacion::Recibido,
+            "2026-11-26T18:00:00Z",
+        )
+        .unwrap();
+        repo.registrar_sincronizacion_exitosa(&["evento-1".to_string()], "2026-11-26T18:01:00Z")
+            .unwrap();
+
+        let estado = repo.estado_sincronizacion_personal().unwrap();
+        assert_eq!(
+            estado.destino,
+            Some(DestinoSincronizacion {
+                tipo: TipoDestinoSincronizacion::Carpeta,
+                ubicacion: "C:\\copias\\cuentas".to_string(),
+            })
+        );
+        assert_eq!(
+            estado.fecha_ultima_sincronizacion.as_deref(),
+            Some("2026-11-26T18:01:00Z")
+        );
+        assert_eq!(
+            repo.ids_eventos_remotos_conocidos().unwrap(),
+            HashSet::from(["evento-1".to_string()])
+        );
+        let lotes: usize = repo
+            .conexion
+            .query_row(
+                "SELECT COUNT(*) FROM local_e8_lotes_sincronizacion WHERE id_lote = 'lote-1'",
+                [],
+                |fila| fila.get(0),
+            )
+            .unwrap();
+        assert_eq!(lotes, 1);
+
+            repo.configurar_destino_sincronizacion(Some(&DestinoSincronizacion {
+                tipo: TipoDestinoSincronizacion::Git,
+                ubicacion: "https://git.example.org/cuentas.git".to_string(),
+            }))
+            .unwrap();
+            let estado_nuevo = repo.estado_sincronizacion_personal().unwrap();
+            assert!(estado_nuevo.fecha_ultima_sincronizacion.is_none());
+            assert!(repo.ids_eventos_remotos_conocidos().unwrap().is_empty());
     }
 }

@@ -6,6 +6,8 @@ pub mod memoria_repo;
 pub mod serializador_libro;
 pub mod sistema;
 pub mod sqlite_repo;
+pub mod transporte_carpeta;
+pub mod transporte_git;
 pub mod transporte_memoria;
 
 #[cfg(test)]

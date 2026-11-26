@@ -9,8 +9,6 @@ use crate::dominio::monto::Monto;
 use crate::dominio::movimiento::Movimiento;
 use serde::{Deserialize, Serialize};
 
-const DISPOSITIVO_LOCAL: &str = "dispositivo-local";
-
 /// Entrada del usuario para registrar un gasto o ingreso.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EntradaRegistrarMovimiento {
@@ -150,7 +148,7 @@ pub fn registrar_movimiento(
     let evento = EventoLibro::nuevo_movimiento_registrado(
         id_evento,
         momento_actual_utc,
-        DISPOSITIVO_LOCAL,
+        repo.dispositivo_id()?,
         datos_evento,
     );
 

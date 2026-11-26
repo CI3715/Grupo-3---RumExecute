@@ -10,8 +10,6 @@ use crate::dominio::moneda::Moneda;
 use crate::dominio::monto::Monto;
 use serde::{Deserialize, Serialize};
 
-const DISPOSITIVO_LOCAL: &str = "dispositivo-local";
-
 // Entrada del usuario, incluye todos los campos que introduce para la nueva cuenta
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EntradaCrearCuenta {
@@ -91,8 +89,12 @@ pub fn crear_cuenta(
         moneda: cuenta.moneda,               // Tiene derive Copy, se copia solo
         saldo_inicial: cuenta.saldo_inicial, // Tiene derive Copy, se copia solo
     };
-    let evento =
-        EventoLibro::nuevo_cuenta_creada(ids.nuevo_id(), reloj.ahora(), DISPOSITIVO_LOCAL, datos);
+    let evento = EventoLibro::nuevo_cuenta_creada(
+        ids.nuevo_id(),
+        reloj.ahora(),
+        repo.dispositivo_id()?,
+        datos,
+    );
     repo.guardar(evento)?;
 
     Ok(cuenta)
@@ -195,7 +197,7 @@ mod tests {
         };
         assert_eq!(tipo, "cuenta_creada");
         assert_eq!(momento_registro, "2026-10-14T20:00:00Z");
-        assert_eq!(dispositivo_origen, DISPOSITIVO_LOCAL);
+        assert_eq!(dispositivo_origen, "dispositivo-local");
         assert_eq!(datos.id_cuenta, cuenta.id);
         assert_eq!(datos.nombre, "Ahorros");
     }

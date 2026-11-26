@@ -5,8 +5,6 @@ use crate::dominio::errores::ErrorDominio;
 use crate::dominio::evento::{DatosMonedaBaseCambiada, EventoLibro};
 use crate::dominio::moneda::CodigoMoneda;
 
-const DISPOSITIVO_LOCAL: &str = "dispositivo-local";
-
 #[derive(Debug)]
 pub enum ErrorCambiarMonedaBase {
     Validacion(ErrorDominio),
@@ -38,10 +36,11 @@ pub fn cambiar_moneda_base(
         return Err(ErrorDominio::moneda_no_encontrada(codigo.as_str()).into());
     }
 
+    let dispositivo_id = repo.dispositivo_id()?;
     repo.guardar(EventoLibro::nuevo_moneda_base_cambiada(
         ids.nuevo_id(),
         reloj.ahora(),
-        DISPOSITIVO_LOCAL,
+        dispositivo_id,
         DatosMonedaBaseCambiada {
             nueva_moneda: codigo,
         },
