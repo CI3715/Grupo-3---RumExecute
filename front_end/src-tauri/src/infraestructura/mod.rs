@@ -1,3 +1,4 @@
+pub mod cifrador_libro;
 pub mod cliente_auth;
 pub mod cliente_sync;
 pub mod memoria_repo;

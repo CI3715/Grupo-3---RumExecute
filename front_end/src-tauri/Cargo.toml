@@ -29,6 +29,9 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 uuid = { version = "1", features = ["v4"] }
 keyring = { version = "3", features = ["sync-secret-service"] }
 chrono = { version = "0.4", features = ["serde"] }
+argon2 = "0.5"
+chacha20poly1305 = "0.10"
+zeroize = "1"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
