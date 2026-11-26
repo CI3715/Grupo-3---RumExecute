@@ -4,8 +4,9 @@ use thiserror::Error;
 
 use crate::aplicacion::puertos::sincronizacion::{
     AlmacenSecretosSincronizacion, CifradorLibro, DocumentoLibro, ErrorAlmacenSecretos,
-    ErrorCifradoLibro, ErrorFormatoLibro, ErrorTransporteSincronizacion,
-    LoteSincronizacion, RepositorioLibroSincronizable, SerializadorLibro,
+    DireccionLoteSincronizacion, ErrorCifradoLibro, ErrorFormatoLibro,
+    ErrorTransporteSincronizacion, LoteSincronizacion, RepositorioLibroSincronizable,
+    SerializadorLibro,
     TransporteSincronizacion,
 };
 use crate::aplicacion::puertos::{ErrorRepositorio, GeneradorId, Reloj};
@@ -123,6 +124,15 @@ pub fn sincronizar_libro(
         transporte
             .confirmar_lotes_leidos(dispositivo_id, &ids_lotes)
             .map_err(mapear_error_transporte)?;
+        for lote in &lotes {
+            repo.registrar_lote_sincronizacion(
+                &lote.id,
+                &lote.dispositivo_origen,
+                DireccionLoteSincronizacion::Recibido,
+                &reloj.ahora(),
+            )
+            .map_err(mapear_error_repositorio)?;
+        }
 
         let mut ids_remotos = repo
             .ids_eventos_remotos_conocidos()
@@ -142,6 +152,7 @@ pub fn sincronizar_libro(
             .map(|evento| evento.id().to_string())
             .collect::<Vec<_>>();
 
+        let mut lote_enviado = None;
         if !eventos_salientes.is_empty() {
             let documento = DocumentoLibro::nuevo(reloj.ahora(), eventos_salientes.clone());
             validar_documento(&documento, &eventos_locales)
@@ -152,16 +163,15 @@ pub fn sincronizar_libro(
             let contenido = cifrador
                 .cifrar(texto.as_bytes(), &frase_paso)
                 .map_err(|_| ErrorSincronizarLibro::Cifrado)?;
+            let lote = LoteSincronizacion {
+                id: ids.nuevo_id(),
+                dispositivo_origen: dispositivo_id.to_string(),
+                contenido,
+            };
             transporte
-                .enviar_lote(
-                    dispositivo_id,
-                    LoteSincronizacion {
-                        id: ids.nuevo_id(),
-                        dispositivo_origen: dispositivo_id.to_string(),
-                        contenido,
-                    },
-                )
+                .enviar_lote(dispositivo_id, lote.clone())
                 .map_err(mapear_error_transporte)?;
+            lote_enviado = Some(lote);
         }
 
         match transporte.publicar_cambios(dispositivo_id) {
@@ -174,6 +184,15 @@ pub fn sincronizar_libro(
                     &fecha_ultima_sincronizacion,
                 )
                 .map_err(mapear_error_repositorio)?;
+                if let Some(lote) = lote_enviado {
+                    repo.registrar_lote_sincronizacion(
+                        &lote.id,
+                        dispositivo_id,
+                        DireccionLoteSincronizacion::Enviado,
+                        &fecha_ultima_sincronizacion,
+                    )
+                    .map_err(mapear_error_repositorio)?;
+                }
 
                 eventos_enviados.extend(ids_salientes);
                 return Ok(InformeSincronizacion {

@@ -8,8 +8,6 @@ use crate::dominio::monto::Monto;
 use crate::dominio::movimiento::{Movimiento, TipoMovimiento};
 use serde::{Deserialize, Serialize};
 
-const DISPOSITIVO_LOCAL: &str = "dispositivo-local";
-
 /// Entrada del usuario para corregir un movimiento erróneo mediante un ajuste.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EntradaCorregirMovimiento {
@@ -174,7 +172,7 @@ pub fn corregir_movimiento(
     let evento = EventoLibro::nuevo_movimiento_corregido(
         id_evento,
         momento_actual_utc,
-        DISPOSITIVO_LOCAL,
+        repo.dispositivo_id()?,
         datos_evento,
     );
 

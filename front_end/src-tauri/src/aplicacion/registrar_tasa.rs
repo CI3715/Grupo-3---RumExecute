@@ -10,8 +10,6 @@ use crate::dominio::evento::{DatosTasaRegistrada, EventoLibro};
 use crate::dominio::moneda::CodigoMoneda;
 use crate::dominio::tasa_cambio::TasaCambio;
 
-const DISPOSITIVO_LOCAL: &str = "dispositivo-local";
-
 #[derive(Debug)]
 pub enum ErrorRegistrarTasa {
     Validacion(ErrorDominio),
@@ -57,7 +55,7 @@ pub fn registrar_tasa(
     let evento = EventoLibro::nuevo_tasa_registrada(
         id_tasa.clone(),
         momento_actual,
-        DISPOSITIVO_LOCAL,
+        repo.dispositivo_id()?,
         DatosTasaRegistrada {
             par_monedas: tasa.par,
             valor: tasa.valor,

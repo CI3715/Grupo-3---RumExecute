@@ -5,8 +5,6 @@ use crate::dominio::errores::ErrorDominio;
 use crate::dominio::evento::{DatosMonedaCreada, EventoLibro};
 use crate::dominio::moneda::Moneda;
 
-const DISPOSITIVO_LOCAL: &str = "dispositivo-local";
-
 #[derive(Debug)]
 pub enum ErrorCrearMoneda {
     Validacion(ErrorDominio),
@@ -55,7 +53,7 @@ pub fn crear_moneda(
     repo.guardar(EventoLibro::nuevo_moneda_creada(
         ids.nuevo_id(),
         reloj.ahora(),
-        DISPOSITIVO_LOCAL,
+        repo.dispositivo_id()?,
         DatosMonedaCreada {
             codigo: moneda.codigo,
             nombre: moneda.nombre,

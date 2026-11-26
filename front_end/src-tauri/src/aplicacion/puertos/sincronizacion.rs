@@ -64,6 +64,12 @@ pub struct CredencialesGit {
     pub token: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DireccionLoteSincronizacion {
+    Recibido,
+    Enviado,
+}
+
 pub trait SerializadorLibro {
     fn serializar(&self, documento: &DocumentoLibro) -> Result<String, ErrorFormatoLibro>;
     fn deserializar(&self, contenido: &str) -> Result<DocumentoLibro, ErrorFormatoLibro>;
@@ -137,6 +143,14 @@ pub trait RepositorioLibroSincronizable: RepositorioLibro {
     fn registrar_ids_eventos_remotos(
         &mut self,
         ids: &[String],
+    ) -> Result<(), ErrorRepositorio>;
+
+    fn registrar_lote_sincronizacion(
+        &mut self,
+        id_lote: &str,
+        dispositivo_origen: &str,
+        direccion: DireccionLoteSincronizacion,
+        fecha: &str,
     ) -> Result<(), ErrorRepositorio>;
 
     /// Persiste la última sincronización exitosa junto con los IDs que ya están en el destino.

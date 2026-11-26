@@ -4,8 +4,6 @@ use crate::aplicacion::puertos::{ErrorRepositorio, GeneradorId, Reloj, Repositor
 use crate::dominio::errores::ErrorDominio;
 use crate::dominio::evento::{DatosTasaEliminada, EventoLibro};
 
-const DISPOSITIVO_LOCAL: &str = "dispositivo-local";
-
 #[derive(Debug)]
 pub enum ErrorEliminarTasa {
     Validacion(ErrorDominio),
@@ -53,7 +51,7 @@ pub fn eliminar_tasa(
     let evento = EventoLibro::nuevo_tasa_eliminada(
         ids.nuevo_id(),
         reloj.ahora(),
-        DISPOSITIVO_LOCAL,
+        repo.dispositivo_id()?,
         DatosTasaEliminada {
             par_monedas: tasa.tasa.par,
             fecha: tasa.tasa.fecha,

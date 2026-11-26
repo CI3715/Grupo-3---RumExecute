@@ -33,6 +33,7 @@ pub trait RepositorioLibro {
     fn guardar(&mut self, evento: EventoLibro) -> Result<(), ErrorRepositorio>;
     // Devuelve todos los eventos, en orden
     fn listar_eventos(&self) -> Result<Vec<EventoLibro>, ErrorRepositorio>;
+    fn dispositivo_id(&self) -> Result<String, ErrorRepositorio>;
 }
 
 pub trait Reloj {

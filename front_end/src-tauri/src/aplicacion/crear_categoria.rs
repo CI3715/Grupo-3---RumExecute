@@ -6,8 +6,6 @@ use crate::dominio::errores::ErrorDominio;
 use crate::dominio::evento::{DatosCategoriaCreada, EventoLibro};
 use serde::{Deserialize, Serialize};
 
-const DISPOSITIVO_LOCAL: &str = "dispositivo-local";
-
 /// Entrada para crear una nueva categoría personalizada (RF-LIB-07).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EntradaCrearCategoria {
@@ -90,7 +88,7 @@ pub fn crear_categoria(
     let evento = EventoLibro::nuevo_categoria_creada(
         id_evento,
         momento_actual,
-        DISPOSITIVO_LOCAL,
+        repo.dispositivo_id()?,
         datos_evento,
     );
 

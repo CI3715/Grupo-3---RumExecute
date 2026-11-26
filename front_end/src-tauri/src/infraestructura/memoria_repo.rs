@@ -1,7 +1,9 @@
 use std::collections::HashSet;
 
 use crate::aplicacion::puertos::{ErrorRepositorio, RepositorioLibro};
-use crate::aplicacion::puertos::sincronizacion::RepositorioLibroSincronizable;
+use crate::aplicacion::puertos::sincronizacion::{
+    DireccionLoteSincronizacion, RepositorioLibroSincronizable,
+};
 use crate::dominio::evento::EventoLibro;
 
 // Se crea el struct
@@ -41,6 +43,10 @@ impl RepositorioLibro for RepositorioLibroEnMemoria {
     fn listar_eventos(&self) -> Result<Vec<EventoLibro>, ErrorRepositorio> {
         Ok(self.eventos.clone())
     }
+
+    fn dispositivo_id(&self) -> Result<String, ErrorRepositorio> {
+        Ok("dispositivo-local".to_string())
+    }
 }
 
 impl RepositorioLibroSincronizable for RepositorioLibroEnMemoria {
@@ -62,6 +68,16 @@ impl RepositorioLibroSincronizable for RepositorioLibroEnMemoria {
         ids: &[String],
     ) -> Result<(), ErrorRepositorio> {
         self.ids_eventos_remotos.extend(ids.iter().cloned());
+        Ok(())
+    }
+
+    fn registrar_lote_sincronizacion(
+        &mut self,
+        _id_lote: &str,
+        _dispositivo_origen: &str,
+        _direccion: DireccionLoteSincronizacion,
+        _fecha: &str,
+    ) -> Result<(), ErrorRepositorio> {
         Ok(())
     }
 

@@ -1,5 +1,6 @@
 pub mod aplicacion;
 pub mod comandos;
+pub mod comandos_sincronizacion;
 pub mod dominio;
 pub mod infraestructura;
 
@@ -110,7 +111,14 @@ pub fn run() {
             comandos::encolar_gasto_offline,
             comandos::listar_cola_offline,
             comandos::listar_partes_pendientes,
-            comandos::obtener_cuenta_grupo
+            comandos::obtener_cuenta_grupo,
+            comandos_sincronizacion::exportar_copia_seguridad,
+            comandos_sincronizacion::importar_copia_seguridad,
+            comandos_sincronizacion::obtener_configuracion_sincronizacion,
+            comandos_sincronizacion::configurar_destino_sincronizacion,
+            comandos_sincronizacion::guardar_frase_paso_sincronizacion,
+            comandos_sincronizacion::actualizar_credenciales_git,
+            comandos_sincronizacion::sincronizar_libro_personal
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
