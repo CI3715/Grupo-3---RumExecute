@@ -88,6 +88,7 @@ export default function VistaComunidad({
   const [participantesIds, setParticipantesIds] = useState<string[]>([]);
   const [valoresCustom, setValoresCustom] = useState<Record<string, string>>({});
   const [guardandoGasto, setGuardandoGasto] = useState(false);
+  const [confirmandoGasto, setConfirmandoGasto] = useState(false);
 
   // Estado de Sincronización, Cuenta por Grupo, Pendientes y Cola Offline
   const [cuentaElegidaGrupo, setCuentaElegidaGrupo] = useState<CuentaPorGrupo | null>(null);
@@ -285,6 +286,10 @@ export default function VistaComunidad({
   const handleGuardarGasto = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!grupoActivo || !conceptoGasto.trim() || !montoGasto.trim()) return;
+    if (!confirmandoGasto) {
+      setConfirmandoGasto(true);
+      return;
+    }
     setGuardandoGasto(true);
     setAviso(null);
 
@@ -391,6 +396,7 @@ export default function VistaComunidad({
       }
     } finally {
       setGuardandoGasto(false);
+      setConfirmandoGasto(false);
     }
   };
   return (
@@ -943,10 +949,28 @@ export default function VistaComunidad({
                   );
                 })}
               </div>
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
-                <button type="button" onClick={() => setMostrarFormGasto(false)} className="btn btn-secondary">Cancelar</button>
-                <button type="submit" disabled={guardandoGasto} className="btn btn-primary">{guardandoGasto ? "Guardando..." : "Guardar Gasto"}</button>
-              </div>
+              {confirmandoGasto ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "12px", borderRadius: "10px", backgroundColor: "#ECFDF5", border: "1px solid #A7F3D0" }}>
+                  <span style={{ fontSize: "13px", fontWeight: 600, color: "#065F46" }}>
+                    ¿Confirmas registrar el gasto <strong>{conceptoGasto.trim()}</strong> por{" "}
+                    <strong>{montoGasto} {grupoActivo.moneda}</strong> entre{" "}
+                    <strong>{participantesIds.length}</strong> participante(s)?
+                  </span>
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                    <button type="button" onClick={() => setConfirmandoGasto(false)} className="btn btn-secondary" disabled={guardandoGasto}>
+                      Volver
+                    </button>
+                    <button type="submit" disabled={guardandoGasto} className="btn btn-primary">
+                      {guardandoGasto ? "Guardando..." : "Confirmar gasto"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                  <button type="button" onClick={() => { setMostrarFormGasto(false); setConfirmandoGasto(false); }} className="btn btn-secondary">Cancelar</button>
+                  <button type="submit" disabled={guardandoGasto} className="btn btn-primary">{guardandoGasto ? "Guardando..." : "Guardar Gasto"}</button>
+                </div>
+              )}
             </form>
           )}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>

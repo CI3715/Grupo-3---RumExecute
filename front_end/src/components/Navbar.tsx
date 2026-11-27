@@ -3,8 +3,8 @@
 import { DatosUsuario } from "../services/authService";
 
 interface NavbarProps {
-  tabActivo?: "cuentas" | "patrimonio" | "tasas" | "comunidad";
-  onCambiarTab?: (tab: "cuentas" | "patrimonio" | "tasas" | "comunidad") => void;
+  tabActivo?: "cuentas" | "patrimonio" | "tasas" | "comunidad" | "respaldo";
+  onCambiarTab?: (tab: "cuentas" | "patrimonio" | "tasas" | "comunidad" | "respaldo") => void;
   onNavigateHome?: () => void;
   usuario?: DatosUsuario | null;
   onOpenAuth?: (modo: "login" | "registro") => void;
@@ -166,6 +166,23 @@ export default function Navbar({
             }}
           >
             Grupos y Amigos
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onCambiarTab("respaldo")}
+            style={{
+              padding: "6px 14px",
+              borderRadius: "8px",
+              fontSize: "13px",
+              fontWeight: tabActivo === "respaldo" ? 700 : 500,
+              backgroundColor: tabActivo === "respaldo" ? "#FFFFFF" : "transparent",
+              color: tabActivo === "respaldo" ? "var(--text-primary)" : "var(--text-secondary)",
+              boxShadow: tabActivo === "respaldo" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+              transition: "all 0.15s ease",
+            }}
+          >
+            Respaldo
           </button>
         </nav>
       )}

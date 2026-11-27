@@ -48,6 +48,7 @@ export default function ModalNuevaCuenta({
   const [moneda, setMoneda] = useState("VES");
   const [saldoInicial, setSaldoInicial] = useState("");
   const [cargando, setCargando] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
   const [errorActivo, setErrorActivo] = useState<ErrorValidacion | null>(null);
   const [listaMonedas, setListaMonedas] = useState<MonedaItem[]>(MONEDAS_DEFAULT);
 
@@ -69,6 +70,7 @@ export default function ModalNuevaCuenta({
       setTipo("banco");
       setMoneda("VES");
       setSaldoInicial("");
+      setConfirmando(false);
       setErrorActivo(null);
     }
   }, [isOpen]);
@@ -81,6 +83,13 @@ export default function ModalNuevaCuenta({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorActivo(null);
+    if (!nombre.trim()) {
+      return setErrorActivo({ campo: "nombre", mensaje: "El nombre de la cuenta no puede estar vacío." });
+    }
+    if (!confirmando) {
+      setConfirmando(true);
+      return;
+    }
     setCargando(true);
 
     try {
@@ -91,6 +100,7 @@ export default function ModalNuevaCuenta({
         saldo_inicial: completarDecimalesOnBlur(saldoInicial.trim() || "0", decimalesMoneda),
       });
       if (exito) onClose();
+      else setConfirmando(false);
     } finally {
       setCargando(false);
     }
@@ -201,13 +211,32 @@ export default function ModalNuevaCuenta({
             </div>
           </div>
 
-          <div className="modal-footer">
-            <button type="button" onClick={onClose} className="btn btn-secondary" disabled={cargando}>
-              Cancelar
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={cargando}>
-              {cargando ? "Guardando..." : "Guardar Cuenta"}
-            </button>
+          <div className="modal-footer" style={{ flexDirection: confirmando ? "column" : "row", alignItems: confirmando ? "stretch" : "center", gap: "10px" }}>
+            {confirmando ? (
+              <>
+                <div style={{ fontSize: "12.5px", fontWeight: 600, color: "#065F46", backgroundColor: "#ECFDF5", padding: "10px 12px", borderRadius: "8px", border: "1px solid #A7F3D0" }}>
+                  ¿Confirmas crear la cuenta <strong>{nombre.trim()}</strong> en <strong>{moneda}</strong> con saldo inicial{" "}
+                  <strong>{completarDecimalesOnBlur(saldoInicial.trim() || "0", decimalesMoneda)}</strong>? (La moneda no se podrá cambiar luego).
+                </div>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                  <button type="button" onClick={() => setConfirmando(false)} className="btn btn-secondary" disabled={cargando}>
+                    Volver
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={cargando}>
+                    {cargando ? "Guardando..." : "Confirmar cuenta"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <button type="button" onClick={onClose} className="btn btn-secondary" disabled={cargando}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={cargando}>
+                  {cargando ? "Guardando..." : "Guardar Cuenta"}
+                </button>
+              </>
+            )}
           </div>
         </form>
       </div>

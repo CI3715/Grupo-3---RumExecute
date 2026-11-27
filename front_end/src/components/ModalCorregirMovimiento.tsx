@@ -53,12 +53,14 @@ export default function ModalCorregirMovimiento({
   const [montoCorrecto, setMontoCorrecto] = useState("");
   const [motivo, setMotivo] = useState("");
   const [cargando, setCargando] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
   const [errorActivo, setErrorActivo] = useState<ErrorValidacion | null>(null);
 
   useEffect(() => {
     if (isOpen && movimiento) {
       setMontoCorrecto("");
       setMotivo("");
+      setConfirmando(false);
       setErrorActivo(null);
     }
   }, [isOpen, movimiento]);
@@ -98,6 +100,11 @@ export default function ModalCorregirMovimiento({
       });
     }
 
+    if (!confirmando) {
+      setConfirmando(true);
+      return;
+    }
+
     setCargando(true);
     try {
       const exito = await onSubmit({
@@ -106,7 +113,9 @@ export default function ModalCorregirMovimiento({
         motivo: motivo.trim(),
       });
       if (exito) onClose();
+      else setConfirmando(false);
     } catch (err: any) {
+      setConfirmando(false);
       setErrorActivo({
         campo: err?.campo || "monto_correcto",
         mensaje: err?.mensaje || (typeof err === "string" ? err : "Error al corregir el movimiento."),
@@ -226,13 +235,36 @@ export default function ModalCorregirMovimiento({
             </div>
           </div>
 
-          <div className="modal-footer">
-            <button type="button" onClick={onClose} className="btn btn-secondary" disabled={cargando}>
-              Cancelar
-            </button>
-            <button type="submit" className="btn btn-blue" disabled={cargando}>
-              {cargando ? "Guardando..." : "Registrar Ajuste"}
-            </button>
+          <div className="modal-footer" style={{ flexDirection: confirmando ? "column" : "row", alignItems: confirmando ? "stretch" : "center", gap: "10px" }}>
+            {confirmando ? (
+              <>
+                <div style={{ fontSize: "12.5px", fontWeight: 600, color: "#1E40AF", backgroundColor: "#EFF6FF", padding: "10px 12px", borderRadius: "8px", border: "1px solid #BFDBFE" }}>
+                  ¿Confirmas registrar el ajuste de{" "}
+                  <strong>
+                    {diferenciaAjuste >= 0 ? "+ " : "- "}
+                    {simbolo} {Math.abs(diferenciaAjuste).toFixed(2).replace(".", ",")}
+                  </strong>{" "}
+                  sobre este movimiento?
+                </div>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                  <button type="button" onClick={() => setConfirmando(false)} className="btn btn-secondary" disabled={cargando}>
+                    Volver
+                  </button>
+                  <button type="submit" className="btn btn-blue" disabled={cargando}>
+                    {cargando ? "Guardando..." : "Confirmar ajuste"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <button type="button" onClick={onClose} className="btn btn-secondary" disabled={cargando}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn btn-blue" disabled={cargando}>
+                  {cargando ? "Guardando..." : "Registrar Ajuste"}
+                </button>
+              </>
+            )}
           </div>
         </form>
       </div>

@@ -65,6 +65,7 @@ export default function ModalNuevoMovimiento({
   const [guardandoCategoria, setGuardandoCategoria] = useState(false);
   const [nota, setNota] = useState("");
   const [confirmaNegativo, setConfirmaNegativo] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [errorActivo, setErrorActivo] = useState<ErrorValidacion | null>(null);
 
@@ -82,6 +83,7 @@ export default function ModalNuevoMovimiento({
       setEmojiNuevaCategoria(tipoInicial === "gasto" ? "🛒" : "💼");
       setNota("");
       setConfirmaNegativo(false);
+      setConfirmando(false);
       setErrorActivo(null);
     }
   }, [isOpen]);
@@ -192,6 +194,11 @@ export default function ModalNuevoMovimiento({
       });
     }
 
+    if (!confirmando) {
+      setConfirmando(true);
+      return;
+    }
+
     setCargando(true);
     try {
       const exito = await onSubmit({
@@ -203,7 +210,9 @@ export default function ModalNuevoMovimiento({
         nota: nota.trim(),
       });
       if (exito) onClose();
+      else setConfirmando(false);
     } catch (err: any) {
+      setConfirmando(false);
       setErrorActivo({
         campo: err?.campo || "fecha",
         mensaje: err?.mensaje || (typeof err === "string" ? err : "Error al registrar el movimiento."),
@@ -449,17 +458,53 @@ export default function ModalNuevoMovimiento({
             </div>
           </div>
 
-          <div className="modal-footer">
-            <button type="button" onClick={onClose} className="btn btn-secondary" disabled={cargando}>
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className={`btn ${tipo === "gasto" ? "btn-danger" : "btn-primary"}`}
-              disabled={cargando}
-            >
-              {cargando ? "Guardando..." : tipo === "gasto" ? "Guardar Gasto" : "Guardar Ingreso"}
-            </button>
+          <div className="modal-footer" style={{ flexDirection: confirmando ? "column" : "row", alignItems: confirmando ? "stretch" : "center", gap: "10px" }}>
+            {confirmando ? (
+              <>
+                <div
+                  style={{
+                    fontSize: "12.5px",
+                    fontWeight: 600,
+                    color: tipo === "gasto" ? "#991B1B" : "#065F46",
+                    backgroundColor: tipo === "gasto" ? "#FEF2F2" : "#ECFDF5",
+                    padding: "10px 12px",
+                    borderRadius: "8px",
+                    border: `1px solid ${tipo === "gasto" ? "#FCA5A5" : "#A7F3D0"}`,
+                  }}
+                >
+                  ¿Confirmas registrar este <strong>{tipo}</strong> de{" "}
+                  <strong>
+                    {simbolo} {completarDecimalesOnBlur(monto)}
+                  </strong>{" "}
+                  en <strong>{cuenta.nombre}</strong> ({categoria})?
+                </div>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                  <button type="button" onClick={() => setConfirmando(false)} className="btn btn-secondary" disabled={cargando}>
+                    Volver
+                  </button>
+                  <button
+                    type="submit"
+                    className={`btn ${tipo === "gasto" ? "btn-danger" : "btn-primary"}`}
+                    disabled={cargando}
+                  >
+                    {cargando ? "Guardando..." : tipo === "gasto" ? "Confirmar gasto" : "Confirmar ingreso"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <button type="button" onClick={onClose} className="btn btn-secondary" disabled={cargando}>
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className={`btn ${tipo === "gasto" ? "btn-danger" : "btn-primary"}`}
+                  disabled={cargando}
+                >
+                  {cargando ? "Guardando..." : tipo === "gasto" ? "Guardar Gasto" : "Guardar Ingreso"}
+                </button>
+              </>
+            )}
           </div>
         </form>
       </div>

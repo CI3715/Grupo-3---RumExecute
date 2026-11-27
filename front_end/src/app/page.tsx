@@ -9,6 +9,7 @@ import DetalleCuenta from "../components/DetalleCuenta";
 import VistaPatrimonio from "../components/VistaPatrimonio";
 import VistaTasas from "../components/VistaTasas";
 import VistaComunidad from "../components/VistaComunidad";
+import VistaRespaldo from "../components/VistaRespaldo";
 import ModalAuth from "../components/ModalAuth";
 
 import { useCuentas } from "../hooks/useCuentas";
@@ -38,9 +39,13 @@ import {
   verificarEstadoServidor,
 } from "../services/authService";
 import { sincronizarCambios } from "../services/syncService";
+import {
+  obtenerConfiguracionSync,
+  sincronizarDispositivosAhora,
+} from "../services/respaldoService";
 
 export default function HomePage() {
-  const [tabActivo, setTabActivo] = useState<"cuentas" | "patrimonio" | "tasas" | "comunidad">("cuentas");
+  const [tabActivo, setTabActivo] = useState<"cuentas" | "patrimonio" | "tasas" | "comunidad" | "respaldo">("cuentas");
 
   // Estado de Sesión y Autenticación (Entrega 5)
   const [usuario, setUsuario] = useState<DatosUsuario | null>(null);
@@ -128,12 +133,25 @@ export default function HomePage() {
     }
   }, [cuentas, saldosIniciales, movimientosPorCuenta, fechaConsultaPatrimonio]);
 
-  // Carga inicial de datos locales del dispositivo
+  // Carga inicial de datos locales del dispositivo y sincronización automática entre dispositivos si hay destino configurado
   useEffect(() => {
     cargarCuentasTauri();
     cargarCategoriasTauri();
     cargarMonedasYBase();
     cargarTasas();
+
+    obtenerConfiguracionSync()
+      .then((cfg) => {
+        if (cfg?.configurado) {
+          return sincronizarDispositivosAhora().then(() => {
+            cargarCuentasTauri();
+            cargarCategoriasTauri();
+            cargarMonedasYBase();
+            cargarTasas();
+          });
+        }
+      })
+      .catch(() => {});
   }, [cargarCuentasTauri, cargarCategoriasTauri, cargarMonedasYBase, cargarTasas]);
 
   // Verificación de conectividad y restauración inmediata de sesión al iniciar
@@ -160,7 +178,6 @@ export default function HomePage() {
               .catch((e: any) => {
                 if (e?.message?.includes("venció")) {
                   setUsuario(null);
-                  setAvisoSesion("Tu sesión venció, inicia sesión de nuevo");
                 }
               });
           }
@@ -168,7 +185,6 @@ export default function HomePage() {
       } catch (err: any) {
         if (!cancelado && err?.message?.includes("venció")) {
           setUsuario(null);
-          setAvisoSesion("Tu sesión venció, inicia sesión de nuevo");
         }
       }
     }
@@ -310,27 +326,42 @@ export default function HomePage() {
               {avisoSesion || "Sin conexión con el servidor. Tu libro personal sigue funcionando normalmente."}
             </span>
             {avisoSesion && (
-              <button
-                type="button"
-                onClick={() => {
-                  const eraVencimiento = avisoSesion.includes("venció");
-                  setAvisoSesion(null);
-                  if (eraVencimiento) {
-                    setModoAuth("login");
-                    setModalAuth(true);
-                  }
-                }}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "#B91C1C",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  textDecoration: "underline",
-                }}
-              >
-                {avisoSesion.includes("venció") ? "Iniciar sesión" : "Cerrar"}
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                {avisoSesion.includes("venció") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAvisoSesion(null);
+                      setModoAuth("login");
+                      setModalAuth(true);
+                    }}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#B91C1C",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      textDecoration: "underline",
+                    }}
+                  >
+                    Iniciar sesión
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setAvisoSesion(null)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "#B91C1C",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                  title="Cerrar aviso"
+                >
+                  ✕
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -442,6 +473,20 @@ export default function HomePage() {
             onSesionVencida={(msg) => {
               setUsuario(null);
               setAvisoSesion(msg || "Tu sesión venció, inicia sesión de nuevo");
+            }}
+          />
+        )}
+
+        {/* TAB 5: RESPALDO Y SINCRONIZACIÓN ENTRE DISPOSITIVOS (ENTREGA 8) */}
+        {tabActivo === "respaldo" && (
+          <VistaRespaldo
+            onLibroActualizado={async () => {
+              await Promise.all([
+                cargarCuentasTauri(),
+                cargarCategoriasTauri(),
+                cargarMonedasYBase(),
+                cargarTasas(),
+              ]);
             }}
           />
         )}
